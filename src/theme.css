@@ -122,3 +122,9 @@ input[type="range"] { accent-color: var(--accent); }
 .mapscroll { overflow-x: auto; }
 details summary { cursor: pointer; margin: 0.3rem 0; }
 .plothost { min-height: 200px; }
+
+/* ---- metric reference table (audit release) ---- */
+.reftable td, .reftable th { text-align: left !important; vertical-align: top; }
+.reftable .eqcell { min-width: 220px; max-width: 420px; }
+.reftable .blurbcell { max-width: 34ch; font-size: 0.85rem; }
+.eq .katex { font-size: 0.98em; }

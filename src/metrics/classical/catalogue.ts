@@ -16,16 +16,27 @@ export const mdae = (o: Vec, s: Vec) => median(Array.from({ length: o.length }, 
 export const mde  = (o: Vec, s: Vec) => median(Array.from({ length: o.length }, (_, i) => s[i] - o[i]));
 export const mdse = (o: Vec, s: Vec) => median(Array.from({ length: o.length }, (_, i) => (s[i] - o[i]) ** 2));
 
-// Log-error family on log1p, the standard (and HydroErr's) zero-safe form.
-export const mle   = (o: Vec, s: Vec) => mean(Array.from({ length: o.length }, (_, i) => Math.log1p(s[i]) - Math.log1p(o[i])));
-export const male  = (o: Vec, s: Vec) => mean(Array.from({ length: o.length }, (_, i) => Math.abs(Math.log1p(s[i]) - Math.log1p(o[i]))));
-export const msle  = (o: Vec, s: Vec) => mean(Array.from({ length: o.length }, (_, i) => (Math.log1p(s[i]) - Math.log1p(o[i])) ** 2));
+// Log-error family per the defining papers (Törnquist et al., 1985; Jackson et
+// al., 2019 Table 1): error term ln(S/O), which is unit-invariant. NOTE: the
+// HydroErr *code* deviates from the HydroErr *paper* here — it computes
+// log1p(S)−log1p(O) = ln((1+S)/(1+O)), which is not scale-invariant. We follow
+// the paper; tests pin these against independently computed NumPy references.
+// Requires strictly positive flows (zeros/negatives → NaN/−∞, shown as n/a).
+export const mle   = (o: Vec, s: Vec) => mean(Array.from({ length: o.length }, (_, i) => Math.log(s[i] / o[i])));
+export const male  = (o: Vec, s: Vec) => mean(Array.from({ length: o.length }, (_, i) => Math.abs(Math.log(s[i] / o[i]))));
+export const msle  = (o: Vec, s: Vec) => mean(Array.from({ length: o.length }, (_, i) => Math.log(s[i] / o[i]) ** 2));
 export const rmsle = (o: Vec, s: Vec) => Math.sqrt(msle(o, s));
 
 export const mape  = (o: Vec, s: Vec) => 100 * mean(Array.from({ length: o.length }, (_, i) => Math.abs((s[i] - o[i]) / o[i])));
-/** MARE as hydroeval defines it: Σ|s−o| / Σo (= 1 − VE). */
-export const mare  = (o: Vec, s: Vec) => { let n = 0, d0 = 0; for (let i = 0; i < o.length; i++) { n += Math.abs(s[i] - o[i]); d0 += o[i]; } return n / d0; };
-/** sMAPE on the 0–200 % scale (spec F1). */
+/**
+ * MAPD % (Jackson et al., 2019 Table 2): 100·Σ|S−O| / Σ|O| — bulk relative
+ * error (= 100·(1−VE) for positive flows). hydroeval calls this quantity
+ * "MARE" and HydroErr's mapd returns the fraction; we use the paper's name
+ * and percent scale to avoid colliding with per-element MARE (= MAPE/100).
+ */
+export const mapd  = (o: Vec, s: Vec) => { let n = 0, d0 = 0; for (let i = 0; i < o.length; i++) { n += Math.abs(s[i] - o[i]); d0 += Math.abs(o[i]); } return d0 === 0 ? NaN : 100 * n / d0; };
+/** sMAPE on the 0–200 % scale. Denominator (|O|+|S|)/2 — HydroErr uses (S+O)/2,
+ * identical for positive flows; the absolute form preserves the stated range. */
 export const smape = (o: Vec, s: Vec) => 100 * mean(Array.from({ length: o.length }, (_, i) => Math.abs(s[i] - o[i]) / ((Math.abs(o[i]) + Math.abs(s[i])) / 2)));
 /** MAAPE ∈ [0, π/2] (Kim & Kim, 2016). */
 export const maape = (o: Vec, s: Vec) => mean(Array.from({ length: o.length }, (_, i) => Math.atan(Math.abs((s[i] - o[i]) / o[i]))));
@@ -122,13 +133,20 @@ export const logNse = (o: Vec, s: Vec) => {
   return nse(lo, ls);
 };
 
-export interface KgeResult { value: number; r: number; alpha: number; beta: number }
+export interface KgeResult {
+  value: number;
+  r: number;
+  /** σS/σO (2009, 2021), CV ratio γ (2012), or αNP (np). */
+  variability: number;
+  /** μS/μO (2009, 2012, np) or β″ = (μS−μO)/σO (2021, optimum 0). */
+  bias: number;
+}
 export const kge2009 = (o: Vec, s: Vec): KgeResult => {
   const rr = pearson(o, s);
   const mo = mean(o), ms = mean(s);
   const alpha = stdPop(s, ms) / stdPop(o, mo);
   const beta = ms / mo;
-  return { value: 1 - Math.sqrt((rr - 1) ** 2 + (alpha - 1) ** 2 + (beta - 1) ** 2), r: rr, alpha, beta };
+  return { value: 1 - Math.sqrt((rr - 1) ** 2 + (alpha - 1) ** 2 + (beta - 1) ** 2), r: rr, variability: alpha, bias: beta };
 };
 /** KGE′ (2012): γ = CV_s / CV_o replaces α. */
 export const kge2012 = (o: Vec, s: Vec): KgeResult => {
@@ -136,7 +154,7 @@ export const kge2012 = (o: Vec, s: Vec): KgeResult => {
   const mo = mean(o), ms = mean(s);
   const gamma = (stdPop(s, ms) / ms) / (stdPop(o, mo) / mo);
   const beta = ms / mo;
-  return { value: 1 - Math.sqrt((rr - 1) ** 2 + (gamma - 1) ** 2 + (beta - 1) ** 2), r: rr, alpha: gamma, beta };
+  return { value: 1 - Math.sqrt((rr - 1) ** 2 + (gamma - 1) ** 2 + (beta - 1) ** 2), r: rr, variability: gamma, bias: beta };
 };
 /** KGE″ (Tang et al., 2021): bias term β″ = (μs − μo)/σo, optimum 0. */
 export const kge2021 = (o: Vec, s: Vec): KgeResult => {
@@ -145,7 +163,7 @@ export const kge2021 = (o: Vec, s: Vec): KgeResult => {
   const so = stdPop(o, mo);
   const alpha = stdPop(s, ms) / so;
   const betaPP = (ms - mo) / so;
-  return { value: 1 - Math.sqrt((rr - 1) ** 2 + (alpha - 1) ** 2 + betaPP ** 2), r: rr, alpha, beta: betaPP };
+  return { value: 1 - Math.sqrt((rr - 1) ** 2 + (alpha - 1) ** 2 + betaPP ** 2), r: rr, variability: alpha, bias: betaPP };
 };
 /** Non-parametric KGE (Pool et al., 2018), matching hydroeval's construction. */
 export const kgenp = (o: Vec, s: Vec): KgeResult => {
@@ -157,7 +175,7 @@ export const kgenp = (o: Vec, s: Vec): KgeResult => {
   let l1 = 0; for (let i = 0; i < n; i++) l1 += Math.abs(fs[i] - fo[i]);
   const alpha = 1 - 0.5 * l1;
   const beta = ms / mo;
-  return { value: 1 - Math.sqrt((rs - 1) ** 2 + (alpha - 1) ** 2 + (beta - 1) ** 2), r: rs, alpha, beta };
+  return { value: 1 - Math.sqrt((rs - 1) ** 2 + (alpha - 1) ** 2 + (beta - 1) ** 2), r: rs, variability: alpha, bias: beta };
 };
 
 /** Volumetric efficiency (Criss & Winston, 2008). */
@@ -226,7 +244,7 @@ export function applyTransform(o: Vec, s: Vec, t: Transform): { o: Float64Array;
   if (t === 'none') return { o: Float64Array.from(o as ArrayLike<number>), s: Float64Array.from(s as ArrayLike<number>), note: null };
   const eps = EPS_FRAC * mean(o);
   const f = t === 'log' ? (v: number) => Math.log(v + eps)
-    : t === 'sqrt' ? (v: number) => Math.sqrt(Math.max(0, v))
+    : t === 'sqrt' ? (v: number) => (v < 0 ? NaN : Math.sqrt(v))
       : (v: number) => 1 / (v + eps);
   const to = new Float64Array(o.length), ts = new Float64Array(s.length);
   for (let i = 0; i < o.length; i++) { to[i] = f(o[i]); ts[i] = f(s[i]); }
@@ -240,26 +258,30 @@ export type BenchmarkKind = 'mean' | 'climatology' | 'persistence';
 export function benchmarkSeries(obs: Vec, kind: BenchmarkKind, datesMs?: number[]): Float64Array {
   const n = obs.length;
   const out = new Float64Array(n);
-  if (kind === 'mean') { out.fill(mean(obs)); return out; }
+  let fSum = 0, fCount = 0;
+  for (let i = 0; i < n; i++) if (isFinite(obs[i])) { fSum += obs[i]; fCount++; }
+  const finiteMean = fCount ? fSum / fCount : NaN;
+  if (kind === 'mean') { out.fill(finiteMean); return out; }
   if (kind === 'persistence') {
     out[0] = obs[0];
     for (let i = 1; i < n; i++) out[i] = obs[i - 1];
     return out;
   }
-  // monthly climatology
+  // monthly climatology over finite observations only
   const sums = new Float64Array(12), counts = new Float64Array(12);
   for (let i = 0; i < n; i++) {
+    if (!isFinite(obs[i])) continue;
     const m = new Date(datesMs![i]).getUTCMonth();
     sums[m] += obs[i]; counts[m]++;
   }
   for (let i = 0; i < n; i++) {
     const m = new Date(datesMs![i]).getUTCMonth();
-    out[i] = counts[m] ? sums[m] / counts[m] : mean(obs);
+    out[i] = counts[m] ? sums[m] / counts[m] : finiteMean;
   }
   return out;
 }
 /** Skill score of a bounded-above metric vs a benchmark: (M − M_b)/(opt − M_b), clamped at 1. */
 export function skill(metricModel: number, metricBench: number, optimum = 1): number {
-  const s = (metricModel - metricBench) / (optimum - metricBench);
-  return Math.min(1, s);
+  if (!isFinite(metricModel) || !isFinite(metricBench) || optimum === metricBench) return NaN;
+  return Math.min(1, (metricModel - metricBench) / (optimum - metricBench));
 }

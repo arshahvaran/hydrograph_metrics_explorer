@@ -5,6 +5,7 @@ import { benchmarkSeries, nse as nseFn, kge2009 as kgeFn, skill } from '../metri
 import { applyNanPolicy } from '../ingest/missing'
 import { computeForRun, bestIndex } from './compute'
 import { fmtNum, download } from './format'
+import { Eq } from './Eq'
 import { APP_VERSION } from '../version'
 import type { Dataset } from '../types'
 
@@ -143,17 +144,36 @@ export function MetricsTab() {
 
       <section className="card">
         <details>
-          <summary><strong>Metric reference</strong> — what each measures, and its blind spot</summary>
-          {GROUPS.map(g => (
-            <div key={g}>
-              <h3>{g}</h3>
-              <ul>
-                {REGISTRY.filter(m => m.group === g).map(m => (
-                  <li key={m.id}><strong>{m.label}</strong> (optimum {m.optimum}, range {m.range}): {m.blurb}</li>
+          <summary><strong>Metric reference</strong> — equations, ranges, and blind spots</summary>
+          <p className="muted">
+            Notation: <Eq tex={'O_i'} /> observed, <Eq tex={'S_i'} /> simulated, <Eq tex={'n'} /> valid pairs after the NaN policy,{' '}
+            <Eq tex={'\\bar{O},\\ \\sigma'} /> mean and population standard deviation, <Eq tex={'\\tilde{O}'} /> median,{' '}
+            <Eq tex={'F'} /> cumulative mass over time (Wasserstein) or FDC quantile. Lags are in steps of the record ({''}
+            positive = simulation late). Every equation below is the form the engine actually computes, verified in <code>tests/</code>.
+          </p>
+          <div className="mapscroll">
+            <table className="grid reftable">
+              <thead>
+                <tr><th>Metric</th><th>Equation</th><th>Range</th><th>Optimum</th><th>Better</th><th>Measures / blind spot</th></tr>
+              </thead>
+              <tbody>
+                {GROUPS.map(g => (
+                  <FragmentGroup key={g} title={g}>
+                    {REGISTRY.filter(m => m.group === g).map(m => (
+                      <tr key={m.id} className={m.timing ? 'timingrow' : ''}>
+                        <td>{m.timing ? '⏱ ' : ''}{m.label}</td>
+                        <td className="eqcell"><Eq tex={m.equation} /></td>
+                        <td>{m.range}</td>
+                        <td>{m.optimum}</td>
+                        <td>{m.direction === 'max' ? 'higher' : m.direction === 'min' ? 'lower' : m.direction === 'zero' ? 'closer to 0' : 'closer to 1'}</td>
+                        <td className="blurbcell">{m.blurb}</td>
+                      </tr>
+                    ))}
+                  </FragmentGroup>
                 ))}
-              </ul>
-            </div>
-          ))}
+              </tbody>
+            </table>
+          </div>
         </details>
       </section>
     </div>

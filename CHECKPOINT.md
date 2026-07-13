@@ -82,3 +82,33 @@ ask the author for `HME_PLAN.md` / `AGENT1` / `AGENT2` documents if not present)
 - Series Distance is the documented core form (auto event matching), not full interactive
   segment supervision.
 - Paper edits C1/C2/C3 still owed (exact sentences at CP8).
+
+
+---
+
+# Update · v0.3.1 — metric correctness audit (Jackson et al. 2019 / Roberts et al. 2018 as ground truth)
+
+Findings & corrections (details in tests/classical.test.ts):
+1. **MLE/MALE/MSLE/RMSLE corrected to the paper form ln(S/O)** (Törnquist 1985; Jackson Table 1).
+   HydroErr's *code* computes log1p(S)−log1p(O), contradicting its own paper and losing unit
+   invariance. Tests now pin these against independent NumPy references; a scale-invariance test
+   documents why the paper form wins. (HydroErr is still the oracle for 27 other metrics.)
+2. **MARE renamed to MAPD %** (paper Table 2 name) = 100·Σ|S−O|/Σ|O|; oracled against HydroErr
+   `mapd` (×100) and hydroeval `mare` (÷100). Avoids the MARE/MAPE naming collision.
+3. sqrt transform: negative flows now propagate NaN instead of silent clamping to 0.
+4. benchmarkSeries NaN-safe (mean/climatology over finite values only); skill() guarded when the
+   benchmark sits at the optimum.
+5. KgeResult fields renamed {variability, bias} — kge2012 no longer stores γ in a field called
+   'alpha'; kge2021's β″=(μs−μo)/σo semantics verified against hydroGOF's method="2021" docs
+   (Tang et al., 2021).
+6. Added missing registry rows + computeAll outputs: MLE, MALE, RMSLE, MdE, MdSE, MAPD.
+7. Conventions documented as deliberate: PBIAS = 100·Σ(O−S)/ΣO, positive = under-estimation
+   (paper/Moriasi; hydroGOF uses the opposite sign — pinned by test); VE range (−∞,1] with
+   optimum 1 (the review paper's "0 ≤ VE < 1, smaller is better" is a misprint vs Criss &
+   Winston 2008); sMAPE denominator (|O|+|S|)/2 preserving the stated 0–200 bound (HydroErr uses
+   (S+O)/2 — identical for positive flows); %BiasFMM log form per the Yilmaz-family signature
+   literature (scale-sensitive when median(O)≈1 in the chosen unit — documented).
+8. Single source of truth: deleted classical/basics.ts; all callers use catalogue.ts.
+9. UI: metric reference is now a grouped table with KaTeX-rendered equations, range, optimum,
+   polarity, and blind-spot columns (per-row equation = exactly what the engine computes).
+Tests: 86 passing (was 69).

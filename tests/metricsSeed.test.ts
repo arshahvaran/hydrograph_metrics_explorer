@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import fixture from './fixtures/reference_vectors.json'
 import { applyNanPolicy } from '../src/ingest/missing'
-import { nse, kge2009, rmse, pearsonR, pbias, c2m } from '../src/metrics/classical/basics'
+import { nse, kge2009, rmse, r as pearsonR, pbias, c2m } from '../src/metrics/classical/catalogue'
 
 type Fx = typeof fixture
 const F = fixture as Fx & Record<string, any>
@@ -25,7 +25,7 @@ describe('seed metrics vs executed HydroErr 2.0.0 reference values', () => {
       const p = applyNanPolicy(obs, sim, 'pairwise')
       const ref = (F.results as any)[name]['HydroErr_2.0.0']
       close(nse(p.obs, p.sim), num(ref.nse))
-      close(kge2009(p.obs, p.sim).kge, num(ref.kge_2009))
+      close(kge2009(p.obs, p.sim).value, num(ref.kge_2009))
       close(rmse(p.obs, p.sim), num(ref.rmse))
       close(pearsonR(p.obs, p.sim), num(ref.pearson_r))
     })
