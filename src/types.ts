@@ -54,7 +54,7 @@ export interface SandboxState {
 }
 
 export interface ViewState {
-  activeTab: 'data' | 'metrics' | 'plots' | 'timing' | 'sandbox' | 'map';
+  activeTab: 'data' | 'metrics' | 'plots' | 'timing' | 'sandbox' | 'compare' | 'map' | 'report';
   activePlot: string;
   /** Contiguous analysis window [startMs, endMs] or null = full record. */
   window: [number, number] | null;

@@ -1,7 +1,7 @@
-import { useDeferredValue, useMemo, useState } from 'react'
+import { useDeferredValue, useMemo, useRef, useState } from 'react'
 import { useApp } from '../store/store'
 import { PlotHost } from './PlotHost'
-import { computeForRun, computeForSeries, perturb } from './compute'
+import { useRunOutput, useSeriesOutput, perturb } from './compute'
 import { fmtNum } from './format'
 import { mean, stdPop } from '../metrics/support/stats'
 import { OBSERVED_COLOR } from '../types'
@@ -32,16 +32,21 @@ export function SandboxTab() {
   }, [ds.id, sb.mode, target?.id]);
 
   const deferred = useDeferredValue(JSON.stringify(sb));
-  const { perturbed, out } = useMemo(() => {
-    const state: SandboxState = JSON.parse(deferred);
-    const p = perturb(baseSeries, state);
-    return { perturbed: p, out: computeForSeries(ds, p) };
-  }, [deferred, ds.id, sb.mode, target?.id, ds.view.nanPolicy, ds.view.transform, JSON.stringify(ds.view.timingConfig)]);
-
-  const baseline = useMemo(
-    () => (sb.mode === 'synthetic' ? computeForSeries(ds, ds.observed.values) : computeForRun(ds, target)),
-    [ds, sb.mode, target?.id, ds.view.nanPolicy, ds.view.transform, JSON.stringify(ds.view.timingConfig)],
+  const perturbed = useMemo(
+    () => perturb(baseSeries, JSON.parse(deferred) as SandboxState),
+    [deferred, baseSeries],
   );
+  const outLive = useSeriesOutput(ds, `sandbox|${sb.mode}|${target?.id ?? 'obs'}|${deferred}`, perturbed);
+  const baselineSeries = useSeriesOutput(ds, 'sandbox-baseline-obs', sb.mode === 'synthetic' ? ds.observed.values : null);
+  const baselineRun = useRunOutput(ds, sb.mode === 'synthetic' ? null : target);
+  // retain the last completed panel so slider drags never blank the readout
+  const lastOut = useRef<ReturnType<typeof Object> | null>(null) as React.MutableRefObject<any>;
+  if (outLive) lastOut.current = outLive;
+  const out = outLive ?? lastOut.current;
+  const baseline = sb.mode === 'synthetic' ? baselineSeries : baselineRun;
+  if (!out || !baseline) {
+    return <div className="card"><h2>Perturbation sandbox</h2><p className="muted">Computing metric panel in a background worker…</p></div>;
+  }
 
   const set = (patch: Partial<SandboxState>) => updateSandbox(patch);
   const slider = (label: string, key: keyof SandboxState, min: number, max: number, step: number, fmt: (v: number) => string) => (
@@ -55,7 +60,7 @@ export function SandboxTab() {
   const dates = useMemo(() => ds.dates.map(m => new Date(m).toISOString().slice(0, 10)), [ds.dates]);
   const clean = (v: ArrayLike<number>) => Array.from(v, x => (isFinite(x as number) ? (x as number) : null));
 
-  const sweepRows = out.extras.sweep?.rows ?? [];
+  const sweepRows: { lag: number; nse: number; w1: number }[] = out.extras.sweep?.rows ?? [];
 
   return (
     <div>

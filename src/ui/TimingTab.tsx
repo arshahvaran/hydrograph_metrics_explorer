@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useApp } from '../store/store'
 import { PlotHost } from './PlotHost'
-import { computeForRun } from './compute'
+import { useRunOutputs, frameFor } from './compute'
 import { fmtNum, fmtDate } from './format'
 import { byId } from '../metrics/registry'
 
@@ -15,8 +15,13 @@ export function TimingTab() {
 
   const t = ds.view.timingConfig;
   const runs = ds.runs.filter(r => r.visible);
-  const outputs = runs.map(r => computeForRun(ds, r));
-  const stepLabel = ds.step.label;
+  const rawOutputs = useRunOutputs(ds, runs);
+  const frame = frameFor(ds);
+  if (rawOutputs.some(o => o === null)) {
+    return <div className="card"><h2>Timing &amp; shape</h2><p className="muted">Computing timing metrics in a background worker…</p></div>;
+  }
+  const outputs = rawOutputs as NonNullable<(typeof rawOutputs)[number]>[];
+  const stepLabel = frame.step.label;
 
   const sweepTraces = useMemo(() => {
     const tr: any[] = [];

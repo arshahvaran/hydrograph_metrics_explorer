@@ -1,41 +1,42 @@
 import { useMemo, useState } from 'react'
 import { useApp } from '../store/store'
-import { REGISTRY, PRESETS, C2M_APPLICABLE, toC2M } from '../metrics/registry'
+import { REGISTRY, PRESETS, C2M_APPLICABLE, toC2M, GROUPS } from '../metrics/registry'
 import { benchmarkSeries, nse as nseFn, kge2009 as kgeFn, skill } from '../metrics/classical/catalogue'
 import { applyNanPolicy } from '../ingest/missing'
-import { computeForRun, bestIndex } from './compute'
+import { useRunOutputs, bestIndex, frameFor } from './compute'
 import { fmtNum, download } from './format'
 import { Eq } from './Eq'
 import { APP_VERSION } from '../version'
 import type { Dataset } from '../types'
 
-const GROUPS = ['Error norms', 'Correlation & agreement', 'Efficiencies', 'FDC signatures', 'Timing & shape'] as const;
 
 export function MetricsTab() {
   const ds = useApp(s => s.project.datasets.find(d => d.id === s.project.activeDatasetId) ?? null);
   const updateView = useApp(s => s.updateView);
   const [preset, setPreset] = useState<string>('Timing-aware');
   const [c2mOn, setC2mOn] = useState(false);
+  const [refQuery, setRefQuery] = useState('');
   if (!ds) return null;
 
   const runs = ds.runs.filter(r => r.visible);
-  const outputs = runs.map(r => computeForRun(ds, r));
+  const outputs = useRunOutputs(ds, runs);
+  const frame = frameFor(ds);
+  const busy = outputs.some(o => o === null);
 
   const selected = PRESETS[preset] === 'all' ? REGISTRY.map(m => m.id) : (PRESETS[preset] as string[]);
   const metricRows = REGISTRY.filter(m => selected.includes(m.id));
 
   // benchmark skill (NSE & KGE vs the selected benchmark forecast)
   const bench = useMemo(() => {
-    const b = benchmarkSeries(ds.observed.values as number[], ds.view.benchmark, ds.dates);
+    const b = benchmarkSeries(frame.obs as unknown as number[], ds.view.benchmark, frame.dates);
+    const pb = applyNanPolicy(frame.obs, b, ds.view.nanPolicy);
+    const nseB = nseFn(pb.obs, pb.sim), kgeB = kgeFn(pb.obs, pb.sim).value;
     return runs.map((_r, i) => {
-      const pb = applyNanPolicy(ds.observed.values, b, ds.view.nanPolicy);
-      const nseB = nseFn(pb.obs, pb.sim), kgeB = kgeFn(pb.obs, pb.sim).value;
-      return {
-        nseSkill: skill(outputs[i].values.nse, nseB),
-        kgeSkill: skill(outputs[i].values.kge2009, kgeB),
-      };
+      const o = outputs[i];
+      return o ? { nseSkill: skill(o.values.nse, nseB), kgeSkill: skill(o.values.kge2009, kgeB) }
+               : { nseSkill: NaN, kgeSkill: NaN };
     });
-  }, [ds, runs.map(r => r.id).join(), ds.view.benchmark, ds.view.nanPolicy, ds.view.transform, JSON.stringify(ds.view.timingConfig)]);
+  }, [frame.key, runs.map(r => r.id).join(), ds.view.benchmark, ds.view.nanPolicy, ds.view.transform, JSON.stringify(ds.view.timingConfig), outputs]);
 
   const display = (id: string, v: number) =>
     c2mOn && C2M_APPLICABLE.has(id) ? toC2M(v) : v;
@@ -51,7 +52,7 @@ export function MetricsTab() {
     ];
     for (const m of metricRows) {
       lines.push([m.label.replace(new RegExp(sep === ',' ? ',' : '\\t', 'g'), ';'), m.group, m.optimum,
-        ...outputs.map(o => String(display(m.id, o.values[m.id])))].join(sep));
+        ...outputs.map(o => String(o ? display(m.id, o.values[m.id]) : ''))].join(sep));
     }
     download(`hme_metrics_${ds!.name.replace(/\W+/g, '_')}.${sep === ',' ? 'csv' : 'tsv'}`,
       lines.join('\n'), sep === ',' ? 'text/csv' : 'text/tab-separated-values');
@@ -95,11 +96,11 @@ export function MetricsTab() {
           <button onClick={() => exportCsv('\t')}>TSV</button>
         </div>
         <p className="muted">
-          n per run (valid pairs): {runs.map((r, i) => `${r.name}: ${outputs[i].n}`).join(' · ')}.
+          n per run (valid pairs): {runs.map((r, i) => `${r.name}: ${outputs[i]?.n ?? '…'}`).join(' · ')}.{busy ? ' Computing in a background worker…' : ''}{frame.caption ? ` Subset: ${frame.caption}.` : ''}
           {ds.view.transform !== 'none' && ' Metrics are computed on the transformed series.'}
           {' '}Rows tinted <span className="timingchip">⏱</span> are the timing- &amp; shape-aware measures — the ones conventional suites omit.
         </p>
-        {outputs.flatMap(o => o.notes).filter((v, i, a) => a.indexOf(v) === i).map(nn => <div key={nn} className="warning">{nn}</div>)}
+        {outputs.flatMap(o => o?.notes ?? []).filter((v, i, a) => a.indexOf(v) === i).map(nn => <div key={nn} className="warning">{nn}</div>)}
         <div className="mapscroll"><table className="grid metricstable">
           <thead>
             <tr><th>Metric</th><th>optimum</th>{runs.map(r => <th key={r.id} style={{ color: r.color }}>{r.name}</th>)}</tr>
@@ -111,7 +112,7 @@ export function MetricsTab() {
               return (
                 <FragmentGroup key={g} title={g}>
                   {rows.map(m => {
-                    const vals = outputs.map(o => display(m.id, o.values[m.id]));
+                    const vals = outputs.map(o => (o ? display(m.id, o.values[m.id]) : NaN));
                     const best = runs.length > 1 ? bestIndex(vals, m.direction) : -1;
                     return (
                       <tr key={m.id} className={m.timing ? 'timingrow' : ''} title={m.blurb + ` Range ${m.range}.`}>
@@ -145,6 +146,10 @@ export function MetricsTab() {
       <section className="card">
         <details>
           <summary><strong>Metric reference</strong> — equations, ranges, and blind spots</summary>
+          <div className="controls"><label>Search{' '}
+            <input type="search" placeholder="e.g. wasserstein, bias, timing…" value={refQuery}
+              onChange={e => setRefQuery(e.target.value)} aria-label="search metric reference" />
+          </label></div>
           <p className="muted">
             Notation: <Eq tex={'O_i'} /> observed, <Eq tex={'S_i'} /> simulated, <Eq tex={'n'} /> valid pairs after the NaN policy,{' '}
             <Eq tex={'\\bar{O},\\ \\sigma'} /> mean and population standard deviation, <Eq tex={'\\tilde{O}'} /> median,{' '}
@@ -159,7 +164,12 @@ export function MetricsTab() {
               <tbody>
                 {GROUPS.map(g => (
                   <FragmentGroup key={g} title={g}>
-                    {REGISTRY.filter(m => m.group === g).map(m => (
+                    {REGISTRY.filter(m => m.group === g)
+                      .filter(m => {
+                        const q = refQuery.trim().toLowerCase();
+                        if (!q) return true;
+                        return (m.label + ' ' + m.id + ' ' + (m.blurb ?? '')).toLowerCase().includes(q);
+                      }).map(m => (
                       <tr key={m.id} className={m.timing ? 'timingrow' : ''}>
                         <td>{m.timing ? '⏱ ' : ''}{m.label}</td>
                         <td className="eqcell"><Eq tex={m.equation} /></td>

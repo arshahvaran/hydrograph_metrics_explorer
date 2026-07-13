@@ -28,6 +28,8 @@ export interface MetricMeta {
 
 const M = (m: MetricMeta) => m;
 
+export const GROUPS = ['Error norms', 'Correlation & agreement', 'Efficiencies', 'FDC signatures', 'Timing & shape'] as const;
+
 export const REGISTRY: MetricMeta[] = [
   // ----- error norms -----
   M({ id: 'me', label: 'ME (mean error)', group: 'Error norms', optimum: '0', direction: 'zero', range: '(−∞,∞)', timing: false, unitful: true, digits: 3, blurb: 'Mean of sim−obs; positive = over-estimation on average. Cancels compensating errors.', equation: '\\frac{1}{n}\\sum_{i=1}^{n}(S_i-O_i)' }),
@@ -135,6 +137,8 @@ export interface ComputeOutput {
 }
 
 /** Compute every metric for one run against observed under the current view. */
+export type ComputeCtx = ComputeContext;
+
 export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>, ctx: ComputeContext): ComputeOutput {
   const paired = applyNanPolicy(obsRaw, simRaw, ctx.nanPolicy);
   const { o, s, note } = C.applyTransform(paired.obs, paired.sim, ctx.transform);

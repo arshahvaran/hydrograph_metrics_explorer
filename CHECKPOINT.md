@@ -135,3 +135,29 @@ Tests: 86 passing (was 69).
   0° at top); lag sweeps carry the dotted 'perfect alignment' zero line; dark-mode Leaflet via
   invert/hue-rotate filter.
 - 86 tests unchanged and passing; no engine changes.
+
+
+---
+
+# CP8 · v1.0.0 — MVP complete (spec §21) 
+
+New this checkpoint:
+- **Subsetting engine** (`src/metrics/subset.ts`): contiguous window → wrap-aware seasonal DOY filter →
+  daily/monthly resample with effective step; cached "frames" feed every tab, caption strings surface in
+  Metrics/Compare/Report (AC3, AC9). Global AnalysisBar above all analysis tabs.
+- **Web Worker** metric engine (`src/metrics/worker.ts` + async `compute.ts`): full panel off-thread,
+  pending states in every tab, last-good retention in the Sandbox so sliders never blank (§18–19).
+- **Compare tab** (`rank.ts` + `CompareTab.tsx`): priority metrics with weights, C2M-normalised scores,
+  composite ranking, Recommended-run callout with timing nudge (AC13). Unit-tested (5 tests) — the tests
+  caught and fixed a degenerate all-equal scoring bug.
+- **Report** (`src/report/report.ts` + tab): client-side DOCX (docx-js; dual-DXA tables, CLEAR shading,
+  typed ImageRun, per-line Paragraphs) with data summary, grouped metrics (timing rows shaded ⏱),
+  three embedded figures (hydrograph / scatter / lag sweep, serif figure style), per-run event tables,
+  ranking + recommendation, notes, provenance JSON appendix, citation; matching print-window PDF;
+  filename `<dataset>_evaluation_<yyyymmdd>` (AC15, §16).
+- **Per-plot PNG/SVG/CSV downloads** on every PlotHost (AC8); **editable paste grid** with
+  ＋Add-predicted-column, header-rename→run-name, block paste (Appendix C, AC1) + template CSV;
+  reference **search** (AC19); Duplicate dataset / New project / >25 MB save warning (§17).
+- Tests 86 → **95** (subset ×4, rank ×5); tsc clean; worker chunk emitted by Vite build.
+Deviations recorded in ACCEPTANCE.md (USGS + bootstrap CIs are spec-designated v1.1; long-job
+cancellation implemented as bounded decimation + superseded-result drop rather than a cancel button).

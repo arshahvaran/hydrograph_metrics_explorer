@@ -12,6 +12,19 @@ Wasserstein distance between hydrographs treated as distributions of flow mass o
 Everything — parsing, unit conversion, every metric, every plot, report generation — runs in
 your browser. **No data ever leaves the page**; there is no server, no database, no account.
 
+## Features (v1.0)
+
+Data ingestion (paste grid with add-column, CSV/XLSX upload with mapping, Julian dates, unit
+conversion incl. depth↔volume with catchment area) · 62-metric panel — classical families
+independently implemented and verified against HydroErr/Hydrostats/hydroeval/hydroGOF, plus the
+timing- & shape-aware core (peak timing, event errors, Diagnostic Efficiency, Series Distance,
+banded DTW, Wasserstein W₁, cross-wavelet lag) · analysis window / wrap-aware seasonal filter /
+resampling · benchmark skill scores · eight linked plots with PNG/SVG/CSV export · interactive
+double-penalty Sandbox with live lag sweep · C2M-normalised multi-run ranking with a recommended
+run · Leaflet map · client-side DOCX + PDF reports with full settings provenance · `.hme.json`
+projects. Everything runs in the browser; no data leaves the device. See ACCEPTANCE.md for the
+criterion-by-criterion audit and PAPER_CHANGES.md for the manuscript-consistency notes.
+
 ## Status
 
 This repository is being built in verified checkpoints. Each checkpoint lands with its tests.

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { useApp } from '../store/store'
 import { parseDelimited, parseWorkbook, guessRoles, stage, fetchSample, type RawTable, type ColumnRole } from '../ingest/ingest'
+import { EditableGrid } from './EditableGrid'
 import { UNITS } from '../units/registry'
 import { fmtDate, fmtNum } from './format'
 import type { DateFormat } from '../ingest/dateParse'
@@ -83,7 +84,9 @@ export function DataTab() {
           </label>
         </div>
         <details>
-          <summary>…or paste from a spreadsheet</summary>
+          <summary>…or paste / type into an editable grid</summary>
+          <EditableGrid onUse={(t2, name) => loadTable(t2, name)} seedText={pasteText} />
+          <p className="muted">Or paste raw delimited text below (tab, comma or semicolon; first row = headers) — <a href="samples/hme_template.csv" download>download the CSV template</a>.</p>
           <textarea rows={6} value={pasteText} placeholder={'date\tobserved\tmodelA\n2001-01-01\t5.2\t4.9\n…'}
             onChange={e => setPasteText(e.target.value)} />
           <button className="primary" disabled={!pasteText.trim()}

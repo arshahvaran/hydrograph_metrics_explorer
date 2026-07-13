@@ -37,7 +37,19 @@ function themeTemplate(): any {
   };
 }
 
-export function PlotHost({ traces, layout, height = 380 }: { traces: any[]; layout: any; height?: number }) {
+function tracesToCsv(traces: any[]): string {
+  const lines = ['trace,x,y'];
+  for (const tr of traces) {
+    const xs = tr.x ?? [], ys = tr.y ?? tr.r ?? [];
+    const name = String(tr.name ?? 'series').replace(/,/g, ';');
+    for (let i = 0; i < Math.min(xs.length ?? 0, ys.length ?? 0); i++) {
+      lines.push(`${name},${xs[i]},${ys[i]}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+export function PlotHost({ traces, layout, height = 380, name = 'hme_plot' }: { traces: any[]; layout: any; height?: number; name?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const theme = useApp(s => s.theme);
   useEffect(() => {
@@ -55,5 +67,26 @@ export function PlotHost({ traces, layout, height = 380 }: { traces: any[]; layo
   useEffect(() => () => {
     if (ref.current) loadPlotly().then(P => P.purge(ref.current!));
   }, []);
-  return <div ref={ref} style={{ width: '100%', height }} className="plothost" />;
+  const dl = (format: 'png' | 'svg') => {
+    if (!ref.current) return;
+    loadPlotly().then(P => P.downloadImage(ref.current!, { format, filename: name, width: 1100, height, scale: format === 'png' ? 2 : 1 }));
+  };
+  const dlCsv = () => {
+    const blob = new Blob([tracesToCsv(traces)], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${name}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  };
+  return (
+    <div>
+      <div ref={ref} style={{ width: '100%', height }} className="plothost" />
+      <div className="dlrow" aria-label="download this plot">
+        <button onClick={() => dl('png')} title="Download PNG">PNG</button>
+        <button onClick={() => dl('svg')} title="Download SVG">SVG</button>
+        <button onClick={dlCsv} title="Download plotted data as CSV">CSV</button>
+      </div>
+    </div>
+  );
 }

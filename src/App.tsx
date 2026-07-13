@@ -6,13 +6,17 @@ import { PlotsTab } from './ui/PlotsTab'
 import { TimingTab } from './ui/TimingTab'
 import { SandboxTab } from './ui/SandboxTab'
 import { MapTab } from './ui/MapTab'
+import { CompareTab } from './ui/CompareTab'
+import { ReportTab } from './ui/ReportTab'
+import { AnalysisBar } from './ui/AnalysisBar'
 import { download } from './ui/format'
 import { APP_VERSION, CHECKPOINT } from './version'
 import type { Project } from './types'
 
 const TABS = [
   ['data', 'Data'], ['metrics', 'Metrics'], ['plots', 'Plots'],
-  ['timing', 'Timing'], ['sandbox', 'Sandbox'], ['map', 'Map'],
+  ['timing', 'Timing'], ['sandbox', 'Sandbox'], ['compare', 'Compare'],
+  ['map', 'Map'], ['report', 'Report'],
 ] as const;
 
 export default function App() {
@@ -55,7 +59,15 @@ export default function App() {
           )}
           {ds && <button title="Remove active dataset" onClick={() => removeDataset(ds.id)}>✕</button>}
           <button title="Save project (.hme.json)" disabled={!project.datasets.length}
-            onClick={() => download('project.hme.json', serialiseProject(project), 'application/json')}>Save</button>
+            onClick={() => {
+              const json = serialiseProject(project);
+              if (json.length > 25_000_000) alert(`Heads-up: this project serialises to ${(json.length / 1e6).toFixed(0)} MB (spec suggests staying under 25 MB). It will still save, but loading may be slow.`);
+              download('project.hme.json', json, 'application/json');
+            }}>Save</button>
+          <button title="Duplicate the active dataset" disabled={!ds}
+            onClick={() => useApp.getState().duplicateDataset()}>Duplicate</button>
+          <button title="Start a new empty project" disabled={!project.datasets.length}
+            onClick={() => { if (confirm('Clear all datasets and start a new project? Unsaved work is lost.')) useApp.getState().loadProject({ schemaVersion: 1, datasets: [], activeDatasetId: null }); }}>New</button>
           <label className="filebtn" title="Load a saved project">Load
             <input ref={loadRef} type="file" accept=".json" hidden onChange={e => e.target.files?.[0] && onLoadProject(e.target.files[0])} />
           </label>
@@ -79,12 +91,15 @@ export default function App() {
       </nav>
 
       <main className="main">
+        {tab !== 'data' && ds && <AnalysisBar />}
         {tab === 'data' && <DataTab />}
         {tab === 'metrics' && ds && <MetricsTab />}
         {tab === 'plots' && ds && <PlotsTab />}
         {tab === 'timing' && ds && <TimingTab />}
         {tab === 'sandbox' && ds && <SandboxTab />}
+        {tab === 'compare' && ds && <CompareTab />}
         {tab === 'map' && ds && <MapTab />}
+        {tab === 'report' && ds && <ReportTab />}
       </main>
 
       <footer className="footer">

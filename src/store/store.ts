@@ -12,6 +12,7 @@ export interface CommitInput {
 }
 
 interface AppState {
+  duplicateDataset: () => void;
   project: Project;
   theme: 'light' | 'dark';
   toggleTheme: () => void;
@@ -113,6 +114,14 @@ export const useApp = create<AppState>((set, get) => ({
 
   setActiveTab: (tab) => set(s => mutateActive(s, d => ({ ...d, view: { ...d.view, activeTab: tab } }))),
   updateView: (patch) => set(s => mutateActive(s, d => ({ ...d, view: { ...d.view, ...patch } }))),
+
+  duplicateDataset: () => set(s => {
+    const src = s.project.datasets.find(d => d.id === s.project.activeDatasetId);
+    if (!src) return s;
+    const id = `ds_${Date.now().toString(36)}`;
+    const copy = JSON.parse(JSON.stringify({ ...src, id, name: `${src.name} (copy)`, createdAt: Date.now() }));
+    return { project: { ...s.project, datasets: [...s.project.datasets, copy], activeDatasetId: id } };
+  }),
   updateTiming: (patch) => set(s => mutateActive(s, d => ({ ...d, view: { ...d.view, timingConfig: { ...d.view.timingConfig, ...patch } } }))),
   updateSandbox: (patch) => set(s => mutateActive(s, d => ({ ...d, view: { ...d.view, sandbox: { ...d.view.sandbox, ...patch } } }))),
   setLocation: (lat, lon) => set(s => mutateActive(s, d => ({ ...d, location: { lat, lon } }))),

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useApp } from '../store/store'
 import { PlotHost } from './PlotHost'
-import { computeForRun } from './compute'
+import { useRunOutput, frameFor } from './compute'
 import { quantile } from '../metrics/support/stats'
 import { OBSERVED_COLOR } from '../types'
 import type { Dataset } from '../types'
@@ -14,11 +14,11 @@ const PLOTS = [
 
 type Mode = 'none' | 'derivative' | 'cumulative' | 'fromMean';
 
-function seriesOf(ds: Dataset) {
+function seriesOf(ds: Dataset, frame: { obs: Float64Array; apply: (v: ArrayLike<number>) => Float64Array }) {
   const clean = (v: ArrayLike<number>) => Array.from(v, x => (isFinite(x as number) ? (x as number) : null));
   return [
-    { name: ds.observed.name || 'Observed', color: OBSERVED_COLOR, y: clean(ds.observed.values), width: 2.2, dash: 'solid' as const },
-    ...ds.runs.filter(r => r.visible).map(r => ({ name: r.name, color: r.color, y: clean(r.values), width: 1.7, dash: 'dash' as const })),
+    { name: ds.observed.name || 'Observed', color: OBSERVED_COLOR, y: clean(frame.obs), width: 2.2, dash: 'solid' as const },
+    ...ds.runs.filter(r => r.visible).map(r => ({ name: r.name, color: r.color, y: clean(frame.apply(r.values)), width: 1.7, dash: 'dash' as const })),
   ];
 }
 
@@ -60,8 +60,11 @@ export function PlotsTab() {
   const [focusIdx, setFocusIdx] = useState(0); // series selector for heatmap/spaghetti/alignment
   if (!ds) return null;
 
-  const dates = useMemo(() => ds.dates.map(m => new Date(m).toISOString().slice(0, 10)), [ds.dates]);
-  const all = useMemo(() => seriesOf(ds), [ds]);
+  const frame = frameFor(ds);
+  const dates = useMemo(() => frame.dates.map(m => new Date(m).toISOString().slice(0, 10)), [frame.key]);
+  const alignRun = ds.runs.filter(r => r.visible)[Math.max(0, Math.min(focusIdx - 1, ds.runs.length - 1))] ?? ds.runs[0] ?? null;
+  const alignOut = useRunOutput(ds, plot === 'alignment' ? alignRun : null);
+  const all = useMemo(() => seriesOf(ds, frame), [ds, frame.key]);
   const unit = ds.targetUnit;
 
   const { traces, layout, note } = useMemo(() => {
@@ -165,9 +168,9 @@ export function PlotsTab() {
     }
 
     // alignment
-    const run = ds.runs.filter(r => r.visible)[Math.max(0, Math.min(focusIdx - 1, ds.runs.length - 1))] ?? ds.runs[0];
-    const out = computeForRun(ds, run);
-    const path = out.extras.dtw?.path ?? [];
+    const run = alignRun!;
+    if (!alignOut) return { traces: [], layout: {}, note: 'computing DTW alignment in a background worker…' };
+    const path = alignOut.extras.dtw?.path ?? [];
     const paired = { o: all[0].y, s: all.find(a => a.name === run.name)?.y ?? all[1]?.y };
     const step = Math.max(1, Math.floor(path.length / 160));
     const cx: (string | null)[] = [], cy: (number | null)[] = [];
@@ -183,9 +186,9 @@ export function PlotsTab() {
         { x: cx, y: cy, name: 'DTW alignment', type: 'scatter', mode: 'lines', line: { color: 'rgba(150,150,160,0.5)', width: 1 }, hoverinfo: 'skip' },
       ],
       layout: { xaxis: { rangeslider: { visible: true } }, yaxis: { title: yTitle } },
-      note: `optimal Sakoe–Chiba alignment (band ${out.extras.dtw?.band} steps) — mean |warp| ${out.values.dtw_warp?.toFixed(2)} steps; grey ties connect matched points`,
+      note: `optimal Sakoe–Chiba alignment (band ${alignOut.extras.dtw?.band} steps) — mean |warp| ${alignOut.values.dtw_warp?.toFixed(2)} steps; grey ties connect matched points`,
     };
-  }, [ds, plot, mode, logY, movAvg, threshold, focusIdx, dates, all, unit]);
+  }, [ds, plot, mode, logY, movAvg, threshold, focusIdx, dates, all, unit, frame.key, alignOut]);
 
   const needsFocus = plot === 'heatmap' || plot === 'spaghetti' || plot === 'alignment';
 

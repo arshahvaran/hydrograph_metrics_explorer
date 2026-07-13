@@ -3,8 +3,8 @@ export const fmtNum = (v: number | undefined | null, digits = 3): string =>
 
 export const fmtDate = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
 
-export function download(filename: string, text: string, mime = 'text/plain'): void {
-  const blob = new Blob([text], { type: mime });
+export function download(filename: string, content: string | Blob, mime = 'text/plain'): void {
+  const blob = content instanceof Blob ? content : new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = filename;
