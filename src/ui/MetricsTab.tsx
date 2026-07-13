@@ -4,7 +4,7 @@ import { REGISTRY, PRESETS, C2M_APPLICABLE, toC2M, GROUPS } from '../metrics/reg
 import { benchmarkSeries, nse as nseFn, kge2009 as kgeFn, skill } from '../metrics/classical/catalogue'
 import { applyNanPolicy } from '../ingest/missing'
 import { useRunOutputs, bestIndex, frameFor, useBootstrapCIsAll } from './compute'
-import { fmtNum, download } from './format'
+import { csvLine, fmtNum, download } from './format'
 import { Eq } from './Eq'
 import { APP_VERSION } from '../version'
 import type { Dataset } from '../types'
@@ -12,11 +12,15 @@ import type { Dataset } from '../types'
 
 export function MetricsTab() {
   const ds = useApp(s => s.project.datasets.find(d => d.id === s.project.activeDatasetId) ?? null);
+  if (!ds) return null;
+  return <MetricsTabInner ds={ds} />;
+}
+
+function MetricsTabInner({ ds }: { ds: Dataset }) {
   const updateView = useApp(s => s.updateView);
   const [preset, setPreset] = useState<string>('Timing-aware');
   const [c2mOn, setC2mOn] = useState(false);
   const [refQuery, setRefQuery] = useState('');
-  if (!ds) return null;
 
   const runs = ds.runs.filter(r => r.visible);
   const outputs = useRunOutputs(ds, runs);
@@ -50,16 +54,16 @@ export function MetricsTab() {
       `# dataset: ${ds!.name} (${ds!.dates.length} rows, step ${ds!.step.label}, unit ${ds!.targetUnit})`,
       `# settings: nan=${ds!.view.nanPolicy}; transform=${ds!.view.transform}; benchmark=${ds!.view.benchmark}; c2m_display=${c2mOn}`,
       `# timing config: ${JSON.stringify(ds!.view.timingConfig)}`,
-      ['metric', 'group', 'optimum', ...runs.flatMap(r => ciOn ? [r.name, `${r.name} ci95_lo`, `${r.name} ci95_hi`] : [r.name])].join(sep),
+      csvLine(['metric', 'group', 'optimum', ...runs.flatMap(r => ciOn ? [r.name, `${r.name} ci95_lo`, `${r.name} ci95_hi`] : [r.name])], sep),
     ];
     for (const m of metricRows) {
-      lines.push([m.label.replace(new RegExp(sep === ',' ? ',' : '\\t', 'g'), ';'), m.group, m.optimum,
+      lines.push(csvLine([m.label, m.group, m.optimum,
         ...outputs.flatMap((o, i) => {
-          const v = String(o ? display(m.id, o.values[m.id]) : '');
+          const v = o ? display(m.id, o.values[m.id]) : '';
           if (!ciOn) return [v];
           const ci = m.timing ? undefined : boots.results[i]?.cis[m.id];
-          return [v, ci ? String(ci[0]) : '', ci ? String(ci[1]) : ''];
-        })].join(sep));
+          return [v, ci ? ci[0] : '', ci ? ci[1] : ''];
+        })], sep));
     }
     download(`hme_metrics_${ds!.name.replace(/\W+/g, '_')}.${sep === ',' ? 'csv' : 'tsv'}`,
       lines.join('\n'), sep === ',' ? 'text/csv' : 'text/tab-separated-values');
@@ -97,8 +101,11 @@ export function MetricsTab() {
             </select>
           </label>
           <label title="Display unbounded efficiencies on the bounded (−1,1] C2M scale">
-            <input type="checkbox" checked={c2mOn} onChange={e => setC2mOn(e.target.checked)} /> C2M display
+            <input type="checkbox" checked={c2mOn} onChange={e => setC2mOn(e.target.checked)} /> C2M display</label>
+          <label title="Circular moving-block bootstrap on the paired series (B=500, L≈n^⅓, seeded). Timing rows are excluded — resampling blocks destroys the time axis they measure.">
+            <input type="checkbox" checked={ciOn} onChange={e => updateView({ showBootstrapCIs: e.target.checked })} /> 95% CIs (block bootstrap)
           </label>
+          {ciOn && boots.progress < 1 && <span className="muted" role="status" aria-live="polite">bootstrapping… {Math.round(boots.progress * 100)}%</span>}
           <button className="primary" onClick={() => exportCsv(',')}>Export CSV</button>
           <button onClick={() => exportCsv('\t')}>TSV</button>
         </div>

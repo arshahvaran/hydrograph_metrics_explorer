@@ -5,7 +5,7 @@ import { useRunOutput, useSeriesOutput, perturb } from './compute'
 import { fmtNum } from './format'
 import { mean, stdPop } from '../metrics/support/stats'
 import { OBSERVED_COLOR } from '../types'
-import type { SandboxState } from '../types'
+import type { Dataset, SandboxState } from '../types'
 
 const CLASSICAL: [string, string, number][] = [['nse', 'NSE', 3], ['kge2009', 'KGE', 3], ['r', 'r', 3], ['rmse', 'RMSE', 3], ['pbias', 'PBIAS %', 2]];
 const TIMING: [string, string, number][] = [['w1', 'W₁ [steps]', 2], ['w2sq', 'W₂² [steps²]', 2], ['dtw_warp', 'DTW |warp| [steps]', 2], ['peak_lag_abs', 'Peak |lag| [steps]', 2], ['lag_best', 'Best-fit lag [steps]', 0], ['xwt_lag', 'XWT lag [steps]', 2]];
@@ -19,8 +19,12 @@ const PRESETS: { name: string; hint: string; patch: Partial<SandboxState> }[] = 
 
 export function SandboxTab() {
   const ds = useApp(s => s.project.datasets.find(d => d.id === s.project.activeDatasetId) ?? null);
-  const updateSandbox = useApp(s => s.updateSandbox);
   if (!ds) return null;
+  return <SandboxTabInner ds={ds} />;
+}
+
+function SandboxTabInner({ ds }: { ds: Dataset }) {
+  const updateSandbox = useApp(s => s.updateSandbox);
 
   const sb = ds.view.sandbox;
   const runs = ds.runs;
@@ -44,9 +48,6 @@ export function SandboxTab() {
   if (outLive) lastOut.current = outLive;
   const out = outLive ?? lastOut.current;
   const baseline = sb.mode === 'synthetic' ? baselineSeries : baselineRun;
-  if (!out || !baseline) {
-    return <div className="card"><h2>Perturbation sandbox</h2><p className="muted">Computing metric panel in a background worker…</p></div>;
-  }
 
   const set = (patch: Partial<SandboxState>) => updateSandbox(patch);
   const slider = (label: string, key: keyof SandboxState, min: number, max: number, step: number, fmt: (v: number) => string) => (
@@ -58,6 +59,9 @@ export function SandboxTab() {
   );
 
   const dates = useMemo(() => ds.dates.map(m => new Date(m).toISOString().slice(0, 10)), [ds.dates]);
+  if (!out || !baseline) {
+    return <div className="card"><h2>Perturbation sandbox</h2><p className="muted">Computing metric panel in a background worker…</p></div>;
+  }
   const clean = (v: ArrayLike<number>) => Array.from(v, x => (isFinite(x as number) ? (x as number) : null));
 
   const sweepRows: { lag: number; nse: number; w1: number }[] = out.extras.sweep?.rows ?? [];
@@ -75,7 +79,7 @@ export function SandboxTab() {
           </label>
           {sb.mode === 'perturb' && (
             <label>Run{' '}
-              <select value={target?.id} onChange={e => set({ targetRunId: e.target.value })}>
+              <select aria-label="Perturbation target run" value={target?.id} onChange={e => set({ targetRunId: e.target.value })}>
                 {runs.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
             </label>
@@ -99,10 +103,10 @@ export function SandboxTab() {
           <div className="sliderrow">
             <span className="srtop"><span>Noise kind / seed</span><code>reproducible</code></span>
             <span className="srctrl">
-              <select value={sb.noiseKind} onChange={e => set({ noiseKind: e.target.value as any })}>
+              <select aria-label="Noise kind" value={sb.noiseKind} onChange={e => set({ noiseKind: e.target.value as any })}>
                 <option value="uniform">uniform</option><option value="gaussian">gaussian</option>
               </select>
-              <input type="number" value={sb.noiseSeed} style={{ width: '6em' }} onChange={e => set({ noiseSeed: Number(e.target.value) })} />
+              <input aria-label="Noise seed" type="number" value={sb.noiseSeed} style={{ width: '6em' }} onChange={e => set({ noiseSeed: Number(e.target.value) })} />
             </span>
           </div>
         </div>

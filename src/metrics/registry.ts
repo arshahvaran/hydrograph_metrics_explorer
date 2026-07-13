@@ -141,6 +141,18 @@ export type ComputeCtx = ComputeContext;
 
 /** The synchronous (classical) metric block on an already-paired, already-
  *  transformed pair — the unit resampled by the bootstrap. */
+
+/** Contract barrier: metric values are finite or NaN, never ±Infinity —
+ *  IEEE754 overflow on degenerate data must read "n/a", not a number.
+ *  Per-metric guards handle the statistically meaningful zero-denominator
+ *  cases; this enforces the contract against overflow in any remaining or
+ *  future metric. */
+function enforceFinite(values: Record<string, number>): void {
+  for (const k of Object.keys(values)) {
+    if (values[k] === Infinity || values[k] === -Infinity) values[k] = NaN;
+  }
+}
+
 export function classicalValues(o: Float64Array, s: Float64Array): {
   values: Record<string, number>;
   kge: { kge2009: ReturnType<typeof C.kge2009>; kge2012: ReturnType<typeof C.kge2012>; kge2021: ReturnType<typeof C.kge2021>; kgenp: ReturnType<typeof C.kgenp> };
@@ -159,6 +171,7 @@ export function classicalValues(o: Float64Array, s: Float64Array): {
     ve: C.ve(o, s), pbias: C.pbias(o, s), beta_nse: C.betaNse(o, s), alpha: C.alphaRatio(o, s),
     fhv: C.fhv(o, s), flv: C.flv(o, s), fms: C.fms(o, s), fmm: C.fmm(o, s),
   };
+  enforceFinite(values);
   return { values, kge: { kge2009: k09, kge2012: k12, kge2021: k21, kgenp: knp } };
 }
 
@@ -179,7 +192,9 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
     };
     const daily = true;
     const de = diagnosticEfficiency(o, s);
-    const peaks = peakTiming(o, s, { prominence: t.peakProminence, minDistance: 100, window: t.peakMatchTolerance });
+    // QA-011: peak separation must follow the configured event spacing, not a
+    // hardcoded 100 steps (which silently suppressed real peaks in daily data).
+    const peaks = peakTiming(o, s, { prominence: t.peakProminence, minDistance: t.eventMinDistance, window: t.peakMatchTolerance });
     const events = eventErrors(o, s, evOpt, t.peakMatchTolerance);
     const sd = seriesDistance(o, s, evOpt, t.peakMatchTolerance);
     // DTW guard for very long series: decimate to keep the DP tractable
@@ -197,6 +212,9 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
     const xw = xwtLag(o, s);
     const sweep = lagSweep(o, s, -30, 30);
 
+    if (peaks.unresolved > 0) {
+      notes.push(`${peaks.unresolved} observed peak(s) had no resolvable simulated peak within ±${t.peakMatchTolerance} steps — those pairs are excluded from the peak-timing means. Widen the peak-match tolerance if lags may exceed it.`);
+    }
     values.peak_lag_abs = peaks.meanAbsLag;
     values.peak_lag_signed = peaks.meanSignedLag;
     values.event_threat = events.threat;
@@ -217,6 +235,7 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
     Object.assign(extras, { de, peaks, events, sd, dtw: dtwRes, xwt: xw, sweep });
   }
 
+  enforceFinite(values);
   return { values, n: paired.n, notes, extras };
 }
 

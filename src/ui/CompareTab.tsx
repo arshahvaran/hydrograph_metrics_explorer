@@ -1,4 +1,5 @@
 import { useApp } from '../store/store'
+import type { Dataset } from '../types'
 import { useRunOutputs, frameFor } from './compute'
 import { rankRuns, DEFAULT_PRIORITIES } from '../metrics/rank'
 import { REGISTRY, byId } from '../metrics/registry'
@@ -11,8 +12,12 @@ const CANDIDATES = REGISTRY.filter(m =>
 /** Compare runs: priority-metric composite ranking + recommendation (spec §14, AC13). */
 export function CompareTab() {
   const ds = useApp(s => s.project.datasets.find(d => d.id === s.project.activeDatasetId) ?? null);
-  const updateView = useApp(s => s.updateView);
   if (!ds) return null;
+  return <CompareTabInner ds={ds} />;
+}
+
+function CompareTabInner({ ds }: { ds: Dataset }) {
+  const updateView = useApp(s => s.updateView);
   const runs = ds.runs.filter(r => r.visible);
   const outputs = useRunOutputs(ds, runs);
   const frame = frameFor(ds);

@@ -5,7 +5,7 @@ import { validateDataset, type ValidationResult } from './validate'
 import type { UnitId } from '../types'
 import type { CommitInput } from '../store/store'
 
-export interface RawTable { header: string[]; rows: string[][] }
+export interface RawTable { header: string[]; rows: string[][]; note?: string }
 
 /** Parse CSV/TSV/semicolon text with Papa's delimiter sniffing. First row = header. */
 export function parseDelimited(text: string): RawTable {
@@ -19,14 +19,22 @@ export function parseDelimited(text: string): RawTable {
 export async function parseWorkbook(buf: ArrayBuffer): Promise<RawTable> {
   const XLSX = await import('xlsx');
   const wb = XLSX.read(buf, { type: 'array', cellDates: true });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const aoa = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: '' });
   const toStr = (c: any) => c instanceof Date
     ? new Date(Date.UTC(c.getFullYear(), c.getMonth(), c.getDate(), c.getHours(), c.getMinutes())).toISOString().slice(0, 16).replace('T', ' ')
     : String(c ?? '');
-  const rows = aoa.filter(r => r.some((c: any) => String(c ?? '').trim() !== ''));
-  if (!rows.length) return { header: [], rows: [] };
-  return { header: rows[0].map(toStr).map(s => s.trim()), rows: rows.slice(1).map(r => r.map(toStr)) };
+  // QA-009: the data is not always on the first sheet — take the first sheet
+  // with at least a header and one data row, and say which one was used.
+  for (const name of wb.SheetNames) {
+    const aoa = XLSX.utils.sheet_to_json<any[]>(wb.Sheets[name], { header: 1, defval: '' });
+    const rows = aoa.filter(r => r.some((c: any) => String(c ?? '').trim() !== ''));
+    if (rows.length >= 2) {
+      const note = wb.SheetNames.length > 1
+        ? `Workbook has ${wb.SheetNames.length} sheets — using “${name}”. Move your data to a single sheet if this is the wrong one.`
+        : undefined;
+      return { header: rows[0].map(toStr).map((s: string) => s.trim()), rows: rows.slice(1).map(r => r.map(toStr)), note };
+    }
+  }
+  return { header: [], rows: [] };
 }
 
 export type ColumnRole = 'date' | 'observed' | 'run' | 'ignore';

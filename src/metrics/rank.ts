@@ -5,6 +5,7 @@
 // by closeness to the optimum, min–max scaled across runs (relative ranking).
 // Composite = weighted mean of per-metric scores; ties broken by name order.
 
+import { arrMin, arrMax } from './support/stats'
 import { byId, C2M_APPLICABLE } from './registry'
 import { c2m } from './classical/catalogue'
 
@@ -19,7 +20,7 @@ export interface RankRow {
 function minMax(xs: number[]): (v: number) => number {
   const fin = xs.filter(isFinite);
   if (!fin.length) return () => NaN;
-  const lo = Math.min(...fin), hi = Math.max(...fin);
+  const lo = arrMin(fin), hi = arrMax(fin);
   if (hi - lo < 1e-15) return v => (isFinite(v) ? 1 : NaN); // all equal → all best
   return v => (isFinite(v) ? (v - lo) / (hi - lo) : NaN);
 }
@@ -37,7 +38,7 @@ export function scoreMetric(id: string, raw: number[]): number[] {
   const dist = raw.map(v => (isFinite(v) ? Math.abs(v - opt) : NaN));
   const fin = dist.filter(isFinite);
   if (!fin.length) return dist.map(() => NaN);
-  const lo = Math.min(...fin), hi = Math.max(...fin);
+  const lo = arrMin(fin), hi = arrMax(fin);
   if (hi - lo < 1e-15) return dist.map(d => (isFinite(d) ? 1 : NaN)); // all equally good
   return dist.map(d => (isFinite(d) ? 1 - (d - lo) / (hi - lo) : NaN));
 }

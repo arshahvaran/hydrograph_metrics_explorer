@@ -101,6 +101,8 @@ export function eventErrors(obs: Vec, sim: Vec, opt: EventOptions, matchToleranc
 // ---------------- Gauch et al. (2021) peak-timing ----------------
 export interface PeakMatch { tObs: number; tSim: number; lag: number; obsQ: number; simQ: number }
 export interface PeakTimingResult {
+  /** Obs peaks whose best sim match clamped at the window edge (excluded). */
+  unresolved: number;
   meanAbsLag: number;       // paper headline
   meanSignedLag: number;    // "timing bias" (secondary)
   peaks: PeakMatch[];
@@ -149,17 +151,27 @@ export function peakTiming(
   }
   keep.sort((a, b) => a - b);
 
-  const peaks: PeakMatch[] = keep.map(t => {
+  // QA-011b: an argmax sitting ON the window boundary while the simulation is
+  // still rising beyond it means the true peak lies outside the window. The
+  // old code reported the clamped boundary lag as truth — a confidently wrong
+  // number. Such pairs are UNRESOLVED: excluded from the means and counted.
+  const peaks: PeakMatch[] = [];
+  let unresolved = 0;
+  for (const t of keep) {
     const lo = Math.max(0, t - opts.window), hi = Math.min(n - 1, t + opts.window);
     let m = lo;
     for (let j = lo; j <= hi; j++) if (sim[j] > sim[m]) m = j;
-    return { tObs: t, tSim: m, lag: m - t, obsQ: obs[t], simQ: sim[m] };
-  });
+    const clampedLo = m === lo && lo > 0 && sim[lo - 1] > sim[lo];
+    const clampedHi = m === hi && hi < n - 1 && sim[hi + 1] > sim[hi];
+    if (clampedLo || clampedHi) { unresolved++; continue; }
+    peaks.push({ tObs: t, tSim: m, lag: m - t, obsQ: obs[t], simQ: sim[m] });
+  }
 
   return {
     meanAbsLag: peaks.length ? mean(peaks.map(p => Math.abs(p.lag))) : NaN,
     meanSignedLag: peaks.length ? mean(peaks.map(p => p.lag)) : NaN,
     peaks,
+    unresolved,
     prominenceUsed: promThr,
     window: opts.window,
   };

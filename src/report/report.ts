@@ -3,6 +3,7 @@
 // ImageRun, one Paragraph per line — per the documented gotchas). PDF via a
 // print-styled window that mirrors the same content, so the two match.
 
+import { arrMax } from '../metrics/support/stats'
 import {
   AlignmentType, Document, HeadingLevel, ImageRun, Packer, Paragraph,
   ShadingType, Table, TableCell, TableRow, TextRun, WidthType, BorderStyle,
@@ -64,7 +65,7 @@ export async function buildReportImages(ds: Dataset, frame: Frame, runs: Run[], 
   const r0 = runs[0];
   const o = clean(frame.obs), s = clean(frame.apply(r0.values));
   const finite = o.map((v, i) => (v != null && s[i] != null ? [v, s[i]!] as [number, number] : null)).filter((x): x is [number, number] => !!x);
-  const lim = [0, Math.max(...finite.map(p => Math.max(p[0], p[1]))) * 1.05];
+  const lim = [0, arrMax(finite.map(p => Math.max(p[0], p[1]))) * 1.05];
   const scat = await plotPng(
     [
       { x: finite.map(p => p[0]), y: finite.map(p => p[1]), name: r0.name, type: 'scattergl', mode: 'markers', marker: { color: r0.color, size: 4, opacity: 0.55 } },
@@ -108,6 +109,13 @@ export function summaryPairs(ds: Dataset, frame: Frame): [string, string][] {
 
 // ------------------------------------------------------------------- docx --
 const DXA_PAGE = 12240, MARGIN = 1080, CONTENT = DXA_PAGE - 2 * MARGIN;
+
+/** Split 0..n-1 into consecutive chunks of at most `per` (exported for tests). */
+export function chunkIndices(n: number, per: number): number[][] {
+  const out: number[][] = [];
+  for (let i = 0; i < n; i += per) out.push(Array.from({ length: Math.min(per, n - i) }, (_, k) => i + k));
+  return out;
+}
 const cellP = (text: string, opts: { bold?: boolean; mono?: boolean; color?: string } = {}) =>
   new Paragraph({ children: [new TextRun({ text, bold: opts.bold, color: opts.color, font: opts.mono ? 'Consolas' : undefined, size: opts.mono ? 16 : 18 })] });
 
@@ -160,21 +168,29 @@ export async function buildDocx(p: ReportPayload): Promise<Blob> {
     H('2. Metrics');
     Ptext('Rows shaded green and marked ⏱ are the timing- and shape-aware measures this tool adds over conventional suites.', { italic: true });
     const nameW = 2900, optW = 1100;
-    const runW = Math.max(900, Math.floor((CONTENT - nameW - optW) / Math.max(1, runs.length)));
-    const widths = [nameW, optW, ...runs.map(() => runW)];
-    const rows: { cells: string[]; shaded?: boolean; boldFirst?: boolean }[] = [];
-    for (const g of GROUPS) {
-      const ms = REGISTRY.filter(m => m.group === g);
-      if (!ms.length) continue;
-      rows.push({ cells: [g, '', ...runs.map(() => '')], boldFirst: true });
-      for (const m of ms) {
-        rows.push({
-          cells: [`${m.timing ? '⏱ ' : ''}${m.label}`, m.optimum, ...outputs.map(o => fmtNum(o.values[m.id], m.digits))],
-          shaded: m.timing,
-        });
+    // QA: with many runs a single table overflows US-Letter. Chunk the run
+    // columns so each table fits; chunk size derives from the minimum legible
+    // column width.
+    for (const idx of chunkIndices(runs.length, Math.max(1, Math.floor((CONTENT - nameW - optW) / 900)))) {
+      const chunkRuns = idx.map(i => runs[i]);
+      const chunkOuts = idx.map(i => outputs[i]);
+      if (runs.length > idx.length) Ptext(`Runs ${idx[0] + 1}–${idx[idx.length - 1] + 1} of ${runs.length}`, { italic: true });
+      const runW = Math.floor((CONTENT - nameW - optW) / chunkRuns.length);
+      const widths = [nameW, optW, ...chunkRuns.map(() => runW)];
+      const rows: { cells: string[]; shaded?: boolean; boldFirst?: boolean }[] = [];
+      for (const g of GROUPS) {
+        const ms = REGISTRY.filter(m => m.group === g);
+        if (!ms.length) continue;
+        rows.push({ cells: [g, '', ...chunkRuns.map(() => '')], boldFirst: true });
+        for (const m of ms) {
+          rows.push({
+            cells: [`${m.timing ? '⏱ ' : ''}${m.label}`, m.optimum, ...chunkOuts.map(o => fmtNum(o.values[m.id], m.digits))],
+            shaded: m.timing,
+          });
+        }
       }
+      kids.push(tableOf(['Metric', 'Optimum', ...chunkRuns.map(r => r.name)], rows, widths));
     }
-    kids.push(tableOf(['Metric', 'Optimum', ...runs.map(r => r.name)], rows, widths));
   }
 
   if (sections.plots) {

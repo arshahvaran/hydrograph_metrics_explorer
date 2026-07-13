@@ -234,6 +234,12 @@ export function useSeriesOutput(ds: Dataset, seriesKey: string, series: ArrayLik
   return request(key, () => computeAsync(frame.obs, frame.apply(series), ctxFor(ds, frame)));
 }
 
+/** Test infrastructure: guarantee cold-cache pending paths in DOM tests. */
+export function __resetComputeCachesForTests(): void {
+  outCache.clear(); pending.clear(); frameCache.clear();
+  ciCache.clear(); ciPending.clear(); ciProgress.clear();
+}
+
 // ------------------------------------------------------------ perturbation --
 /**
  * Sandbox model (§13): S′(t) = m + (B(t−Δt) − m)·γ·(1−δ) + β + ε, on the

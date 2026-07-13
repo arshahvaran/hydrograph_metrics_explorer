@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { useApp, serialiseProject } from './store/store'
+import { parseProjectFile } from './store/projectLoad'
 import { DataTab } from './ui/DataTab'
 import { MetricsTab } from './ui/MetricsTab'
 import { PlotsTab } from './ui/PlotsTab'
@@ -34,9 +35,9 @@ export default function App() {
 
   async function onLoadProject(f: File) {
     try {
-      const p = JSON.parse(await f.text()) as Project;
-      if (p?.schemaVersion !== 1 || !Array.isArray(p.datasets)) throw new Error('Not an HME project file');
-      loadProject(p);
+      const { project, warnings } = parseProjectFile(await f.text());
+      loadProject(project);
+      if (warnings.length) alert(`Project loaded with ${warnings.length} skipped item(s):\n- ${warnings.join('\n- ')}`);
     } catch (e) {
       alert(`Could not load project: ${e instanceof Error ? e.message : e}`);
     } finally {
@@ -54,7 +55,7 @@ export default function App() {
         </div>
         <div className="headerright">
           {project.datasets.length > 0 && (
-            <select value={ds?.id ?? ''} onChange={e => setActiveDataset(e.target.value)} title="Active dataset">
+            <select value={ds?.id ?? ''} onChange={e => setActiveDataset(e.target.value)} title="Active dataset" aria-label="Active dataset">
               {project.datasets.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           )}
@@ -79,7 +80,7 @@ export default function App() {
         </div>
       </header>
 
-      <nav className="tabs" role="tablist" aria-label="Main sections"
+      <nav className="tabs" aria-label="Main sections"
         onKeyDown={e => {
           if (!ds) return;
           const ids = TABS.map(([id]) => id);
@@ -92,9 +93,9 @@ export default function App() {
           if (next >= 0) {
             e.preventDefault();
             setActiveTab(ids[next]);
-            (e.currentTarget.children[next] as HTMLButtonElement)?.focus();
+            (e.currentTarget.querySelectorAll('[role="tab"]')[next] as HTMLButtonElement)?.focus();
           }
-        }}>
+        }}><div role="tablist" aria-label="Main sections" style={{ display: 'contents' }}>
         {TABS.map(([id, label]) => (
           <button key={id} role="tab" aria-selected={tab === id} tabIndex={tab === id ? 0 : -1}
             className={tab === id ? 'tab active' : 'tab'}
@@ -104,7 +105,7 @@ export default function App() {
             {label}
           </button>
         ))}
-      </nav>
+      </div></nav>
 
       <main className="main" id="main">
         {tab !== 'data' && ds && <AnalysisBar />}

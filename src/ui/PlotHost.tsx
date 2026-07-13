@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useApp } from '../store/store'
+import { csvLine } from './format'
 
 let plotlyPromise: Promise<any> | null = null;
 const loadPlotly = () => (plotlyPromise ??= import('plotly.js-dist-min').then(m => m.default ?? m));
@@ -41,9 +42,9 @@ function tracesToCsv(traces: any[]): string {
   const lines = ['trace,x,y'];
   for (const tr of traces) {
     const xs = tr.x ?? [], ys = tr.y ?? tr.r ?? [];
-    const name = String(tr.name ?? 'series').replace(/,/g, ';');
+    const name = String(tr.name ?? 'series');
     for (let i = 0; i < Math.min(xs.length ?? 0, ys.length ?? 0); i++) {
-      lines.push(`${name},${xs[i]},${ys[i]}`);
+      lines.push(csvLine([name, xs[i], ys[i]]));
     }
   }
   return lines.join('\n');

@@ -63,7 +63,7 @@ export function MapTab() {
         </div>
         <div className="controls">
           <label>Catchment area <input value={areaIn} onChange={e => setAreaIn(e.target.value)} style={{ width: '7em' }} /></label>
-          <select value={areaUnit} onChange={e => setAreaUnit(e.target.value as AreaUnitId)}>
+          <select aria-label="Area unit" value={areaUnit} onChange={e => setAreaUnit(e.target.value as AreaUnitId)}>
             <option value="km2">km²</option><option value="mi2">mi²</option>
             <option value="ha">ha</option><option value="acre">acre</option>
           </select>

@@ -44,16 +44,21 @@ export function applySubset(
   nativeStep: { ms: number; label: string },
 ): SubsetResult {
   const n = dates.length;
+  // A window picked end-before-start is treated as the span between the two
+  // instants (QA: reversed window must not silently empty the frame).
+  const win: [number, number] | null = view.window
+    ? [Math.min(view.window[0], view.window[1]), Math.max(view.window[0], view.window[1])]
+    : null;
   const keep: number[] = [];
   for (let i = 0; i < n; i++) {
     const t = dates[i];
-    if (view.window && (t < view.window[0] || t > view.window[1])) continue;
+    if (win && (t < win[0] || t > win[1])) continue;
     if (view.season && !inSeason(doyUTC(t), view.season)) continue;
     keep.push(i);
   }
 
   const capParts: string[] = [];
-  if (view.window) capParts.push(`window ${iso(view.window[0])}–${iso(view.window[1])}`);
+  if (win) capParts.push(`window ${iso(win[0])}–${iso(win[1])}`);
   if (view.season) capParts.push(`season DOY ${view.season.startDoy}–${view.season.endDoy}`);
 
   const pick = (s: ArrayLike<number>) => {

@@ -33,7 +33,7 @@ interface AppState {
 let idCounter = 0;
 const newId = (p: string) => `${p}_${Date.now().toString(36)}_${(idCounter++).toString(36)}`;
 
-function alignByDate(input: CommitInput): CommitInput {
+export function alignByDate(input: CommitInput): CommitInput {
   const order = input.dates
     .map((d, i) => [d, i] as const)
     .filter(([d]) => isFinite(d))

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import type { Dataset } from '../types'
 import { useApp } from '../store/store'
 import { PlotHost } from './PlotHost'
 import { useRunOutputs, frameFor } from './compute'
@@ -9,21 +10,24 @@ const SUMMARY_IDS = ['peak_lag_abs', 'peak_lag_signed', 'event_threat', 'event_l
 
 export function TimingTab() {
   const ds = useApp(s => s.project.datasets.find(d => d.id === s.project.activeDatasetId) ?? null);
+  if (!ds) return null;
+  return <TimingTabInner ds={ds} />;
+}
+
+function TimingTabInner({ ds }: { ds: Dataset }) {
   const updateTiming = useApp(s => s.updateTiming);
   const [eventRunIdx, setEventRunIdx] = useState(0);
-  if (!ds) return null;
 
   const t = ds.view.timingConfig;
   const runs = ds.runs.filter(r => r.visible);
   const rawOutputs = useRunOutputs(ds, runs);
   const frame = frameFor(ds);
-  if (rawOutputs.some(o => o === null)) {
-    return <div className="card"><h2>Timing &amp; shape</h2><p className="muted">Computing timing metrics in a background worker…</p></div>;
-  }
-  const outputs = rawOutputs as NonNullable<(typeof rawOutputs)[number]>[];
+  const outputs = rawOutputs.map(o => o!);  // guarded below; memos tolerate nulls
+  const pending = rawOutputs.some(o => o === null);
   const stepLabel = frame.step.label;
 
   const sweepTraces = useMemo(() => {
+    if (pending) return [] as any[];
     const tr: any[] = [];
     runs.forEach((r, i) => {
       const rows = outputs[i].extras.sweep?.rows ?? [];
@@ -31,7 +35,11 @@ export function TimingTab() {
       tr.push({ x: rows.map(x => x.lag), y: rows.map(x => x.w1), name: `${r.name} W₁`, yaxis: 'y2', type: 'scatter', mode: 'lines', line: { color: r.color, width: 1.5, dash: 'dot' } });
     });
     return tr;
-  }, [ds, runs.map(r => r.id).join(), JSON.stringify(t), ds.view.nanPolicy, ds.view.transform]);
+  }, [ds, pending, runs.map(r => r.id).join(), JSON.stringify(t), ds.view.nanPolicy, ds.view.transform]);
+
+  if (pending) {
+    return <div className="card"><h2>Timing &amp; shape</h2><p className="muted">Computing timing metrics in a background worker…</p></div>;
+  }
 
   const sweepShapes = runs.map((r, i) => ({
     type: 'line', x0: outputs[i].extras.sweep?.bestLag, x1: outputs[i].extras.sweep?.bestLag,
@@ -172,7 +180,7 @@ export function TimingTab() {
 
       <section className="card">
         <h2>Events{' '}
-          <select value={eventRunIdx} onChange={e => setEventRunIdx(Number(e.target.value))}>
+          <select aria-label="Event report run" value={eventRunIdx} onChange={e => setEventRunIdx(Number(e.target.value))}>
             {runs.map((r, i) => <option key={r.id} value={i}>{r.name}</option>)}
           </select>{' '}
           <span className="muted">threshold {fmtNum(evOut.extras.events?.threshold, 2)} {ds.targetUnit} · tolerance ±{t.peakMatchTolerance} steps</span>

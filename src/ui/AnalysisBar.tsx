@@ -50,7 +50,7 @@ export function AnalysisBar() {
           {v.season && <button onClick={() => updateView({ season: null })} title="Clear season" aria-label="Clear seasonal filter">×</button>}
         </label>
         <label>Resample{' '}
-          <select value={v.resample} onChange={e => updateView({ resample: e.target.value as any })}>
+          <select aria-label="Resample" value={v.resample} onChange={e => updateView({ resample: e.target.value as any })}>
             <option value="native">native ({ds.step.label})</option>
             <option value="daily">daily means</option>
             <option value="monthly">monthly means</option>

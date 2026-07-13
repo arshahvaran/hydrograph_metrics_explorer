@@ -3,7 +3,7 @@
 // executed HydroErr 2.0.0 / hydroeval 0.1.0 outputs in tests/classical.test.ts.
 // All functions assume the (obs, sim) pair has already been NaN-paired.
 
-import { mean, stdPop, sum, median, quantile, pearson, ranksAverage, ranksOrdinal, sortedAsc, type Vec } from '../support/stats'
+import { arrMin, mean, stdPop, sum, median, quantile, pearson, ranksAverage, ranksOrdinal, sortedAsc, type Vec } from '../support/stats'
 
 const EPS_FRAC = 0.01; // ε = 0.01 · mean(obs) for log/inverse transforms (§11.2)
 
@@ -22,35 +22,81 @@ export const mdse = (o: Vec, s: Vec) => median(Array.from({ length: o.length }, 
 // log1p(S)−log1p(O) = ln((1+S)/(1+O)), which is not scale-invariant. We follow
 // the paper; tests pin these against independently computed NumPy references.
 // Requires strictly positive flows (zeros/negatives → NaN/−∞, shown as n/a).
-export const mle   = (o: Vec, s: Vec) => mean(Array.from({ length: o.length }, (_, i) => Math.log(s[i] / o[i])));
-export const male  = (o: Vec, s: Vec) => mean(Array.from({ length: o.length }, (_, i) => Math.abs(Math.log(s[i] / o[i]))));
-export const msle  = (o: Vec, s: Vec) => mean(Array.from({ length: o.length }, (_, i) => Math.log(s[i] / o[i]) ** 2));
+const logRatio = (o: Vec, s: Vec): number[] | null => {
+  const r: number[] = [];
+  for (let i = 0; i < o.length; i++) {
+    if (o[i] <= 0 || s[i] <= 0) return null;       // log-ratio needs strictly positive flows
+    r.push(Math.log(s[i] / o[i]));
+  }
+  return r;
+};
+export const mle   = (o: Vec, s: Vec) => { const r = logRatio(o, s); return r ? mean(r) : NaN; };
+export const male  = (o: Vec, s: Vec) => { const r = logRatio(o, s); return r ? mean(r.map(Math.abs)) : NaN; };
+export const msle  = (o: Vec, s: Vec) => { const r = logRatio(o, s); return r ? mean(r.map(x => x * x)) : NaN; };
 export const rmsle = (o: Vec, s: Vec) => Math.sqrt(msle(o, s));
 
-export const mape  = (o: Vec, s: Vec) => 100 * mean(Array.from({ length: o.length }, (_, i) => Math.abs((s[i] - o[i]) / o[i])));
+export const mape  = (o: Vec, s: Vec) => {
+  let sum = 0;
+  for (let i = 0; i < o.length; i++) {
+    if (o[i] === 0) return NaN;                    // percentage error undefined at zero flow
+    sum += Math.abs((s[i] - o[i]) / o[i]);
+  }
+  const v = 100 * sum / o.length;
+  return isFinite(v) ? v : NaN;
+};
 /**
  * MAPD % (Jackson et al., 2019 Table 2): 100·Σ|S−O| / Σ|O| — bulk relative
  * error (= 100·(1−VE) for positive flows). hydroeval calls this quantity
  * "MARE" and HydroErr's mapd returns the fraction; we use the paper's name
  * and percent scale to avoid colliding with per-element MARE (= MAPE/100).
  */
-export const mapd  = (o: Vec, s: Vec) => { let n = 0, d0 = 0; for (let i = 0; i < o.length; i++) { n += Math.abs(s[i] - o[i]); d0 += Math.abs(o[i]); } return d0 === 0 ? NaN : 100 * n / d0; };
+export const mapd  = (o: Vec, s: Vec) => { let n = 0, d0 = 0; for (let i = 0; i < o.length; i++) { n += Math.abs(s[i] - o[i]); d0 += Math.abs(o[i]); } return over(100 * n, d0); };
 /** sMAPE on the 0–200 % scale. Denominator (|O|+|S|)/2 — HydroErr uses (S+O)/2,
  * identical for positive flows; the absolute form preserves the stated range. */
-export const smape = (o: Vec, s: Vec) => 100 * mean(Array.from({ length: o.length }, (_, i) => Math.abs(s[i] - o[i]) / ((Math.abs(o[i]) + Math.abs(s[i])) / 2)));
+export const smape = (o: Vec, s: Vec) => {
+  let sum = 0;
+  for (let i = 0; i < o.length; i++) {
+    const den = (Math.abs(o[i]) + Math.abs(s[i])) / 2;
+    const diff = Math.abs(s[i] - o[i]);
+    if (den === 0) { if (diff === 0) continue; return NaN; }  // 0/0 → 0 by limit; underflow → n/a
+    sum += diff / den;
+  }
+  return 100 * sum / o.length;
+};
 /** MAAPE ∈ [0, π/2] (Kim & Kim, 2016). */
 export const maape = (o: Vec, s: Vec) => mean(Array.from({ length: o.length }, (_, i) => Math.atan(Math.abs((s[i] - o[i]) / o[i]))));
 
-export const nrmseMean  = (o: Vec, s: Vec) => rmse(o, s) / mean(o);
-export const nrmseRange = (o: Vec, s: Vec) => { const so = sortedAsc(o); return rmse(o, s) / (so[so.length - 1] - so[0]); };
-export const nrmseIqr   = (o: Vec, s: Vec) => rmse(o, s) / (quantile(o, 0.75) - quantile(o, 0.25));
+/** QA-010: degenerate denominators answer NaN ("n/a"), never ±Infinity. */
+const over = (num: number, den: number) => {
+  if (den === 0) return NaN;
+  const v = num / den;
+  return isFinite(v) ? v : NaN;                     // overflow past double range ⇒ n/a
+};
+
+/** Log-family domain guard: the ε-shifted logs must all be finite, otherwise
+ *  the metric is undefined (zero/negative flows with a vanishing ε). */
+const logPair = (o: Vec, s: Vec): { lo: number[]; ls: number[] } | null => {
+  const eps = EPS_FRAC * mean(o);
+  const lo: number[] = [], ls: number[] = [];
+  for (let i = 0; i < o.length; i++) {
+    const a = o[i] + eps, b = s[i] + eps;
+    if (a <= 0 || b <= 0) return null;
+    lo.push(Math.log(a)); ls.push(Math.log(b));
+  }
+  return { lo, ls };
+};
+
+export const nrmseMean  = (o: Vec, s: Vec) => over(rmse(o, s), mean(o));
+export const nrmseRange = (o: Vec, s: Vec) => { const so = sortedAsc(o); return over(rmse(o, s), so[so.length - 1] - so[0]); };
+export const nrmseIqr   = (o: Vec, s: Vec) => over(rmse(o, s), quantile(o, 0.75) - quantile(o, 0.25));
 /** RSR (Moriasi et al., 2007): RMSE / std(obs). */
-export const rsr = (o: Vec, s: Vec) => rmse(o, s) / stdPop(o);
+export const rsr = (o: Vec, s: Vec) => over(rmse(o, s), stdPop(o));
 /** MASE (Hyndman & Koehler, 2006), non-seasonal denominator. */
 export const mase = (o: Vec, s: Vec) => {
+  if (o.length < 2) return NaN;
   let denom = 0; for (let i = 1; i < o.length; i++) denom += Math.abs(o[i] - o[i - 1]);
   denom /= (o.length - 1);
-  return mae(o, s) / denom;
+  return over(mae(o, s), denom);                     // constant record ⇒ zero naive error ⇒ n/a; overflow ⇒ n/a
 };
 
 // ---------- correlation & agreement ----------
@@ -59,6 +105,7 @@ export const r2 = (o: Vec, s: Vec) => pearson(o, s) ** 2;
 export const spearman = (o: Vec, s: Vec) => pearson(ranksAverage(o), ranksAverage(s));
 /** Weighted R² (Krause et al., 2005): |b|·R² for b ≤ 1, R²/|b| otherwise, b = regression slope of sim on obs. */
 export const wr2 = (o: Vec, s: Vec) => {
+  if (Number.isNaN(pearson(o, s))) return NaN;
   const mo = mean(o), ms = mean(s);
   let num = 0, den = 0;
   for (let i = 0; i < o.length; i++) { num += (o[i] - mo) * (s[i] - ms); den += (o[i] - mo) ** 2; }
@@ -75,7 +122,7 @@ export const d = (o: Vec, s: Vec) => {
     num += (s[i] - o[i]) ** 2;
     den += (Math.abs(s[i] - mo) + Math.abs(o[i] - mo)) ** 2;
   }
-  return 1 - num / den;
+  return isFinite(num / den) ? 1 - num / den : NaN;
 };
 /** Willmott's d1 (j = 1). */
 export const d1 = (o: Vec, s: Vec) => {
@@ -85,17 +132,19 @@ export const d1 = (o: Vec, s: Vec) => {
     num += Math.abs(s[i] - o[i]);
     den += Math.abs(s[i] - mo) + Math.abs(o[i] - mo);
   }
-  return 1 - num / den;
+  return isFinite(num / den) ? 1 - num / den : NaN;
 };
 /** Relative index of agreement (Krause et al., 2005). */
 export const drel = (o: Vec, s: Vec) => {
   const mo = mean(o);
+  if (mo === 0) return NaN;
   let num = 0, den = 0;
   for (let i = 0; i < o.length; i++) {
+    if (o[i] === 0) return NaN;                    // relative form undefined at zero flow
     num += ((s[i] - o[i]) / o[i]) ** 2;
     den += ((Math.abs(s[i] - mo) + Math.abs(o[i] - mo)) / mo) ** 2;
   }
-  return 1 - num / den;
+  return den === 0 ? NaN : 1 - num / den;
 };
 /** Refined index of agreement dr (Willmott et al., 2012). */
 export const dr = (o: Vec, s: Vec) => {
@@ -109,7 +158,8 @@ export const lmIndex = (o: Vec, s: Vec) => {
   const mo = mean(o);
   let num = 0, den = 0;
   for (let i = 0; i < o.length; i++) { num += Math.abs(s[i] - o[i]); den += Math.abs(o[i] - mo); }
-  return 1 - num / den;
+  const q = over(num, den);
+  return Number.isNaN(q) ? NaN : 1 - q;
 };
 
 // ---------- efficiencies ----------
@@ -122,15 +172,18 @@ export const nse = (o: Vec, s: Vec) => {
 export const nseMod = lmIndex; // j = 1 modified NSE
 export const nseRel = (o: Vec, s: Vec) => {
   const mo = mean(o);
+  if (mo === 0) return NaN;
   let num = 0, den = 0;
-  for (let i = 0; i < o.length; i++) { num += ((s[i] - o[i]) / o[i]) ** 2; den += ((o[i] - mo) / mo) ** 2; }
-  return 1 - num / den;
+  for (let i = 0; i < o.length; i++) {
+    if (o[i] === 0) return NaN;                      // relative form undefined at zero flow
+    num += ((s[i] - o[i]) / o[i]) ** 2; den += ((o[i] - mo) / mo) ** 2;
+  }
+  const q = over(num, den);
+  return Number.isNaN(q) ? NaN : 1 - q;
 };
 export const logNse = (o: Vec, s: Vec) => {
-  const eps = EPS_FRAC * mean(o);
-  const lo = Array.from({ length: o.length }, (_, i) => Math.log(o[i] + eps));
-  const ls = Array.from({ length: s.length }, (_, i) => Math.log(s[i] + eps));
-  return nse(lo, ls);
+  const p = logPair(o, s);
+  return p ? nse(p.lo, p.ls) : NaN;
 };
 
 export interface KgeResult {
@@ -146,7 +199,7 @@ export const kge2009 = (o: Vec, s: Vec): KgeResult => {
   const mo = mean(o), ms = mean(s);
   const alpha = stdPop(s, ms) / stdPop(o, mo);
   const beta = ms / mo;
-  return { value: 1 - Math.sqrt((rr - 1) ** 2 + (alpha - 1) ** 2 + (beta - 1) ** 2), r: rr, variability: alpha, bias: beta };
+  { const _v = 1 - Math.sqrt((rr - 1) ** 2 + (alpha - 1) ** 2 + (beta - 1) ** 2); return { value: isFinite(_v) ? _v : NaN, r: rr, variability: alpha, bias: beta }; }
 };
 /** KGE′ (2012): γ = CV_s / CV_o replaces α. */
 export const kge2012 = (o: Vec, s: Vec): KgeResult => {
@@ -154,7 +207,7 @@ export const kge2012 = (o: Vec, s: Vec): KgeResult => {
   const mo = mean(o), ms = mean(s);
   const gamma = (stdPop(s, ms) / ms) / (stdPop(o, mo) / mo);
   const beta = ms / mo;
-  return { value: 1 - Math.sqrt((rr - 1) ** 2 + (gamma - 1) ** 2 + (beta - 1) ** 2), r: rr, variability: gamma, bias: beta };
+  { const _v = 1 - Math.sqrt((rr - 1) ** 2 + (gamma - 1) ** 2 + (beta - 1) ** 2); return { value: isFinite(_v) ? _v : NaN, r: rr, variability: gamma, bias: beta }; }
 };
 /** KGE″ (Tang et al., 2021): bias term β″ = (μs − μo)/σo, optimum 0. */
 export const kge2021 = (o: Vec, s: Vec): KgeResult => {
@@ -163,11 +216,11 @@ export const kge2021 = (o: Vec, s: Vec): KgeResult => {
   const so = stdPop(o, mo);
   const alpha = stdPop(s, ms) / so;
   const betaPP = (ms - mo) / so;
-  return { value: 1 - Math.sqrt((rr - 1) ** 2 + (alpha - 1) ** 2 + betaPP ** 2), r: rr, variability: alpha, bias: betaPP };
+  { const _v = 1 - Math.sqrt((rr - 1) ** 2 + (alpha - 1) ** 2 + betaPP ** 2); return { value: isFinite(_v) ? _v : NaN, r: rr, variability: alpha, bias: betaPP }; }
 };
 /** Non-parametric KGE (Pool et al., 2018), matching hydroeval's construction. */
 export const kgenp = (o: Vec, s: Vec): KgeResult => {
-  const rs = pearson(ranksOrdinal(o), ranksOrdinal(s));
+  const rs = pearson(ranksAverage(o), ranksAverage(s));   // average ranks: ties handled per scipy/R; constant series → NaN
   const mo = mean(o), ms = mean(s);
   const n = o.length;
   const fo = sortedAsc(Array.from({ length: n }, (_, i) => o[i] / (n * mo)));
@@ -175,25 +228,26 @@ export const kgenp = (o: Vec, s: Vec): KgeResult => {
   let l1 = 0; for (let i = 0; i < n; i++) l1 += Math.abs(fs[i] - fo[i]);
   const alpha = 1 - 0.5 * l1;
   const beta = ms / mo;
-  return { value: 1 - Math.sqrt((rs - 1) ** 2 + (alpha - 1) ** 2 + (beta - 1) ** 2), r: rs, variability: alpha, bias: beta };
+  { const _v = 1 - Math.sqrt((rs - 1) ** 2 + (alpha - 1) ** 2 + (beta - 1) ** 2); return { value: isFinite(_v) ? _v : NaN, r: rs, variability: alpha, bias: beta }; }
 };
 
 /** Volumetric efficiency (Criss & Winston, 2008). */
 export const ve = (o: Vec, s: Vec) => {
   let num = 0, den = 0;
   for (let i = 0; i < o.length; i++) { num += Math.abs(s[i] - o[i]); den += o[i]; }
-  return 1 - num / den;
+  const q = over(num, den);
+  return Number.isNaN(q) ? NaN : 1 - q;
 };
 /** PBIAS, paper sign convention: 100·Σ(O−S)/ΣO — positive = underestimation. */
 export const pbias = (o: Vec, s: Vec) => {
   let num = 0, den = 0;
   for (let i = 0; i < o.length; i++) { num += o[i] - s[i]; den += o[i]; }
-  return den === 0 ? NaN : 100 * num / den;
+  return over(100 * num, den);
 };
 /** β-NSE bias term (μs − μo)/σo, optimum 0. */
-export const betaNse = (o: Vec, s: Vec) => (mean(s) - mean(o)) / stdPop(o);
+export const betaNse = (o: Vec, s: Vec) => over(mean(s) - mean(o), stdPop(o));
 /** Variability ratio α = σs/σo, optimum 1. */
-export const alphaRatio = (o: Vec, s: Vec) => stdPop(s) / stdPop(o);
+export const alphaRatio = (o: Vec, s: Vec) => over(stdPop(s), stdPop(o));
 /** Bounded C2M form of an efficiency (Mathevet et al., 2006). */
 export const c2m = (e: number) => e / (2 - e);
 
@@ -206,7 +260,7 @@ export const fhv = (o: Vec, s: Vec, frac = 0.02) => {
   const k = Math.max(1, Math.round(frac * os.length));
   let num = 0, den = 0;
   for (let i = 0; i < k; i++) { num += ss[i] - os[i]; den += os[i]; }
-  return 100 * num / den;
+  return over(100 * num, den);
 };
 /** %BiasFLV: low-flow bias in log space over the bottom `frac` (default 30 %). */
 export const flv = (o: Vec, s: Vec, frac = 0.3) => {
@@ -216,13 +270,13 @@ export const flv = (o: Vec, s: Vec, frac = 0.3) => {
   const eps = EPS_FRAC * mean(o);
   const lo = Array.from(os.slice(start), v => Math.log(v + eps));
   const ls = Array.from(ss.slice(start), v => Math.log(v + eps));
-  const minLo = Math.min(...lo), minLs = Math.min(...ls);
+  const minLo = arrMin(lo), minLs = arrMin(ls);
   let num = 0, den = 0;
   for (let i = 0; i < lo.length; i++) {
     num += (ls[i] - minLs) - (lo[i] - minLo);
     den += lo[i] - minLo;
   }
-  return -100 * num / den; // Yilmaz sign: positive = simulated low flows too low
+  return over(-100 * num, den); // Yilmaz sign: positive = simulated low flows too low
 };
 /** %BiasFMS: mid-segment FDC slope bias between exceedance 20 % and 70 %. */
 export const fms = (o: Vec, s: Vec, p1 = 0.2, p2 = 0.7) => {
@@ -230,12 +284,12 @@ export const fms = (o: Vec, s: Vec, p1 = 0.2, p2 = 0.7) => {
   const at = (a: Vec, p: number) => quantile(a, 1 - p); // exceedance p ↔ quantile 1−p
   const so1 = Math.log(at(o, p1) + eps), so2 = Math.log(at(o, p2) + eps);
   const ss1 = Math.log(at(s, p1) + eps), ss2 = Math.log(at(s, p2) + eps);
-  return 100 * ((ss1 - ss2) - (so1 - so2)) / (so1 - so2);
+  return over(100 * ((ss1 - ss2) - (so1 - so2)), so1 - so2);
 };
 /** Median (FMM) bias in log space. */
 export const fmm = (o: Vec, s: Vec) => {
   const eps = EPS_FRAC * mean(o);
-  return 100 * (Math.log(median(s) + eps) - Math.log(median(o) + eps)) / Math.log(median(o) + eps);
+  return over(100 * (Math.log(median(s) + eps) - Math.log(median(o) + eps)), Math.log(median(o) + eps));
 };
 
 // ---------- transforms (§11.2) ----------

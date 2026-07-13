@@ -70,8 +70,19 @@ export function pearson(x: Vec, y: Vec): number {
     const a = x[i] - mx, b = y[i] - my;
     num += a * b; dx += a * a; dy += b * b;
   }
-  const den = Math.sqrt(dx * dy);
-  return den === 0 ? NaN : num / den;
+  // sqrt(dx)·sqrt(dy), NOT sqrt(dx·dy): the product underflows to a 1-ulp
+  // denormal for tiny-magnitude data, and sqrt of that garbage produced
+  // plausible-looking correlations (r = 0.707 for identical arrays).
+  const den = Math.sqrt(dx) * Math.sqrt(dy);
+  // QA-012: a numerically-constant series (one-ulp summation noise) must not
+  // yield a plausible-looking correlation for an undefined statistic.
+  const sx = Math.sqrt(dx / x.length), sy = Math.sqrt(dy / y.length);
+  if (den === 0 || sx <= Math.abs(mx) * 1e-12 || sy <= Math.abs(my) * 1e-12) return NaN;
+  // Cauchy–Schwarz: |num| ≤ den, with equality iff the series are perfectly
+  // (anti)correlated. Rounding can leak an ulp either way, so the equality
+  // case is snapped exactly and the rest clamped (as scipy does).
+  if (Math.abs(num) >= den) return Math.sign(num);
+  return Math.max(-1, Math.min(1, num / den));
 }
 
 /**
@@ -124,4 +135,17 @@ export function gaussian(rng: () => number): () => number {
     spare = v * f;
     return u * f;
   };
+}
+
+/** QA-013: spread-based Math.min/max blow the call stack past ~125k elements
+ *  (V8 argument limit). Loop-based extrema for data-sized arrays. */
+export function arrMin(a: ArrayLike<number>): number {
+  let m = Infinity;
+  for (let i = 0; i < a.length; i++) if (a[i] < m) m = a[i];
+  return m;
+}
+export function arrMax(a: ArrayLike<number>): number {
+  let m = -Infinity;
+  for (let i = 0; i < a.length; i++) if (a[i] > m) m = a[i];
+  return m;
 }

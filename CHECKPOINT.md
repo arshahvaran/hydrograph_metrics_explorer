@@ -186,3 +186,20 @@ report generator, acceptance & accessibility audit, release"):
    icon-only controls and key tables, polite live regions for async status. Partials stated
    (canvas plots ↔ CSV-equivalent alternative; light grid has no arrow-key nav).
 6. **Release** — v1.1.0 tagged + deployed.
+
+
+## v1.1.1 — pre-release QA campaign (adversarial multi-agent)
+Full REPRODUCE→ROOT-CAUSE→FIX→REGRESSION-TEST loop on every defect. 13 defects
+logged (7×S1, 4×S2, 2×S3), all fixed; 1 suspicion refuted by test (QA-006).
+Highlights: rules-of-hooks crashes on Timing/Sandbox first visit under real
+workers (QA-001/002); the v1.1 CI toggle was never rendered (QA-004); European
+decimal commas parsed ×10 wrong (QA-005); 15 metrics leaked ±Infinity on
+degenerate denominators (QA-010); hardcoded peak minDistance=100 suppressed
+real daily peaks (QA-011); window-clamped peak lags reported as truth
+(QA-011b); numerically-constant series produced plausible wrong r/KGE
+(QA-012, incl. a sqrt(dx·dy) underflow instability); Math.min(...arr) stack
+overflow ≥130k rows (QA-013); CSV formula injection (QA-008); unvalidated
+project files (QA-007); XLSX sheet-0 only (QA-009); DOCX >6-run overflow;
+reversed windows. Suite grew 101 → 300 tests incl. DOM (jsdom+RTL), fast-check
+fuzz, axe-core a11y, perf numbers, worker-race, privacy manifest, and a
+rules-of-hooks lint gate.

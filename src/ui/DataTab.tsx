@@ -98,10 +98,11 @@ export function DataTab() {
       {table && (
         <section className="card">
           <h2>Map columns</h2>
+          {table.note && <p className="warn" role="status">{table.note}</p>}
           <div className="controls">
             <label>Name <input value={name} onChange={e => setName(e.target.value)} /></label>
             <label>Date format{' '}
-              <select value={dateFormat} onChange={e => setDateFormat(e.target.value as DateFormat)}>
+              <select aria-label="Date format" value={dateFormat} onChange={e => setDateFormat(e.target.value as DateFormat)}>
                 <option value="auto">auto-detect</option>
                 <option value="ymd">Y-M-D</option>
                 <option value="mdy">M/D/Y</option>
@@ -110,7 +111,7 @@ export function DataTab() {
               </select>
             </label>
             <label>Unit (all value columns){' '}
-              <select value={unit} onChange={e => setUnit(e.target.value as UnitId)}>
+              <select aria-label="Input unit" value={unit} onChange={e => setUnit(e.target.value as UnitId)}>
                 {Object.values(UNITS).map(u => <option key={u.id} value={u.id}>{u.label}</option>)}
               </select>
             </label>
@@ -124,7 +125,7 @@ export function DataTab() {
                 <tr>{table.header.map((h, j) => (
                   <th key={j}>
                     <div>{h || `col ${j + 1}`}</div>
-                    <select value={roles[j]} onChange={e => setRoles(roles.map((r, k) => (k === j ? e.target.value as ColumnRole : r)))}>
+                    <select aria-label={`Role for column ${table.header[j] || j + 1}`} value={roles[j]} onChange={e => setRoles(roles.map((r, k) => (k === j ? e.target.value as ColumnRole : r)))}>
                       {ROLE_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
                     </select>
                   </th>
@@ -171,7 +172,7 @@ export function DataTab() {
             <tr><th>Step</th><td>{ds.step.label}{ds.step.irregular ? ' (irregular)' : ''}</td></tr>
             <tr><th>Series</th><td>{ds.observed.name || 'Observed'} + {ds.runs.length} run{ds.runs.length === 1 ? '' : 's'}</td></tr>
             <tr><th>Unit</th><td>
-              <select value={ds.targetUnit} onChange={e => setConvertMsg(convertUnits(e.target.value as UnitId))}>
+              <select aria-label="Convert units to" value={ds.targetUnit} onChange={e => setConvertMsg(convertUnits(e.target.value as UnitId))}>
                 {Object.values(UNITS).filter(u => u.kind !== 'dimensionless' || ds.targetUnit === 'dimensionless').map(u => <option key={u.id} value={u.id}>{u.label}</option>)}
               </select>
               {' '}<span className="muted">converting a depth unit needs the catchment area (Map tab)</span>

@@ -143,7 +143,9 @@ describe('audit pins: polarity, sign conventions, ranges, edge cases', () => {
   it('DE polarity: identical series score exactly 0 (0 is perfect, larger is worse)', async () => {
     const { diagnosticEfficiency } = await import('../src/metrics/timing/deSd')
     const d = diagnosticEfficiency(o6, o6)
-    expect(d.de).toBe(0)
+    // adjudicated: DE is a float composite (Simpson quadrature + r); demanding
+    // bit-exact zero over-pins a rounding accident of the old pearson formula.
+    expect(d.de).toBeCloseTo(0, 12)
     expect(diagnosticEfficiency(o6, o6.map(v => v * 1.4)).de).toBeGreaterThan(0)
   })
   it('sqrt transform: negative flow propagates NaN instead of being silently clamped', () => {

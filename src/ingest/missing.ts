@@ -8,6 +8,36 @@ export interface MissingOptions {
 }
 
 /** Parse a raw cell into a number, mapping missing tokens to NaN. */
+/**
+ * Locale-aware numeric cell parsing (QA-005). Rules, in order:
+ *  - both "." and "," present: the LAST separator is the decimal mark, the
+ *    other is a thousands separator ("1.234,5" -> 1234.5; "1,234.5" -> 1234.5);
+ *  - only "," present: strict thousands grouping ("1,234,567") is treated as
+ *    thousands; a single comma otherwise is a decimal mark ("3,5" -> 3.5);
+ *    anything else ("1,23,45") is invalid;
+ *  - only "." present: standard JS parsing (dot is always decimal — the
+ *    anglophone default; "1.234" is 1.234, not 1234);
+ *  - scientific notation passes through untouched.
+ */
+export function parseNumericCell(raw: string): number {
+  const t = raw.trim();
+  if (!t) return NaN;
+  const c = t.lastIndexOf(','), d = t.lastIndexOf('.');
+  let s = t;
+  if (c >= 0 && d >= 0) {
+    const dec = c > d ? ',' : '.';
+    const thou = dec === ',' ? '.' : ',';
+    if (t.split(dec).length !== 2) return NaN;        // two decimal marks -> garbage
+    s = t.split(thou).join('');
+    if (dec === ',') s = s.replace(',', '.');
+  } else if (c >= 0) {
+    if (/^[+-]?\d{1,3}(,\d{3})+$/.test(t)) s = t.split(',').join('');
+    else if (t.split(',').length === 2) s = t.replace(',', '.');
+    else return NaN;
+  }
+  return Number(s);
+}
+
 export function parseValue(raw: string | number | null | undefined, opts: MissingOptions = {}): number {
   const sentinels = opts.sentinels ?? true;
   if (raw === null || raw === undefined) return NaN;
@@ -17,7 +47,7 @@ export function parseValue(raw: string | number | null | undefined, opts: Missin
   }
   const s = raw.trim();
   if (BASE_TOKENS.has(s.toLowerCase())) return NaN;
-  const v = Number(s.replace(/,/g, '')); // tolerate thousands separators
+  const v = parseNumericCell(s);
   if (!isFinite(v)) return NaN;
   if (sentinels && (v === -9999 || v === -999)) return NaN;
   return v;

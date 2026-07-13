@@ -4,6 +4,7 @@ import { PlotHost } from './PlotHost'
 import { useRunOutput, frameFor } from './compute'
 import { quantile } from '../metrics/support/stats'
 import { OBSERVED_COLOR } from '../types'
+import { arrMax } from '../metrics/support/stats'
 import type { Dataset } from '../types'
 
 const PLOTS = [
@@ -52,13 +53,17 @@ const doyOf = (ms: number) => {
 
 export function PlotsTab() {
   const ds = useApp(s => s.project.datasets.find(d => d.id === s.project.activeDatasetId) ?? null);
+  if (!ds) return null;
+  return <PlotsTabInner ds={ds} />;
+}
+
+function PlotsTabInner({ ds }: { ds: Dataset }) {
   const [plot, setPlot] = useState<(typeof PLOTS)[number][0]>('timeseries');
   const [mode, setMode] = useState<Mode>('none');
   const [logY, setLogY] = useState(false);
   const [movAvg, setMovAvg] = useState<number>(0);
   const [threshold, setThreshold] = useState<string>('');
   const [focusIdx, setFocusIdx] = useState(0); // series selector for heatmap/spaghetti/alignment
-  if (!ds) return null;
 
   const frame = frameFor(ds);
   const dates = useMemo(() => frame.dates.map(m => new Date(m).toISOString().slice(0, 10)), [frame.key]);
@@ -89,7 +94,7 @@ export function PlotsTab() {
 
     if (plot === 'scatter') {
       const obs = all[0].y;
-      const finiteMax = Math.max(...all.flatMap(s => s.y.filter((v): v is number => v !== null)));
+      const finiteMax = arrMax(all.flatMap(s => s.y.filter((v): v is number => v !== null)));
       const t = all.slice(1).map(s => ({
         x: obs, y: s.y, name: s.name, type: 'scattergl', mode: 'markers',
         marker: { color: s.color, size: 4, opacity: 0.55 },
@@ -115,7 +120,7 @@ export function PlotsTab() {
         const sv = s.y.filter((x): x is number => x !== null);
         return { x: oq, y: qs.map(q => quantile(sv, q)), name: s.name, type: 'scatter', mode: 'lines+markers', marker: { size: 4 }, line: { color: s.color } };
       });
-      const mx = Math.max(...oq);
+      const mx = arrMax(oq);
       t.push({ x: [0, mx], y: [0, mx], name: '1:1', type: 'scatter', mode: 'lines', line: { color: '#555', dash: 'dash', width: 1 } } as any);
       return { traces: t, layout: { xaxis: { title: `Observed quantiles [${unit}]` }, yaxis: { title: `Simulated quantiles [${unit}]` }, hovermode: 'closest' }, note: null };
     }
@@ -204,7 +209,7 @@ export function PlotsTab() {
           {plot === 'timeseries' && (
             <>
               <label>View{' '}
-                <select value={mode} onChange={e => setMode(e.target.value as Mode)}>
+                <select aria-label="Plot mode" value={mode} onChange={e => setMode(e.target.value as Mode)}>
                   <option value="none">values</option>
                   <option value="derivative">derivative (ΔQ)</option>
                   <option value="cumulative">cumulative</option>
@@ -220,7 +225,7 @@ export function PlotsTab() {
           )}
           {needsFocus && (
             <label>Series{' '}
-              <select value={focusIdx} onChange={e => setFocusIdx(Number(e.target.value))}>
+              <select aria-label="Focus series" value={focusIdx} onChange={e => setFocusIdx(Number(e.target.value))}>
                 {(plot === 'alignment' ? all.slice(1) : all).map((s, i) => (
                   <option key={s.name} value={plot === 'alignment' ? i + 1 : i}>{s.name}</option>
                 ))}
