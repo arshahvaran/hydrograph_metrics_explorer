@@ -100,7 +100,7 @@ export function MetricsTab() {
           {' '}Rows tinted <span className="timingchip">⏱</span> are the timing- &amp; shape-aware measures — the ones conventional suites omit.
         </p>
         {outputs.flatMap(o => o.notes).filter((v, i, a) => a.indexOf(v) === i).map(nn => <div key={nn} className="warning">{nn}</div>)}
-        <table className="grid metricstable">
+        <div className="mapscroll"><table className="grid metricstable">
           <thead>
             <tr><th>Metric</th><th>optimum</th>{runs.map(r => <th key={r.id} style={{ color: r.color }}>{r.name}</th>)}</tr>
           </thead>
@@ -139,7 +139,7 @@ export function MetricsTab() {
               );
             })}
           </tbody>
-        </table>
+        </table></div>
       </section>
 
       <section className="card">

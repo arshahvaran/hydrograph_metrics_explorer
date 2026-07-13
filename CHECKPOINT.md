@@ -112,3 +112,26 @@ Findings & corrections (details in tests/classical.test.ts):
 9. UI: metric reference is now a grouped table with KaTeX-rendered equations, range, optimum,
    polarity, and blind-spot columns (per-row equation = exactly what the engine computes).
 Tests: 86 passing (was 69).
+
+
+---
+
+# Update · v0.4.0 — visual release (studio-family consistency + paper-figure style)
+
+- Layout bug fixed: sandbox sliders were a 3-column grid inside minmax(300px) cells → label/value
+  overlap (user screenshot). Now stacked rows (label+value line, full-width slider) — collision-free
+  at any width. Wide tables (metrics, timing summary, events) wrapped in horizontal-scroll guards.
+- Design language aligned with the author's studio tools (inspected color_model_studio & cartolab):
+  html[data-theme] light/dark with ☽/☀ header toggle (localStorage 'hme_theme', prefers-color-scheme
+  fallback, flash-free bootstrap in index.html); Fraunces headings, Hanken Grotesk body, DM Mono
+  numerals/badges; 12px radius cards + soft shadow; accent-soft pill badge; footer credit
+  "Developed by Ali Reza Shahvaran" + github link; data-URI SVG favicon (hydrograph mark:
+  blue solid + orange dashed in the rounded-card frame) + public/icon.svg; og meta.
+- Paper-figure consistency: OBSERVED_COLOR #1f77b4 (solid, 2.2px); runs dashed, palette led by the
+  figures' simulated orange #d95f02 then ColorBrewer Dark2; Plotly template now theme-aware with
+  STIX Two Text serif type (figures' look); XWT panel reoriented to the paper's timing-error-by-scale
+  layout (period on log-y, reversed; lag on x; dotted zero line); DE polar restyled per the
+  diagnostic polar figure (markers coloured by timing r, Plasma-reversed yellow→purple, colorbar,
+  0° at top); lag sweeps carry the dotted 'perfect alignment' zero line; dark-mode Leaflet via
+  invert/hue-rotate filter.
+- 86 tests unchanged and passing; no engine changes.

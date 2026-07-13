@@ -46,10 +46,9 @@ export function SandboxTab() {
   const set = (patch: Partial<SandboxState>) => updateSandbox(patch);
   const slider = (label: string, key: keyof SandboxState, min: number, max: number, step: number, fmt: (v: number) => string) => (
     <label className="sliderrow" key={key}>
-      <span>{label}</span>
+      <span className="srtop"><span>{label}</span><code>{fmt(sb[key] as number)}</code></span>
       <input type="range" min={min} max={max} step={step} value={sb[key] as number}
         onChange={e => set({ [key]: Number(e.target.value) } as any)} />
-      <code>{fmt(sb[key] as number)}</code>
     </label>
   );
 
@@ -92,16 +91,15 @@ export function SandboxTab() {
           {slider('Scale γ (anomalies)', 'scale', 0, 3, 0.05, v => `${v.toFixed(2)}×`)}
           {slider('Dampen δ', 'dampen', 0, 1, 0.05, v => v.toFixed(2))}
           {slider('Noise ε amplitude', 'noiseAmp', 0, 2 * baseStats.std, baseStats.std / 25 || 0.1, v => v.toFixed(2))}
-          <label className="sliderrow">
-            <span>Noise kind / seed</span>
-            <span>
+          <div className="sliderrow">
+            <span className="srtop"><span>Noise kind / seed</span><code>reproducible</code></span>
+            <span className="srctrl">
               <select value={sb.noiseKind} onChange={e => set({ noiseKind: e.target.value as any })}>
                 <option value="uniform">uniform</option><option value="gaussian">gaussian</option>
-              </select>{' '}
-              <input type="number" value={sb.noiseSeed} style={{ width: '5.5em' }} onChange={e => set({ noiseSeed: Number(e.target.value) })} />
+              </select>
+              <input type="number" value={sb.noiseSeed} style={{ width: '6em' }} onChange={e => set({ noiseSeed: Number(e.target.value) })} />
             </span>
-            <code>seeded</code>
-          </label>
+          </div>
         </div>
         <p className="muted">S′(t) = m + (B(t−Δt) − m)·γ·(1−δ) + β + ε — B is the base series, m its mean; noise is reproducible from the seed.</p>
       </section>
@@ -131,9 +129,9 @@ export function SandboxTab() {
       <section className="card">
         <PlotHost
           traces={[
-            { x: dates, y: clean(ds.observed.values), name: 'Observed', type: 'scatter', mode: 'lines', line: { color: OBSERVED_COLOR, width: 2 } },
-            ...(sb.mode === 'perturb' ? [{ x: dates, y: clean(target.values), name: `${target.name} (original)`, type: 'scatter', mode: 'lines', line: { color: target.color, width: 1, dash: 'dot' }, opacity: 0.55 }] : []),
-            { x: dates, y: clean(perturbed), name: 'Perturbed S′', type: 'scatter', mode: 'lines', line: { color: '#D55E00', width: 1.6 } },
+            { x: dates, y: clean(ds.observed.values), name: 'Observed', type: 'scatter', mode: 'lines', line: { color: OBSERVED_COLOR, width: 2.2 } },
+            ...(sb.mode === 'perturb' ? [{ x: dates, y: clean(target.values), name: `${target.name} (original)`, type: 'scatter', mode: 'lines', line: { color: target.color, width: 1, dash: 'dot' }, opacity: 0.4 }] : []),
+            { x: dates, y: clean(perturbed), name: 'Perturbed S′', type: 'scatter', mode: 'lines', line: { color: '#d95f02', width: 1.9, dash: 'dash' } },
           ]}
           layout={{ xaxis: { rangeslider: { visible: true } }, yaxis: { title: `Q [${ds.targetUnit}]` } }}
           height={380}
@@ -144,15 +142,15 @@ export function SandboxTab() {
         <h2>Lag sweep of the perturbed series <span className="muted">— NSE collapses off-lag; W₁ stays smooth and points at the shift</span></h2>
         <PlotHost
           traces={[
-            { x: sweepRows.map(r => r.lag), y: sweepRows.map(r => r.nse), name: 'NSE', type: 'scatter', mode: 'lines', line: { color: '#0072B2', width: 2 } },
-            { x: sweepRows.map(r => r.lag), y: sweepRows.map(r => r.w1), name: 'W₁', yaxis: 'y2', type: 'scatter', mode: 'lines', line: { color: '#D55E00', width: 2, dash: 'dot' } },
+            { x: sweepRows.map(r => r.lag), y: sweepRows.map(r => r.nse), name: 'NSE', type: 'scatter', mode: 'lines', line: { color: '#1f77b4', width: 2.2 } },
+            { x: sweepRows.map(r => r.lag), y: sweepRows.map(r => r.w1), name: 'W₁', yaxis: 'y2', type: 'scatter', mode: 'lines', line: { color: '#d95f02', width: 2, dash: 'dot' } },
           ]}
           layout={{
             xaxis: { title: 'lag [steps] — positive = simulation late', zeroline: true, dtick: 5 },
             yaxis: { title: 'NSE' },
             yaxis2: { title: 'W₁ [steps]', overlaying: 'y', side: 'right' },
             shapes: [
-              { type: 'line', x0: out.extras.sweep?.bestLag, x1: out.extras.sweep?.bestLag, yref: 'paper', y0: 0, y1: 1, line: { color: '#0072B2', dash: 'dash', width: 1 } },
+              { type: 'line', x0: out.extras.sweep?.bestLag, x1: out.extras.sweep?.bestLag, yref: 'paper', y0: 0, y1: 1, line: { color: '#1f77b4', dash: 'dash', width: 1 } },
               { type: 'line', x0: sb.shiftSteps, x1: sb.shiftSteps, yref: 'paper', y0: 0, y1: 1, line: { color: '#999', dash: 'dot', width: 1 } },
             ],
           }}

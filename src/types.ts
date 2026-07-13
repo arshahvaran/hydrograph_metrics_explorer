@@ -157,11 +157,15 @@ export function defaultView(stepMs: number, n: number): ViewState {
   };
 }
 
-/** Colourblind-safe run palette (Okabe–Ito, minus black which is reserved for observed). */
+/**
+ * Run palette matching the paper's figure style: first run takes the
+ * "simulated" orange used throughout the figures, then the ColorBrewer Dark2
+ * family (colour-vision friendly). Observed is reserved the figures' blue.
+ */
 export const RUN_PALETTE = [
-  '#E69F00', '#56B4E9', '#009E73', '#CC79A7',
-  '#0072B2', '#D55E00', '#F0E442', '#999999',
-  '#8C510A', '#5AB4AC', '#762A83', '#1B7837',
+  '#d95f02', '#7570b3', '#e7298a', '#1b9e77',
+  '#e6ab02', '#66a61e', '#a6761d', '#666666',
+  '#0072B2', '#CC79A7', '#56B4E9', '#8C510A',
 ];
 
-export const OBSERVED_COLOR = '#1a1a1a';
+export const OBSERVED_COLOR = '#1f77b4';

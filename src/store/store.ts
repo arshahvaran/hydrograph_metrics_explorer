@@ -13,6 +13,8 @@ export interface CommitInput {
 
 interface AppState {
   project: Project;
+  theme: 'light' | 'dark';
+  toggleTheme: () => void;
   commitDataset: (input: CommitInput) => string;
   setActiveDataset: (id: string) => void;
   removeDataset: (id: string) => void;
@@ -62,6 +64,14 @@ const mutateActive = (s: AppState, fn: (d: Dataset) => Dataset) => {
 
 export const useApp = create<AppState>((set, get) => ({
   project: { schemaVersion: 1, datasets: [], activeDatasetId: null },
+
+  theme: (typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'dark') ? 'dark' : 'light',
+  toggleTheme: () => set(s => {
+    const theme = s.theme === 'dark' ? 'light' : 'dark';
+    if (typeof document !== 'undefined') document.documentElement.setAttribute('data-theme', theme);
+    try { localStorage.setItem('hme_theme', theme); } catch { /* private mode */ }
+    return { theme };
+  }),
 
   commitDataset: (raw) => {
     const input = alignByDate(raw);

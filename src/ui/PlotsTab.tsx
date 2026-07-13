@@ -17,8 +17,8 @@ type Mode = 'none' | 'derivative' | 'cumulative' | 'fromMean';
 function seriesOf(ds: Dataset) {
   const clean = (v: ArrayLike<number>) => Array.from(v, x => (isFinite(x as number) ? (x as number) : null));
   return [
-    { name: ds.observed.name || 'Observed', color: OBSERVED_COLOR, y: clean(ds.observed.values), width: 2 },
-    ...ds.runs.filter(r => r.visible).map(r => ({ name: r.name, color: r.color, y: clean(r.values), width: 1.4 })),
+    { name: ds.observed.name || 'Observed', color: OBSERVED_COLOR, y: clean(ds.observed.values), width: 2.2, dash: 'solid' as const },
+    ...ds.runs.filter(r => r.visible).map(r => ({ name: r.name, color: r.color, y: clean(r.values), width: 1.7, dash: 'dash' as const })),
   ];
 }
 
@@ -72,7 +72,7 @@ export function PlotsTab() {
     if (plot === 'timeseries') {
       const t = all.map(s => ({
         x: dates, y: applyMode(s.y, mode, movAvg || null), name: s.name, type: 'scatter', mode: 'lines',
-        line: { color: s.color, width: s.width },
+        line: { color: s.color, width: s.width, dash: s.dash },
       }));
       L.xaxis = { rangeslider: { visible: true }, title: '' };
       if (threshold && isFinite(thr) && mode === 'none') {
@@ -99,7 +99,7 @@ export function PlotsTab() {
       const t = all.map(s => {
         const v = s.y.filter((x): x is number => x !== null).sort((a, b) => b - a);
         const p = v.map((_, i) => (100 * (i + 1)) / (v.length + 1));
-        return { x: p, y: v, name: s.name, type: 'scatter', mode: 'lines', line: { color: s.color, width: s.width } };
+        return { x: p, y: v, name: s.name, type: 'scatter', mode: 'lines', line: { color: s.color, width: s.width, dash: s.dash } };
       });
       return { traces: t, layout: { xaxis: { title: 'Exceedance probability [%]' }, yaxis: { title: yTitle, type: 'log' }, hovermode: 'closest' }, note: 'log-y flow duration curves (Weibull plotting position)' };
     }
@@ -135,7 +135,7 @@ export function PlotsTab() {
           t.push({ x: doys, y: p75, type: 'scatter', mode: 'lines', line: { width: 0 }, showlegend: false, hoverinfo: 'skip' });
           t.push({ x: doys, y: p25, type: 'scatter', mode: 'lines', line: { width: 0 }, fill: 'tonexty', fillcolor: 'rgba(26,26,26,0.12)', name: 'obs IQR', hoverinfo: 'skip' });
         }
-        t.push({ x: doys, y: med, name: `${s.name} (median)`, type: 'scatter', mode: 'lines', line: { color: s.color, width: s.width } });
+        t.push({ x: doys, y: med, name: `${s.name} (median)`, type: 'scatter', mode: 'lines', line: { color: s.color, width: s.width, dash: s.dash } });
       });
       return { traces: t, layout: { xaxis: { title: 'Day of year' }, yaxis: { title: yTitle, type: logY ? 'log' : 'linear' } }, note: 'medians by day of year; shaded band = observed interquartile range' };
     }
@@ -178,8 +178,8 @@ export function PlotsTab() {
     }
     return {
       traces: [
-        { x: dates, y: paired.o, name: 'Observed', type: 'scatter', mode: 'lines', line: { color: OBSERVED_COLOR, width: 2 } },
-        { x: dates, y: paired.s, name: run.name, type: 'scatter', mode: 'lines', line: { color: run.color, width: 1.4 } },
+        { x: dates, y: paired.o, name: 'Observed', type: 'scatter', mode: 'lines', line: { color: OBSERVED_COLOR, width: 2.2 } },
+        { x: dates, y: paired.s, name: run.name, type: 'scatter', mode: 'lines', line: { color: run.color, width: 1.7, dash: 'dash' } },
         { x: cx, y: cy, name: 'DTW alignment', type: 'scatter', mode: 'lines', line: { color: 'rgba(150,150,160,0.5)', width: 1 }, hoverinfo: 'skip' },
       ],
       layout: { xaxis: { rangeslider: { visible: true } }, yaxis: { title: yTitle } },

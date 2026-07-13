@@ -35,18 +35,21 @@ export function TimingTab() {
 
   const xwtTraces = runs.map((r, i) => {
     const rows = outputs[i].extras.xwt?.byScale ?? [];
-    return { x: rows.map(x => x.period), y: rows.map(x => x.meanLag), name: r.name, type: 'scatter', mode: 'lines+markers', marker: { size: 5 }, line: { color: r.color }, connectgaps: false };
+    return { x: rows.map(x => x.meanLag), y: rows.map(x => x.period), name: r.name, type: 'scatter', mode: 'lines+markers', marker: { size: 5, color: r.color }, line: { color: r.color, width: 2 }, connectgaps: false };
   });
 
-  const polarTraces = runs.map((r, i) => {
-    const de = outputs[i].extras.de;
-    return {
-      type: 'scatterpolar', mode: 'markers+text', name: r.name,
-      r: [de?.de ?? 0], theta: [((de?.phi ?? 0) * 180) / Math.PI],
-      text: [r.name], textposition: 'top center',
-      marker: { size: 12, color: r.color },
-    };
-  });
+  const polarTraces = [{
+    type: 'scatterpolar', mode: 'markers+text', showlegend: false,
+    r: runs.map((_r, i) => outputs[i].extras.de?.de ?? NaN),
+    theta: runs.map((_r, i) => ((outputs[i].extras.de?.phi ?? 0) * 180) / Math.PI),
+    text: runs.map(r => r.name), textposition: 'top center',
+    marker: {
+      size: 15, line: { color: '#ffffff', width: 1.5 },
+      color: runs.map((_r, i) => outputs[i].extras.de?.temporalR ?? NaN),
+      colorscale: 'Plasma', reversescale: true, cmin: 0, cmax: 1,
+      colorbar: { title: { text: 'timing r' }, thickness: 12, len: 0.75, x: 1.06 },
+    },
+  }];
 
   const evOut = outputs[Math.min(eventRunIdx, outputs.length - 1)];
   const evRun = runs[Math.min(eventRunIdx, runs.length - 1)];
@@ -86,7 +89,7 @@ export function TimingTab() {
 
       <section className="card">
         <h2>Timing summary <span className="muted">(lags in steps of {stepLabel})</span></h2>
-        <table className="grid">
+        <div className="mapscroll"><table className="grid">
           <thead><tr><th>Measure</th><th>optimum</th>{runs.map(r => <th key={r.id} style={{ color: r.color }}>{r.name}</th>)}</tr></thead>
           <tbody>
             {SUMMARY_IDS.map(id => {
@@ -107,7 +110,7 @@ export function TimingTab() {
               {outputs.map((o, i) => <td key={runs[i].id}>{fmtNum((o.extras.xwt?.fracSignificant ?? NaN) * 100, 1)} %</td>)}
             </tr>
           </tbody>
-        </table>
+        </table></div>
       </section>
 
       <section className="card">
@@ -118,7 +121,11 @@ export function TimingTab() {
             xaxis: { title: `lag [steps of ${stepLabel}] — positive = simulation late`, dtick: 5, zeroline: true },
             yaxis: { title: 'NSE' },
             yaxis2: { title: 'W₁ [steps]', overlaying: 'y', side: 'right' },
-            shapes: sweepShapes,
+            shapes: [
+              ...sweepShapes,
+              { type: 'line', x0: 0, x1: 0, yref: 'paper', y0: 0, y1: 1, line: { color: '#888', width: 1, dash: 'dot' } },
+            ],
+            annotations: [{ x: 0, yref: 'paper', y: 1.05, text: 'perfect alignment', showarrow: false, font: { size: 12 } }],
           }}
           height={360}
         />
@@ -130,13 +137,14 @@ export function TimingTab() {
           <PlotHost
             traces={xwtTraces}
             layout={{
-              xaxis: { title: `period [steps of ${stepLabel}]`, type: 'log' },
-              yaxis: { title: 'phase lag [steps]', zeroline: true },
+              xaxis: { title: 'power-weighted lag [steps] (+ = simulation late)', zeroline: false },
+              yaxis: { title: `period [steps of ${stepLabel}]`, type: 'log', autorange: 'reversed' },
               hovermode: 'closest',
+              shapes: [{ type: 'line', x0: 0, x1: 0, yref: 'paper', y0: 0, y1: 1, line: { color: '#888', width: 1, dash: 'dot' } }],
             }}
             height={330}
           />
-          <p className="muted">Gaps = no significant common power at that scale. Positive = simulation late.</p>
+          <p className="muted">Read like the paper's timing-error-by-scale panel: fast scales at the top, slow at the bottom. Gaps = no significant common power at that scale.</p>
         </section>
 
         <section className="card">
@@ -145,14 +153,15 @@ export function TimingTab() {
             traces={polarTraces}
             layout={{
               polar: {
-                radialaxis: { title: 'DE', rangemode: 'tozero' },
-                angularaxis: { thetaunit: 'degrees', dtick: 45 },
+                radialaxis: { rangemode: 'tozero' },
+                angularaxis: { thetaunit: 'degrees', dtick: 45, rotation: 90, direction: 'counterclockwise' },
               },
+              margin: { t: 36, r: 70, l: 40, b: 36 },
               showlegend: false, hovermode: 'closest',
             }}
             height={330}
           />
-          <p className="muted">Radius = total error (0 is perfect). Angle: ±180° ⇒ dynamic (high-vs-low-flow) error dominates; ±90° ⇒ constant bias dominates (positive up = over-estimation).</p>
+          <p className="muted">As in the paper's diagnostic polar figure: radius = DE (0 at the centre is perfect), the top half is constant positive offset (B̄rel &gt; 0), the bottom half constant negative offset, left/right = dynamic high-vs-low-flow error; marker colour is the timing term r (yellow = mismatch → purple = match).</p>
         </section>
       </div>
 
@@ -163,7 +172,7 @@ export function TimingTab() {
           </select>{' '}
           <span className="muted">threshold {fmtNum(evOut.extras.events?.threshold, 2)} {ds.targetUnit} · tolerance ±{t.peakMatchTolerance} steps</span>
         </h2>
-        <table className="grid">
+        <div className="mapscroll"><table className="grid">
           <thead><tr><th>#</th><th>window</th><th>obs peak [{ds.targetUnit}]</th><th>peak lag</th><th>peak mag err %</th><th>volume err %</th></tr></thead>
           <tbody>
             {(evOut.extras.events?.events ?? []).slice(0, 40).map((e, i) => (
@@ -177,7 +186,7 @@ export function TimingTab() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
         {(evOut.extras.events?.events.length ?? 0) === 0 && <p className="warning">No events above the current threshold for {evRun?.name}. Lower the percentile above.</p>}
       </section>
     </div>

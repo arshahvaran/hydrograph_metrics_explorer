@@ -21,6 +21,8 @@ export default function App() {
   const setActiveDataset = useApp(s => s.setActiveDataset);
   const removeDataset = useApp(s => s.removeDataset);
   const loadProject = useApp(s => s.loadProject);
+  const theme = useApp(s => s.theme);
+  const toggleTheme = useApp(s => s.toggleTheme);
   const loadRef = useRef<HTMLInputElement>(null);
 
   const ds = project.datasets.find(d => d.id === project.activeDatasetId) ?? null;
@@ -58,6 +60,9 @@ export default function App() {
             <input ref={loadRef} type="file" accept=".json" hidden onChange={e => e.target.files?.[0] && onLoadProject(e.target.files[0])} />
           </label>
           <span className="badge">{CHECKPOINT}</span>
+          <button className="theme-toggle" onClick={toggleTheme} title="Toggle light or dark interface" aria-label="Toggle colour theme">
+            {theme === 'dark' ? '\u2600\uFE0E' : '\u263D'}
+          </button>
         </div>
       </header>
 
@@ -87,6 +92,10 @@ export default function App() {
         <span>
           HME v{APP_VERSION} · MIT ·{' '}
           <a href="https://github.com/arshahvaran/hydrograph_metrics_explorer" target="_blank" rel="noreferrer">source &amp; citation</a>
+        </span>
+        <span className="credit">
+          Developed by Ali Reza Shahvaran ·{' '}
+          <a href="https://github.com/arshahvaran/" target="_blank" rel="noopener noreferrer">github.com/arshahvaran</a>
         </span>
       </footer>
     </div>
