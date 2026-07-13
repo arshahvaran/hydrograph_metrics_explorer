@@ -23,7 +23,9 @@ function themeTemplate(): any {
   return {
     layout: {
       font: { family: '"STIX Two Text", "Times New Roman", Georgia, serif', size: 13.5, color: ink },
-      xaxis: axis, yaxis: axis,
+      xaxis: { ...axis, rangeslider: { bgcolor: 'rgba(0,0,0,0)', bordercolor: grid } },
+      yaxis: axis,
+      modebar: { color: soft, activecolor: ink, bgcolor: 'rgba(0,0,0,0)' },
       polar: {
         bgcolor: 'rgba(0,0,0,0)',
         angularaxis: { gridcolor: grid, linecolor: soft },
