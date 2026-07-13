@@ -79,7 +79,7 @@ export function DataTab() {
           ))}
           <label className="primary filebtn">
             Upload CSV / TXT / XLSX
-            <input ref={fileRef} type="file" accept=".csv,.txt,.tsv,.xlsx,.xls" hidden
+            <input ref={fileRef} type="file" accept=".csv,.txt,.tsv,.xlsx,.xls" className="vh" aria-label="Upload CSV, TXT, TSV or XLSX data files"
               onChange={e => e.target.files?.[0] && onFile(e.target.files[0])} />
           </label>
         </div>

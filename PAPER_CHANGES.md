@@ -9,7 +9,7 @@ Each item states the location, the issue, and drop-in replacement wording.
 **C1 — §6.2 "reuses tested implementations".** A client-only TypeScript SPA cannot call the Python
 libraries. Replace with: "All metrics are *independently implemented* in TypeScript from the
 published equations and *verified against* HydroErr, Hydrostats, hydroeval and hydroGOF reference
-outputs in an automated test suite (95 tests at v1.0.0)." This also strengthens the
+outputs in an automated test suite (101 tests at v1.1.0)." This also strengthens the
 superset/correctness claim the section is making.
 
 **C2 — §6.1 novelty sentence on Wasserstein.** hydroGOF ≥ 0.7-0 exposes a Wasserstein option inside

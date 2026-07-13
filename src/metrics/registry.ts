@@ -139,12 +139,12 @@ export interface ComputeOutput {
 /** Compute every metric for one run against observed under the current view. */
 export type ComputeCtx = ComputeContext;
 
-export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>, ctx: ComputeContext): ComputeOutput {
-  const paired = applyNanPolicy(obsRaw, simRaw, ctx.nanPolicy);
-  const { o, s, note } = C.applyTransform(paired.obs, paired.sim, ctx.transform);
-  const notes: string[] = note ? [note] : [];
-  const heavy = ctx.heavy !== false;
-
+/** The synchronous (classical) metric block on an already-paired, already-
+ *  transformed pair — the unit resampled by the bootstrap. */
+export function classicalValues(o: Float64Array, s: Float64Array): {
+  values: Record<string, number>;
+  kge: { kge2009: ReturnType<typeof C.kge2009>; kge2012: ReturnType<typeof C.kge2012>; kge2021: ReturnType<typeof C.kge2021>; kgenp: ReturnType<typeof C.kgenp> };
+} {
   const k09 = C.kge2009(o, s), k12 = C.kge2012(o, s), k21 = C.kge2021(o, s), knp = C.kgenp(o, s);
   const values: Record<string, number> = {
     me: C.me(o, s), mae: C.mae(o, s), mdae: C.mdae(o, s), mse: C.mse(o, s), rmse: C.rmse(o, s),
@@ -159,8 +159,17 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
     ve: C.ve(o, s), pbias: C.pbias(o, s), beta_nse: C.betaNse(o, s), alpha: C.alphaRatio(o, s),
     fhv: C.fhv(o, s), flv: C.flv(o, s), fms: C.fms(o, s), fmm: C.fmm(o, s),
   };
+  return { values, kge: { kge2009: k09, kge2012: k12, kge2021: k21, kgenp: knp } };
+}
 
-  const extras: ComputeOutput['extras'] = { kge2009: k09, kge2012: k12, kge2021: k21, kgenp: knp };
+export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>, ctx: ComputeContext): ComputeOutput {
+  const paired = applyNanPolicy(obsRaw, simRaw, ctx.nanPolicy);
+  const { o, s, note } = C.applyTransform(paired.obs, paired.sim, ctx.transform);
+  const notes: string[] = note ? [note] : [];
+  const heavy = ctx.heavy !== false;
+
+  const { values, kge } = classicalValues(o, s);
+  const extras: ComputeOutput['extras'] = { ...kge };
 
   if (heavy && o.length >= 4) {
     const t = ctx.timing;

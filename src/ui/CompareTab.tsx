@@ -69,7 +69,7 @@ export function CompareTab() {
 
       <section className="card">
         <h2>Ranking</h2>
-        <div className="mapscroll"><table className="grid">
+        <div className="mapscroll"><table className="grid" aria-label="Composite ranking of runs">
           <thead>
             <tr><th>Rank</th><th>Run</th>
               {priorities.map(p => <th key={p.id}>{byId.get(p.id)?.timing ? '⏱ ' : ''}{byId.get(p.id)?.label ?? p.id}<br /><span className="muted">raw · score ×{p.weight}</span></th>)}

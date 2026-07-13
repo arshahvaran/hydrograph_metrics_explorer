@@ -94,7 +94,7 @@ export function TimingTab() {
 
       <section className="card">
         <h2>Timing summary <span className="muted">(lags in steps of {stepLabel})</span></h2>
-        <div className="mapscroll"><table className="grid">
+        <div className="mapscroll"><table className="grid" aria-label="Timing summary per run">
           <thead><tr><th>Measure</th><th>optimum</th>{runs.map(r => <th key={r.id} style={{ color: r.color }}>{r.name}</th>)}</tr></thead>
           <tbody>
             {SUMMARY_IDS.map(id => {
@@ -177,7 +177,7 @@ export function TimingTab() {
           </select>{' '}
           <span className="muted">threshold {fmtNum(evOut.extras.events?.threshold, 2)} {ds.targetUnit} · tolerance ±{t.peakMatchTolerance} steps</span>
         </h2>
-        <div className="mapscroll"><table className="grid">
+        <div className="mapscroll"><table className="grid" aria-label="Detected events and per-event errors">
           <thead><tr><th>#</th><th>window</th><th>obs peak [{ds.targetUnit}]</th><th>peak lag</th><th>peak mag err %</th><th>volume err %</th></tr></thead>
           <tbody>
             {(evOut.extras.events?.events ?? []).slice(0, 40).map((e, i) => (

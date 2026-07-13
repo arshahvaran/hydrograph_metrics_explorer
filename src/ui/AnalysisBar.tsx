@@ -31,7 +31,7 @@ export function AnalysisBar() {
               const t = e.target.value ? ms(e.target.value) : null;
               updateView({ window: t == null ? null : [v.window?.[0] ?? d0, t] });
             }} />
-          {v.window && <button onClick={() => updateView({ window: null })} title="Clear window">×</button>}
+          {v.window && <button onClick={() => updateView({ window: null })} title="Clear window" aria-label="Clear analysis window">×</button>}
         </label>
         <label>Season (DOY){' '}
           <input type="number" aria-label="season start day-of-year" min={1} max={366} style={{ width: '4.6em' }}
@@ -47,7 +47,7 @@ export function AnalysisBar() {
               const n = Number(e.target.value);
               updateView({ season: e.target.value === '' ? null : { startDoy: v.season?.startDoy ?? 1, endDoy: Math.min(366, Math.max(1, n || 366)) } });
             }} />
-          {v.season && <button onClick={() => updateView({ season: null })} title="Clear season">×</button>}
+          {v.season && <button onClick={() => updateView({ season: null })} title="Clear season" aria-label="Clear seasonal filter">×</button>}
         </label>
         <label>Resample{' '}
           <select value={v.resample} onChange={e => updateView({ resample: e.target.value as any })}>

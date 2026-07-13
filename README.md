@@ -16,7 +16,7 @@ your browser. **No data ever leaves the page**; there is no server, no database,
 
 Data ingestion (paste grid with add-column, CSV/XLSX upload with mapping, Julian dates, unit
 conversion incl. depth↔volume with catchment area) · 62-metric panel — classical families
-independently implemented and verified against HydroErr/Hydrostats/hydroeval/hydroGOF, plus the
+independently implemented and verified against HydroErr/Hydrostats/hydroeval/hydroGOF (95% block-bootstrap CIs on demand), plus the
 timing- & shape-aware core (peak timing, event errors, Diagnostic Efficiency, Series Distance,
 banded DTW, Wasserstein W₁, cross-wavelet lag) · analysis window / wrap-aware seasonal filter /
 resampling · benchmark skill scores · eight linked plots with PNG/SVG/CSV export · interactive

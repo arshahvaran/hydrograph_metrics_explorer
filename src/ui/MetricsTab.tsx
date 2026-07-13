@@ -3,7 +3,7 @@ import { useApp } from '../store/store'
 import { REGISTRY, PRESETS, C2M_APPLICABLE, toC2M, GROUPS } from '../metrics/registry'
 import { benchmarkSeries, nse as nseFn, kge2009 as kgeFn, skill } from '../metrics/classical/catalogue'
 import { applyNanPolicy } from '../ingest/missing'
-import { useRunOutputs, bestIndex, frameFor } from './compute'
+import { useRunOutputs, bestIndex, frameFor, useBootstrapCIsAll } from './compute'
 import { fmtNum, download } from './format'
 import { Eq } from './Eq'
 import { APP_VERSION } from '../version'
@@ -22,6 +22,8 @@ export function MetricsTab() {
   const outputs = useRunOutputs(ds, runs);
   const frame = frameFor(ds);
   const busy = outputs.some(o => o === null);
+  const ciOn = ds.view.showBootstrapCIs;
+  const boots = useBootstrapCIsAll(ds, runs, ciOn);
 
   const selected = PRESETS[preset] === 'all' ? REGISTRY.map(m => m.id) : (PRESETS[preset] as string[]);
   const metricRows = REGISTRY.filter(m => selected.includes(m.id));
@@ -48,11 +50,16 @@ export function MetricsTab() {
       `# dataset: ${ds!.name} (${ds!.dates.length} rows, step ${ds!.step.label}, unit ${ds!.targetUnit})`,
       `# settings: nan=${ds!.view.nanPolicy}; transform=${ds!.view.transform}; benchmark=${ds!.view.benchmark}; c2m_display=${c2mOn}`,
       `# timing config: ${JSON.stringify(ds!.view.timingConfig)}`,
-      ['metric', 'group', 'optimum', ...runs.map(r => r.name)].join(sep),
+      ['metric', 'group', 'optimum', ...runs.flatMap(r => ciOn ? [r.name, `${r.name} ci95_lo`, `${r.name} ci95_hi`] : [r.name])].join(sep),
     ];
     for (const m of metricRows) {
       lines.push([m.label.replace(new RegExp(sep === ',' ? ',' : '\\t', 'g'), ';'), m.group, m.optimum,
-        ...outputs.map(o => String(o ? display(m.id, o.values[m.id]) : ''))].join(sep));
+        ...outputs.flatMap((o, i) => {
+          const v = String(o ? display(m.id, o.values[m.id]) : '');
+          if (!ciOn) return [v];
+          const ci = m.timing ? undefined : boots.results[i]?.cis[m.id];
+          return [v, ci ? String(ci[0]) : '', ci ? String(ci[1]) : ''];
+        })].join(sep));
     }
     download(`hme_metrics_${ds!.name.replace(/\W+/g, '_')}.${sep === ',' ? 'csv' : 'tsv'}`,
       lines.join('\n'), sep === ',' ? 'text/csv' : 'text/tab-separated-values');
@@ -95,13 +102,13 @@ export function MetricsTab() {
           <button className="primary" onClick={() => exportCsv(',')}>Export CSV</button>
           <button onClick={() => exportCsv('\t')}>TSV</button>
         </div>
-        <p className="muted">
+        <p className="muted" aria-live="polite">
           n per run (valid pairs): {runs.map((r, i) => `${r.name}: ${outputs[i]?.n ?? '…'}`).join(' · ')}.{busy ? ' Computing in a background worker…' : ''}{frame.caption ? ` Subset: ${frame.caption}.` : ''}
           {ds.view.transform !== 'none' && ' Metrics are computed on the transformed series.'}
           {' '}Rows tinted <span className="timingchip">⏱</span> are the timing- &amp; shape-aware measures — the ones conventional suites omit.
         </p>
         {outputs.flatMap(o => o?.notes ?? []).filter((v, i, a) => a.indexOf(v) === i).map(nn => <div key={nn} className="warning">{nn}</div>)}
-        <div className="mapscroll"><table className="grid metricstable">
+        <div className="mapscroll"><table className="grid metricstable" aria-label="Metric values per run">
           <thead>
             <tr><th>Metric</th><th>optimum</th>{runs.map(r => <th key={r.id} style={{ color: r.color }}>{r.name}</th>)}</tr>
           </thead>
@@ -118,9 +125,19 @@ export function MetricsTab() {
                       <tr key={m.id} className={m.timing ? 'timingrow' : ''} title={m.blurb + ` Range ${m.range}.`}>
                         <td>{m.timing ? '⏱ ' : ''}{m.label}</td>
                         <td className="muted">{m.optimum}</td>
-                        {vals.map((v, i) => (
-                          <td key={runs[i].id} className={i === best ? 'best' : ''}>{fmtNum(v, m.digits)}</td>
-                        ))}
+                        {vals.map((v, i) => {
+                          const ci = ciOn ? boots.results[i]?.cis[m.id] : undefined;
+                          return (
+                            <td key={runs[i].id} className={i === best ? 'best' : ''}>
+                              {fmtNum(v, m.digits)}
+                              {ciOn && (m.timing
+                                ? <span className="ci" title="Block resampling destroys the time axis that timing metrics measure, so a bootstrap CI would be meaningless here.">CI n/a</span>
+                                : ci && isFinite(ci[0])
+                                  ? <span className="ci">[{fmtNum(ci[0], m.digits)}, {fmtNum(ci[1], m.digits)}]</span>
+                                  : <span className="ci">…</span>)}
+                            </td>
+                          );
+                        })}
                       </tr>
                     );
                   })}
@@ -157,7 +174,7 @@ export function MetricsTab() {
             positive = simulation late). Every equation below is the form the engine actually computes, verified in <code>tests/</code>.
           </p>
           <div className="mapscroll">
-            <table className="grid reftable">
+            <table className="grid reftable" aria-label="Metric reference: equations, ranges and blind spots">
               <thead>
                 <tr><th>Metric</th><th>Equation</th><th>Range</th><th>Optimum</th><th>Better</th><th>Measures / blind spot</th></tr>
               </thead>

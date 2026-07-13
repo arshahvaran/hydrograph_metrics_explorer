@@ -46,6 +46,7 @@ export default function App() {
 
   return (
     <div className="app">
+      <a href="#main" className="skip">Skip to content</a>
       <header className="header">
         <div>
           <h1>Hydrograph Metrics Explorer</h1>
@@ -57,7 +58,7 @@ export default function App() {
               {project.datasets.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           )}
-          {ds && <button title="Remove active dataset" onClick={() => removeDataset(ds.id)}>✕</button>}
+          {ds && <button title="Remove active dataset" aria-label="Remove active dataset" onClick={() => removeDataset(ds.id)}>✕</button>}
           <button title="Save project (.hme.json)" disabled={!project.datasets.length}
             onClick={() => {
               const json = serialiseProject(project);
@@ -69,7 +70,7 @@ export default function App() {
           <button title="Start a new empty project" disabled={!project.datasets.length}
             onClick={() => { if (confirm('Clear all datasets and start a new project? Unsaved work is lost.')) useApp.getState().loadProject({ schemaVersion: 1, datasets: [], activeDatasetId: null }); }}>New</button>
           <label className="filebtn" title="Load a saved project">Load
-            <input ref={loadRef} type="file" accept=".json" hidden onChange={e => e.target.files?.[0] && onLoadProject(e.target.files[0])} />
+            <input ref={loadRef} type="file" accept=".json" className="vh" aria-label="Load a saved .hme.json project" onChange={e => e.target.files?.[0] && onLoadProject(e.target.files[0])} />
           </label>
           <span className="badge">{CHECKPOINT}</span>
           <button className="theme-toggle" onClick={toggleTheme} title="Toggle light or dark interface" aria-label="Toggle colour theme">
@@ -78,9 +79,24 @@ export default function App() {
         </div>
       </header>
 
-      <nav className="tabs" role="tablist" aria-label="Main sections">
+      <nav className="tabs" role="tablist" aria-label="Main sections"
+        onKeyDown={e => {
+          if (!ds) return;
+          const ids = TABS.map(([id]) => id);
+          const cur = ids.indexOf(tab);
+          let next = -1;
+          if (e.key === 'ArrowRight') next = (cur + 1) % ids.length;
+          else if (e.key === 'ArrowLeft') next = (cur - 1 + ids.length) % ids.length;
+          else if (e.key === 'Home') next = 0;
+          else if (e.key === 'End') next = ids.length - 1;
+          if (next >= 0) {
+            e.preventDefault();
+            setActiveTab(ids[next]);
+            (e.currentTarget.children[next] as HTMLButtonElement)?.focus();
+          }
+        }}>
         {TABS.map(([id, label]) => (
-          <button key={id} role="tab" aria-selected={tab === id}
+          <button key={id} role="tab" aria-selected={tab === id} tabIndex={tab === id ? 0 : -1}
             className={tab === id ? 'tab active' : 'tab'}
             disabled={!ds && id !== 'data'}
             title={!ds && id !== 'data' ? 'Load data first' : undefined}
@@ -90,7 +106,7 @@ export default function App() {
         ))}
       </nav>
 
-      <main className="main">
+      <main className="main" id="main">
         {tab !== 'data' && ds && <AnalysisBar />}
         {tab === 'data' && <DataTab />}
         {tab === 'metrics' && ds && <MetricsTab />}

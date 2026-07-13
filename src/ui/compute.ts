@@ -5,6 +5,7 @@
 // computation where Workers are unavailable (tests, very old browsers).
 
 import { computeAll, type ComputeOutput, type ComputeCtx } from '../metrics/registry'
+import { bootstrapCIs, type BootstrapResult } from '../metrics/bootstrap'
 import { applySubset } from '../metrics/subset'
 import { mulberry32, gaussian, mean } from '../metrics/support/stats'
 import { useEffect, useState } from 'react'
@@ -39,26 +40,29 @@ export function frameFor(ds: Dataset): Frame {
 }
 
 // ------------------------------------------------------------- async core ---
-type Job = { resolve: (o: ComputeOutput) => void; reject: (e: unknown) => void };
+type Job = { resolve: (o: unknown) => void; reject: (e: unknown) => void; onProgress?: (p: number) => void };
 
-let worker: Worker | null = null;
+const workers: Partial<Record<'panel' | 'boot', Worker | null>> = {};
 let seq = 0;
 const jobs = new Map<number, Job>();
 
-function getWorker(): Worker | null {
+function getWorker(lane: 'panel' | 'boot' = 'panel'): Worker | null {
   if (typeof Worker === 'undefined') return null;
-  if (worker) return worker;
+  if (workers[lane]) return workers[lane]!;
+  let worker: Worker | null = null;
   try {
     worker = new Worker(new URL('../metrics/worker.ts', import.meta.url), { type: 'module' });
     worker.onmessage = (e: MessageEvent) => {
-      const { id, out, error } = e.data as { id: number; out?: ComputeOutput; error?: string };
+      const { id, out, error, progress } = e.data as { id: number; out?: unknown; error?: string; progress?: number };
       const job = jobs.get(id);
       if (!job) return;
+      if (progress != null) { job.onProgress?.(progress); return; }
       jobs.delete(id);
-      if (error) job.reject(new Error(error)); else job.resolve(out!);
+      if (error) job.reject(new Error(error)); else job.resolve(out);
     };
-    worker.onerror = () => { worker = null; /* subsequent calls fall back or respawn */ };
+    worker.onerror = () => { workers[lane] = null; /* subsequent calls fall back or respawn */ };
   } catch { worker = null; }
+  workers[lane] = worker;
   return worker;
 }
 
@@ -67,9 +71,72 @@ function computeAsync(obs: Float64Array, sim: Float64Array, ctx: ComputeCtx): Pr
   if (!w) return Promise.resolve(computeAll(obs, sim, ctx));
   const id = ++seq;
   return new Promise((resolve, reject) => {
-    jobs.set(id, { resolve, reject });
-    w.postMessage({ id, obs, sim, ctx });
+    jobs.set(id, { resolve: resolve as (o: unknown) => void, reject });
+    w.postMessage({ id, task: 'panel', obs, sim, ctx });
   });
+}
+
+function bootstrapAsync(obs: Float64Array, sim: Float64Array, ctx: ComputeCtx, onProgress: (p: number) => void): Promise<BootstrapResult> {
+  const w = getWorker('boot');
+  if (!w) return Promise.resolve(bootstrapCIs(obs, sim, { nanPolicy: ctx.nanPolicy, transform: ctx.transform }));
+  const id = ++seq;
+  return new Promise((resolve, reject) => {
+    jobs.set(id, { resolve: resolve as (o: unknown) => void, reject, onProgress });
+    w.postMessage({ id, task: 'bootstrap', obs, sim, ctx, boot: { B: 500 } });
+  });
+}
+
+// ------------------------------------------------------------ bootstrap ----
+const ciCache = new Map<string, BootstrapResult>();
+const ciPending = new Map<string, Promise<BootstrapResult>>();
+const ciProgress = new Map<string, number>();
+
+/** CI panels for all runs (single hook — stable order regardless of run count). */
+export function useBootstrapCIsAll(ds: Dataset, runs: Run[], enabled: boolean): { results: (BootstrapResult | null)[]; progress: number } {
+  useRecompute();
+  if (!enabled) return { results: runs.map(() => null), progress: 0 };
+  const frame = frameFor(ds);
+  let pmin = 1;
+  const results = runs.map(run => {
+    const key = `${settingsKey(ds, frame)}|ci:${run.id}`;
+    const hit = ciCache.get(key);
+    if (hit) return hit;
+    if (!ciPending.has(key)) {
+      ciProgress.set(key, 0);
+      const p = bootstrapAsync(frame.obs, frame.apply(run.values), ctxFor(ds, frame), pct => { ciProgress.set(key, pct); notify(); })
+        .then(res => { if (ciCache.size > 40) ciCache.clear(); ciCache.set(key, res); ciPending.delete(key); notify(); return res; })
+        .catch(err => { ciPending.delete(key); console.error('bootstrap failed', err); throw err; });
+      ciPending.set(key, p);
+    }
+    pmin = Math.min(pmin, ciProgress.get(key) ?? 0);
+    return null;
+  });
+  return { results, progress: results.every(r => r) ? 1 : pmin };
+}
+
+/** 95% block-bootstrap CIs for the classical rows; null while running. */
+export function useBootstrapCIs(ds: Dataset, run: Run, enabled: boolean): { res: BootstrapResult | null; progress: number } {
+  useRecompute();
+  const frame = frameFor(ds);
+  const key = `${settingsKey(ds, frame)}|ci:${run.id}`;
+  if (!enabled) return { res: null, progress: 0 };
+  const hit = ciCache.get(key);
+  if (hit) return { res: hit, progress: 1 };
+  if (!ciPending.has(key)) {
+    ciProgress.set(key, 0);
+    const p = bootstrapAsync(frame.obs, frame.apply(run.values), ctxFor(ds, frame), pct => {
+      ciProgress.set(key, pct);
+      notify();
+    }).then(res => {
+      if (ciCache.size > 40) ciCache.clear();
+      ciCache.set(key, res);
+      ciPending.delete(key);
+      notify();
+      return res;
+    }).catch(err => { ciPending.delete(key); console.error('bootstrap failed', err); throw err; });
+    ciPending.set(key, p);
+  }
+  return { res: null, progress: ciProgress.get(key) ?? 0 };
 }
 
 // --------------------------------------------------------------- caching ----

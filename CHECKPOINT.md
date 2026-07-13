@@ -161,3 +161,28 @@ New this checkpoint:
 - Tests 86 → **95** (subset ×4, rank ×5); tsc clean; worker chunk emitted by Vite build.
 Deviations recorded in ACCEPTANCE.md (USGS + bootstrap CIs are spec-designated v1.1; long-job
 cancellation implemented as bounded decimation + superseded-result drop rather than a cancel button).
+
+
+---
+
+# CP8 ✅ (final) · v1.1.0 — the checkpoint's own six items, all delivered
+
+Per the project checkpoint plan ("Web Workers for very long records, bootstrap CIs, editing grid,
+report generator, acceptance & accessibility audit, release"):
+1. **Web Workers** — full metric panel + bootstrap on dedicated lanes ('panel' / 'boot') so 500-replicate
+   jobs never queue behind live interaction; pending states everywhere; DTW decimation guards ≥50k rows.
+2. **Bootstrap CIs** — `src/metrics/bootstrap.ts`: circular moving-block bootstrap on the paired index,
+   L = max(3, n^⅓), B = 500, seeded, per-replicate transform re-application, percentile 95% CIs;
+   `classicalValues()` extracted from `computeAll` (no behaviour change, suite-verified) as the replicate
+   unit; worker progress → "bootstrapping… N%"; CI sub-lines in every classical cell + CSV lo/hi columns;
+   timing rows honestly excluded with in-UI rationale. Tests +6 (reproducibility, bracketing, width-vs-n,
+   classical-only coverage, block-length rate, progress) → **101 total**.
+3. **Editing grid** — shipped earlier in CP8 (EditableGrid, Appendix C).
+4. **Report generator** — shipped earlier in CP8 (DOCX + matching PDF).
+5. **Acceptance & accessibility audit** — ACCEPTANCE.md updated (CI deviation resolved);
+   **ACCESSIBILITY.md** added with measured WCAG contrast (10 pairs, all ≥4.5:1, worst 4.63:1),
+   plus fixes landed this checkpoint: skip-to-content link, ARIA tabs pattern with roving tabindex +
+   Arrow/Home/End activation, file inputs made keyboard-reachable (hidden → .vh), aria-labels on all
+   icon-only controls and key tables, polite live regions for async status. Partials stated
+   (canvas plots ↔ CSV-equivalent alternative; light grid has no arrow-key nav).
+6. **Release** — v1.1.0 tagged + deployed.

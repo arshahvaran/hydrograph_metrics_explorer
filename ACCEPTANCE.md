@@ -1,7 +1,7 @@
 # Acceptance audit — webtool_v3.md §22 (v1.0.0)
 
 Each criterion below maps to its implementation and, where numeric, its automated evidence
-(`npx vitest run` — 95 tests). Honest deviations are listed at the end rather than buried.
+(`npx vitest run` — 101 tests). Honest deviations are listed at the end rather than buried.
 
 | # | Criterion (abridged) | Status | Evidence |
 |---|---|---|---|
@@ -27,8 +27,13 @@ Each criterion below maps to its implementation and, where numeric, its automate
 
 ## Deviations, stated plainly
 
-- **USGS loader and bootstrap CIs** are not in v1.0 — the spec itself schedules both for v1.1 (§21),
-  and the privacy criterion (17) is currently satisfied unconditionally as a result.
+- **Bootstrap CIs shipped in v1.1.0** (CP8): circular moving-block bootstrap (B=500, L≈n^⅓, seeded,
+  worker-lane isolated with live progress) surfaces 95% percentile intervals across every classical
+  row and the CSV export. Timing-/shape-aware rows show "CI n/a" by design: block resampling
+  destroys the time axis those metrics measure, so an interval there would be statistically
+  meaningless — the exclusion is explained in the UI tooltip. 6 dedicated tests.
+- **USGS loader** remains out (spec §21 v1.1 "optional"); the privacy criterion (17) therefore
+  holds unconditionally.
 - **DTW/Wasserstein cancellation** (§18) is implemented as *bounded work + superseded-result dropping*
   (Sakoe–Chiba band, decimation caps, worker off-thread, stale responses discarded) rather than a
   user-facing cancel button. On the bounded sizes, jobs finish in well under the spec's 2 s target,
