@@ -1,7 +1,7 @@
 # Acceptance audit — webtool_v3.md §22 (v1.0.0)
 
 Each criterion below maps to its implementation and, where numeric, its automated evidence
-(`npx vitest run` — 101 tests). Honest deviations are listed at the end rather than buried.
+(`npx vitest run` — 300 tests as of v1.1.1). Honest deviations are listed at the end rather than buried.
 
 | # | Criterion (abridged) | Status | Evidence |
 |---|---|---|---|
