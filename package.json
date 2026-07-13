@@ -1,7 +1,7 @@
 {
   "name": "hydrograph-metrics-explorer",
   "private": true,
-  "version": "0.1.0-cp1",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,12 +10,16 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "leaflet": "^1.9.4",
     "papaparse": "^5.4.1",
+    "plotly.js-dist-min": "^2.35.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "xlsx": "^0.18.5",
     "zustand": "^4.5.5"
   },
   "devDependencies": {
+    "@types/leaflet": "^1.9.12",
     "@types/papaparse": "^5.3.14",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",

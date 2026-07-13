@@ -1,141 +1,181 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useApp } from '../store/store'
-import { fetchSample, parseSampleCsv, type LoadedCsv } from '../ingest/csvLoad'
-import { applyNanPolicy } from '../ingest/missing'
-import { nse, kge2009, rmse, pbias, pearsonR } from '../metrics/classical/basics'
-
-const fmtDate = (ms: number) => new Date(ms).toISOString().slice(0, 10);
-const fmt = (v: number, d = 3) => (isFinite(v) ? v.toFixed(d) : 'n/a');
+import { parseDelimited, parseWorkbook, guessRoles, stage, fetchSample, type RawTable, type ColumnRole } from '../ingest/ingest'
+import { UNITS } from '../units/registry'
+import { fmtDate, fmtNum } from './format'
+import type { DateFormat } from '../ingest/dateParse'
+import type { UnitId } from '../types'
 
 const SAMPLES = [
-  {
-    file: 'sample_hymod_raven.csv',
-    name: 'HYMOD vs observed (Raven output, daily 1954–1959)',
-    note: 'Real model output exported by the Raven hydrologic framework.',
-  },
-  {
-    file: 'sample_synthetic.csv',
-    name: 'Synthetic catchment, two runs (daily, 2 years)',
-    note: 'run_shifted lags the truth by 3 days; run_biased adds a constant offset — the two canonical error types the timing-aware metrics separate.',
-  },
+  { file: 'sample_hymod_raven.csv', name: 'HYMOD vs observed (Raven, daily 1954–59)' },
+  { file: 'sample_synthetic.csv', name: 'Synthetic: shifted + biased runs (daily, 2 yr)' },
 ];
+
+const ROLE_OPTIONS: ColumnRole[] = ['date', 'observed', 'run', 'ignore'];
 
 export function DataTab() {
   const commitDataset = useApp(s => s.commitDataset);
+  const setActiveTab = useApp(s => s.setActiveTab);
+  const convertUnits = useApp(s => s.convertUnits);
   const ds = useApp(s => s.project.datasets.find(d => d.id === s.project.activeDatasetId) ?? null);
-  const [loaded, setLoaded] = useState<LoadedCsv | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
-  async function load(file: string, name: string) {
-    setBusy(file); setError(null);
+  const [table, setTable] = useState<RawTable | null>(null);
+  const [roles, setRoles] = useState<ColumnRole[]>([]);
+  const [dateFormat, setDateFormat] = useState<DateFormat>('auto');
+  const [unit, setUnit] = useState<UnitId>('m3s');
+  const [sentinels, setSentinels] = useState(true);
+  const [name, setName] = useState('My dataset');
+  const [pasteText, setPasteText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [convertMsg, setConvertMsg] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const staged = table && roles.length
+    ? stage(table, { name, roles, dateFormat, unit, sentinels })
+    : null;
+
+  function loadTable(t: RawTable, suggestedName: string) {
+    setTable(t);
+    setRoles(guessRoles(t.header));
+    setName(suggestedName);
+    setError(null);
+    const m = t.header.map(h => /\[(.+?)\]/.exec(h)?.[1]?.replace(/\s/g, '').toLowerCase()).find(Boolean);
+    if (m === 'm3/s' || m === 'm³/s') setUnit('m3s');
+    else if (m === 'cfs' || m === 'ft3/s') setUnit('cfs');
+    else if (m === 'l/s') setUnit('ls');
+  }
+
+  async function onSample(file: string, label: string) {
+    setBusy(true);
+    try { loadTable(parseDelimited(await fetchSample(file)), label); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  }
+
+  async function onFile(f: File) {
+    setBusy(true); setError(null);
     try {
-      const text = await fetchSample(file);
-      const parsed = parseSampleCsv(text, name);
-      setLoaded(parsed);
-      if (parsed.validation.ok) commitDataset(parsed.commit);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(null);
-    }
+      if (/\.xlsx?$/i.test(f.name)) loadTable(await parseWorkbook(await f.arrayBuffer()), f.name.replace(/\.\w+$/, ''));
+      else loadTable(parseDelimited(await f.text()), f.name.replace(/\.\w+$/, ''));
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); if (fileRef.current) fileRef.current.value = ''; }
+  }
+
+  function commit() {
+    if (!staged?.commit) return;
+    commitDataset(staged.commit);
+    setActiveTab('metrics');
   }
 
   return (
-    <div className="datatab">
+    <div>
       <section className="card">
-        <h2>Load data</h2>
-        <p>
-          Paste-grid and file upload (CSV/TXT/XLSX with column mapping, unit and date-format
-          selectors) arrive at CP4. For this checkpoint, load a bundled sample — everything you
-          see is parsed, validated and computed <em>in this browser tab</em>.
-        </p>
-        <div className="samplerow">
+        <h2>Load data <span className="muted">— parsed, validated and computed entirely in this browser tab</span></h2>
+        <div className="controls">
           {SAMPLES.map(s => (
-            <button key={s.file} className="primary" disabled={busy !== null} onClick={() => load(s.file, s.name)}>
-              {busy === s.file ? 'Loading…' : s.name}
-            </button>
+            <button key={s.file} disabled={busy} onClick={() => onSample(s.file, s.name)}>{s.name}</button>
           ))}
+          <label className="primary filebtn">
+            Upload CSV / TXT / XLSX
+            <input ref={fileRef} type="file" accept=".csv,.txt,.tsv,.xlsx,.xls" hidden
+              onChange={e => e.target.files?.[0] && onFile(e.target.files[0])} />
+          </label>
         </div>
-        <p className="muted">{SAMPLES[1].note}</p>
+        <details>
+          <summary>…or paste from a spreadsheet</summary>
+          <textarea rows={6} value={pasteText} placeholder={'date\tobserved\tmodelA\n2001-01-01\t5.2\t4.9\n…'}
+            onChange={e => setPasteText(e.target.value)} />
+          <button className="primary" disabled={!pasteText.trim()}
+            onClick={() => loadTable(parseDelimited(pasteText), 'Pasted data')}>Parse pasted data</button>
+        </details>
         {error && <div className="error">{error}</div>}
       </section>
 
-      {loaded && (
+      {table && (
         <section className="card">
-          <h2>Validation summary</h2>
-          {loaded.validation.errors.map((e, i) => <div key={i} className="error">{e}</div>)}
-          {loaded.validation.warnings.map((w, i) => <div key={i} className="warning">{w}</div>)}
-          <table className="kv">
-            <tbody>
-              <tr><th>Rows</th><td>{loaded.validation.rows.toLocaleString()}</td></tr>
-              <tr><th>Date range</th><td>{loaded.validation.dateRange ? `${fmtDate(loaded.validation.dateRange[0])} → ${fmtDate(loaded.validation.dateRange[1])}` : '—'}</td></tr>
-              <tr><th>Detected step</th><td>{loaded.validation.step?.label ?? '—'}{loaded.validation.step?.irregular ? ' (irregular)' : ''}</td></tr>
-              <tr><th>Duplicate dates</th><td>{loaded.validation.duplicates}</td></tr>
-            </tbody>
-          </table>
-          <table className="grid">
-            <thead>
-              <tr><th>Series</th><th>missing</th><th>negatives</th><th>min</th><th>mean</th><th>max</th><th>valid pairs vs obs</th></tr>
-            </thead>
-            <tbody>
-              {loaded.validation.series.map(s => (
-                <tr key={s.name}>
-                  <td>{s.name}</td><td>{s.missing}</td><td>{s.negatives}</td>
-                  <td>{fmt(s.min)}</td><td>{fmt(s.mean)}</td><td>{fmt(s.max)}</td>
-                  <td>{s.overlapWithObserved.toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <h2>Map columns</h2>
+          <div className="controls">
+            <label>Name <input value={name} onChange={e => setName(e.target.value)} /></label>
+            <label>Date format{' '}
+              <select value={dateFormat} onChange={e => setDateFormat(e.target.value as DateFormat)}>
+                <option value="auto">auto-detect</option>
+                <option value="ymd">Y-M-D</option>
+                <option value="mdy">M/D/Y</option>
+                <option value="dmy">D/M/Y</option>
+                <option value="julian">Julian (YYYY-DDD)</option>
+              </select>
+            </label>
+            <label>Unit (all value columns){' '}
+              <select value={unit} onChange={e => setUnit(e.target.value as UnitId)}>
+                {Object.values(UNITS).map(u => <option key={u.id} value={u.id}>{u.label}</option>)}
+              </select>
+            </label>
+            <label title="-9999 and -999 are treated as missing">
+              <input type="checkbox" checked={sentinels} onChange={e => setSentinels(e.target.checked)} /> sentinel −9999/−999 = missing
+            </label>
+          </div>
+          <div className="mapscroll">
+            <table className="grid">
+              <thead>
+                <tr>{table.header.map((h, j) => (
+                  <th key={j}>
+                    <div>{h || `col ${j + 1}`}</div>
+                    <select value={roles[j]} onChange={e => setRoles(roles.map((r, k) => (k === j ? e.target.value as ColumnRole : r)))}>
+                      {ROLE_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  </th>
+                ))}</tr>
+              </thead>
+              <tbody>
+                {table.rows.slice(0, 6).map((r, i) => (
+                  <tr key={i}>{table.header.map((_, j) => <td key={j}>{r[j]}</td>)}</tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="muted">{table.rows.length.toLocaleString()} data rows · date parser: {staged?.dateInfo.used}
+            {staged?.dateInfo.failures ? ` · ${staged.dateInfo.failures} unparseable dates` : ''}</p>
+
+          {staged && (
+            <>
+              {staged.validation.errors.map((e, i) => <div key={i} className="error">{e}</div>)}
+              {staged.validation.warnings.map((w, i) => <div key={i} className="warning">{w}</div>)}
+              <table className="grid">
+                <thead><tr><th>Series</th><th>missing</th><th>negatives</th><th>min</th><th>mean</th><th>max</th><th>valid pairs vs obs</th></tr></thead>
+                <tbody>
+                  {staged.validation.series.map(s => (
+                    <tr key={s.name}>
+                      <td>{s.name}</td><td>{s.missing}</td><td>{s.negatives}</td>
+                      <td>{fmtNum(s.min)}</td><td>{fmtNum(s.mean)}</td><td>{fmtNum(s.max)}</td>
+                      <td>{s.overlapWithObserved.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <button className="primary" disabled={!staged.commit} onClick={commit}>Use this data →</button>
+            </>
+          )}
         </section>
       )}
 
       {ds && (
         <section className="card">
-          <h2>Metrics — seed of the engine <span className="muted">(pairwise NaN policy · full catalogue at CP2, timing-aware core at CP3)</span></h2>
-          <table className="grid">
-            <thead>
-              <tr><th>Metric</th><th>optimum</th>{ds.runs.map(r => <th key={r.id} style={{ color: r.color }}>{r.name}</th>)}</tr>
-            </thead>
-            <tbody>
-              {(() => {
-                const paired = ds.runs.map(r => applyNanPolicy(ds.observed.values, r.values, 'pairwise'));
-                const rows: [string, string, (i: number) => number][] = [
-                  ['NSE', '1', i => nse(paired[i].obs, paired[i].sim)],
-                  ['KGE (2009)', '1', i => kge2009(paired[i].obs, paired[i].sim).kge],
-                  ['RMSE', '0', i => rmse(paired[i].obs, paired[i].sim)],
-                  ['PBIAS % (+ = under-est.)', '0', i => pbias(paired[i].obs, paired[i].sim)],
-                  ['r (Pearson)', '1', i => pearsonR(paired[i].obs, paired[i].sim)],
-                ];
-                return rows.map(([label, opt, f]) => (
-                  <tr key={label}>
-                    <td>{label}</td><td className="muted">{opt}</td>
-                    {ds.runs.map((r, i) => <td key={r.id}>{fmt(f(i))}</td>)}
-                  </tr>
-                ));
-              })()}
-            </tbody>
-          </table>
-          <p className="muted">
-            Every value above is computed from the published equations and verified in the test
-            suite against executed reference outputs of HydroErr, Hydrostats, hydroeval and
-            diag-eff — see <code>tests/</code> in the repository.
-          </p>
-        </section>
-      )}
-
-      {loaded && (
-        <section className="card">
-          <h2>Preview (first 8 rows)</h2>
-          <table className="grid">
-            <thead><tr>{loaded.preview.header.map(h => <th key={h}>{h}</th>)}</tr></thead>
-            <tbody>
-              {loaded.preview.rows.map((r, i) => (
-                <tr key={i}>{r.map((c, j) => <td key={j}>{c}</td>)}</tr>
-              ))}
-            </tbody>
-          </table>
+          <h2>Active dataset: {ds.name}</h2>
+          <table className="kv"><tbody>
+            <tr><th>Rows</th><td>{ds.dates.length.toLocaleString()}</td></tr>
+            <tr><th>Range</th><td>{fmtDate(ds.dates[0])} → {fmtDate(ds.dates[ds.dates.length - 1])}</td></tr>
+            <tr><th>Step</th><td>{ds.step.label}{ds.step.irregular ? ' (irregular)' : ''}</td></tr>
+            <tr><th>Series</th><td>{ds.observed.name || 'Observed'} + {ds.runs.length} run{ds.runs.length === 1 ? '' : 's'}</td></tr>
+            <tr><th>Unit</th><td>
+              <select value={ds.targetUnit} onChange={e => setConvertMsg(convertUnits(e.target.value as UnitId))}>
+                {Object.values(UNITS).filter(u => u.kind !== 'dimensionless' || ds.targetUnit === 'dimensionless').map(u => <option key={u.id} value={u.id}>{u.label}</option>)}
+              </select>
+              {' '}<span className="muted">converting a depth unit needs the catchment area (Map tab)</span>
+            </td></tr>
+          </tbody></table>
+          {convertMsg && <div className="error">{convertMsg}</div>}
+          <p className="muted">Head to <strong>Metrics</strong> for the full catalogue, <strong>Timing</strong> for the shape-aware panel, or <strong>Sandbox</strong> to stress-test the metrics.</p>
         </section>
       )}
     </div>

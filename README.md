@@ -18,14 +18,14 @@ This repository is being built in verified checkpoints. Each checkpoint lands wi
 
 | Checkpoint | Contents | Status |
 |---|---|---|
-| CP1 | Scaffold, data model, date parsing (incl. Julian), time-step detection, unit engine (volumetric + area/step-aware depth↔volume), missing-value & NaN policies, validation, bundled samples, seed metrics (NSE, KGE-2009, RMSE, PBIAS, r, C2M) | ✅ live |
-| CP2 | Full classical catalogue: error norms, correlation & agreement, efficiencies (incl. KGE′, KGE″, KGEnp, bounded C2M forms), FDC signatures (FHV/FLV/FMS/FMM), transforms, benchmarks & skill scores | ⏳ |
-| CP3 | Timing-aware core: peak-timing (Gauch et al., 2021), event errors, Series Distance, DTW (Sakoe–Chiba), Wasserstein W₁/W₂², cross-wavelet phase lag, Diagnostic Efficiency, lag sweep — in Web Workers | ⏳ |
-| CP4 | Paste grid, file upload with column mapping, editing, full metrics table, in-app metric reference | ⏳ |
-| CP5 | Seven linked plots + DTW/SD alignment view, shared toggles, PNG/SVG/CSV export | ⏳ |
-| CP6 | Perturbation Sandbox (shift/offset/scale/dampen/seeded noise, presets incl. the double-penalty demo), Timing tab UI | ⏳ |
-| CP7 | Multi-run comparison & recommendation, station map, DOCX/PDF report, project save/load | ⏳ |
-| CP8 | Full acceptance audit, accessibility & privacy checks, release | ⏳ |
+| CP1 | Scaffold, data model, date parsing (incl. Julian), time-step detection, unit engine (volumetric + area/step-aware depth↔volume), missing-value & NaN policies, validation, bundled samples | ✅ live |
+| CP2 | Full classical catalogue: error norms, correlation & agreement, efficiencies (incl. KGE′, KGE″, KGEnp, bounded C2M forms), FDC signatures (FHV/FLV/FMS/FMM), transforms, benchmarks & skill scores | ✅ live |
+| CP3 | Timing-aware core: peak-timing (Gauch et al., 2021), event errors, Series Distance (core form), band-constrained DTW, Wasserstein W₁/W₂², cross-wavelet phase lag (Morlet, red-noise gated), Diagnostic Efficiency, lag sweep | ✅ live |
+| CP4 | File upload (CSV/TXT/XLSX) + paste with column mapping, full metrics table with presets/exports, in-app metric reference | ✅ live (spreadsheet-style editing grid still to come) |
+| CP5 | Eight plots: time series, 1:1 scatter, FDC, Q–Q, DOY climatology, annual heatmap, spaghetti, DTW alignment; PNG export via the plot toolbar | ✅ live |
+| CP6 | Perturbation Sandbox (shift/offset/scale/dampen/seeded noise, presets incl. the double-penalty demo) and Timing tab UI (config, lag sweep, XWT curve, DE polar, events table) | ✅ live |
+| CP7 | Station map + catchment area, project save/load (.hme.json) | ✅ live (DOCX/PDF report and multi-run ranking view still to come) |
+| CP8 | Web Workers for very long records, bootstrap CIs, editing grid, report generator, acceptance & accessibility audit, release | ⏳ |
 
 ## Correctness
 

@@ -92,3 +92,33 @@ table.grid thead th { background: #eef1f5; }
   .main { padding: 0.8rem; }
   .tabs { overflow-x: auto; }
 }
+
+/* ---- v0.3 additions ---- */
+.headerright { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
+.headerright select, .headerright button, .headerright .filebtn { font-size: 0.85rem; }
+.controls { display: flex; flex-wrap: wrap; gap: 0.7rem 1rem; align-items: center; margin: 0.5rem 0; }
+.controls label { display: inline-flex; align-items: center; gap: 0.35rem; }
+button, select, input[type="number"], input[type="text"], input:not([type]) {
+  font: inherit; padding: 0.32rem 0.55rem; border: 1px solid var(--line); border-radius: 7px; background: #fff; color: var(--ink);
+}
+button { cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button.primary, .filebtn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.filebtn { display: inline-flex; align-items: center; padding: 0.32rem 0.7rem; border: 1px solid var(--line); border-radius: 7px; cursor: pointer; }
+textarea { width: 100%; font: 0.85rem/1.4 ui-monospace, monospace; border: 1px solid var(--line); border-radius: 7px; padding: 0.5rem; margin: 0.4rem 0; }
+.grouprow td { background: #eef1f5; font-weight: 600; text-align: left !important; }
+.timingrow { background: #f0f7ee; }
+.timingchip { background: #f0f7ee; border: 1px solid #bcd9b4; border-radius: 5px; padding: 0 0.3rem; }
+td.best { font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.metricstable td, .metricstable th { padding: 0.28rem 0.5rem; }
+.twocol { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 900px) { .twocol { grid-template-columns: 1fr; } }
+.slidergrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 0.4rem 1.4rem; margin: 0.4rem 0; }
+.sliderrow { display: grid; grid-template-columns: 15em 1fr 4.5em; align-items: center; gap: 0.6rem; }
+.sliderrow code { text-align: right; }
+input[type="range"] { accent-color: var(--accent); }
+.maphost { height: 460px; border-radius: 8px; }
+.mapscroll { overflow-x: auto; }
+details summary { cursor: pointer; margin: 0.3rem 0; }
+.plothost { min-height: 200px; }

@@ -1,4 +1,4 @@
-# CHECKPOINT — CP1 (data core) · 2026-07-12
+# CHECKPOINT — CP1–CP3 + full UI (v0.3.0) · 2026-07-13
 
 State manifest so any future working session can resume by cloning this repository.
 Requirement IDs refer to `AGENT1_requirements_checklist.md` (kept with the project plan;
@@ -46,3 +46,39 @@ ask the author for `HME_PLAN.md` / `AGENT1` / `AGENT2` documents if not present)
 - Pages serves `gh-pages` branch = `dist/` (base path `/hydrograph_metrics_explorer/`)
 - Oracle regeneration: Python venv with numpy/scipy + inspected library sources
   (see header of `scripts/generate_reference_vectors.py`)
+
+
+---
+
+# Update · v0.3.0 (same session)
+
+## Added since CP1
+- Classical engine complete (`src/metrics/classical/catalogue.ts`): 30 metrics verified vs
+  executed HydroErr 2.0.0 across all 8 fixture series at ≤1e-9 rel; hydroeval pins for
+  PBIAS/MARE/C2M family/KGEnp (tie-order tolerance 1e-5 documented in test); log-error family
+  is log1p (HydroErr/sklearn convention); MARE is hydroeval's Σ|e|/Σo.
+- Timing engine (`src/metrics/timing/`): events + per-event errors, Gauch peak-timing,
+  lag sweep, W₁/W₂² (mass-normalised, inverse-CDF W₂²), Sakoe–Chiba DTW with backtrack,
+  Diagnostic Efficiency mirroring diag-eff exactly (incl. artefact zeroing; `phi` full form +
+  `phiFdc` fixture-pinned form — generator passed b_area as b_slope), core Series Distance,
+  Morlet XWT with AR1 red-noise 95 % gating + COI (radix-2 FFT in-house). All pinned by
+  analytic pure-shift identities (W₁=k, W₂²=k², DTW dist 0 & warp≈k, peak lag=k, sweep argmax k,
+  XWT lag≈k — sign convention locked by test).
+- Registry (`src/metrics/registry.ts`): metadata for ~45 metrics, presets, computeAll orchestrator
+  (DTW decimation guard >6000 pts; XWT decimation >16384).
+- UI: all six tabs live. Metrics (grouped table, best-per-row, C2M toggle, benchmark skill,
+  provenance-stamped CSV/TSV export), Plots (8 plots incl. DTW alignment; lazy Plotly),
+  Timing (config + sweep + XWT-by-scale + DE polar + events), Sandbox (perturbation model
+  S′ = m + (B(t−Δt)−m)·γ·(1−δ) + β + ε, presets, contrast readout), Map (Leaflet, area),
+  Data (upload CSV/TXT/XLSX, paste, column mapping, date-format, units, sentinel toggle),
+  header save/load `.hme.json`, dataset switcher, unit conversion on the fly.
+- 69 tests green. Bundle: entry ~404 kB min (+ lazy plotly 1.4 MB gz, lazy xlsx 143 kB gz).
+
+## Known deferrals (state honestly)
+- No Web Workers yet: heavy metrics run on the main thread with decimation guards; fine to
+  ~10k steps, sluggish beyond.
+- No DOCX/PDF report, no bootstrap CIs, no editable grid, no multi-run ranking view,
+  no windows/season subsetting UI (engine supports arbitrary arrays).
+- Series Distance is the documented core form (auto event matching), not full interactive
+  segment supervision.
+- Paper edits C1/C2/C3 still owed (exact sentences at CP8).
