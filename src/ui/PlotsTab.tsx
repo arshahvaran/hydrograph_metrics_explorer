@@ -163,7 +163,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
       const years = [...byYear.keys()].sort((a, b) => a - b);
       if (plot === 'heatmap') {
         return {
-          traces: [{ z: years.map(y => byYear.get(y)!), x: Array.from({ length: 366 }, (_, i) => i + 1), y: years, type: 'heatmap', colorscale: 'Rainbow', colorbar: { title: { text: unit, side: 'right' }, lenmode: 'pixels', len: 358, y: 0.5, yanchor: 'middle', thickness: 14, outlinewidth: 0 } }],
+          traces: [{ z: years.map(y => byYear.get(y)!), x: Array.from({ length: 366 }, (_, i) => i + 1), y: years, type: 'heatmap', colorscale: 'Rainbow', colorbar: { title: { text: unit, side: 'right' }, lenmode: 'pixels', len: 376, y: 0.5, yanchor: 'middle', thickness: 14, outlinewidth: 0 } }],
           layout: { xaxis: { title: 'Day of year' }, yaxis: { title: 'Year', dtick: 1 }, hovermode: 'closest' },
           note: `Annual regime of ${s.name}`,
         };

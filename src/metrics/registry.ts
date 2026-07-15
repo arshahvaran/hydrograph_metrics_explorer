@@ -74,7 +74,7 @@ export const REGISTRY: MetricMeta[] = [
   M({ id: 'kge2021', label: 'KGE″ (2021)', group: 'Efficiencies', optimum: '1', direction: 'max', range: '(−∞,1]', timing: false, unitful: false, digits: 3, blurb: 'KGE with non-dimensional bias β″ = (μs−μo)/σo (Tang et al., 2021); robust when μo → 0.', equation: '1-\\sqrt{(r-1)^2+(\\alpha-1)^2+\\beta\'\'^2},\\ \\beta\'\'=\\tfrac{\\mu_S-\\mu_O}{\\sigma_O}' }),
   M({ id: 'kgenp', label: 'KGEnp', group: 'Efficiencies', optimum: '1', direction: 'max', range: '(−∞,1]', timing: false, unitful: false, digits: 3, blurb: 'Non-parametric KGE (Pool et al., 2018): Spearman r + normalised-FDC α.', equation: '1-\\sqrt{(r_S-1)^2+(\\alpha_{NP}-1)^2+(\\beta-1)^2},\\ \\alpha_{NP}=1-\\tfrac{1}{2}\\sum|\\hat{F}_S-\\hat{F}_O|' }),
   M({ id: 've', label: 'VE (volumetric)', group: 'Efficiencies', optimum: '1', direction: 'max', range: '(−∞,1]', timing: false, unitful: false, digits: 3, blurb: 'Volumetric efficiency (Criss & Winston, 2008).', equation: '1-\\frac{\\sum|S_i-O_i|}{\\sum O_i}' }),
-  M({ id: 'pbias', label: 'PBIAS % (+ = under)', group: 'Efficiencies', optimum: '0', direction: 'zero', range: '(−∞,∞)', timing: false, unitful: false, digits: 2, blurb: '100·Σ(O−S)/ΣO; positive means the model under-estimates volume (paper Table 2 convention).', equation: '100\\,\\frac{\\sum(O_i-S_i)}{\\sum O_i}' }),
+  M({ id: 'pbias', label: 'PBIAS % (+ = under)', group: 'Efficiencies', optimum: '0', direction: 'zero', range: '(−∞,100] %', timing: false, unitful: false, digits: 2, blurb: '100·Σ(O−S)/ΣO; positive means the model under-estimates volume (paper Table 2 convention).', equation: '100\\,\\frac{\\sum(O_i-S_i)}{\\sum O_i}' }),
   M({ id: 'beta_nse', label: 'β-NSE bias', group: 'Efficiencies', optimum: '0', direction: 'zero', range: '(−∞,∞)', timing: false, unitful: false, digits: 3, blurb: '(μs−μo)/σo; the standardised bias term.', equation: '\\frac{\\mu_S-\\mu_O}{\\sigma_O}' }),
   M({ id: 'alpha', label: 'α (σs/σo)', group: 'Efficiencies', optimum: '1', direction: 'one', range: '[0,∞)', timing: false, unitful: false, digits: 3, blurb: 'Variability ratio; <1 = flashiness under-estimated.', equation: '\\sigma_S/\\sigma_O' }),
 
@@ -88,6 +88,7 @@ export const REGISTRY: MetricMeta[] = [
   M({ id: 'peak_lag_abs', label: 'Peak timing |lag|', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'Mean |lag| of matched hydrograph peaks (Gauch et al., 2021). Directly answers "how late are my floods?"; invisible to NSE/KGE.', equation: '\\frac{1}{P}\\sum_{p=1}^{P}\\big|t^{S}_{p}-t^{O}_{p}\\big|' }),
   M({ id: 'peak_lag_signed', label: 'Peak timing bias', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'Mean signed peak lag; + = simulated peaks late. Cancels mixed early/late errors; read with |lag|.', equation: '\\frac{1}{P}\\sum_{p}\\big(t^{S}_{p}-t^{O}_{p}\\big)' }),
   M({ id: 'event_threat', label: 'Event occurrence (threat)', group: 'Timing & shape', optimum: '1', direction: 'max', range: '[0,1]', timing: true, unitful: false, digits: 3, blurb: 'Hits/(hits+misses+false alarms) of threshold events; did the model produce the flood at all?', equation: '\\frac{\\text{hits}}{\\text{hits}+\\text{misses}+\\text{false}}' }),
+  M({ id: 'event_peak', label: 'Event peak err %', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞)', timing: true, unitful: false, digits: 1, blurb: 'Mean signed peak-height error over matched events; the per-event peak component of Table 2.', equation: '\\overline{100\\,(S_{pk}-O_{pk})/O_{pk}}' }),
   M({ id: 'event_vol', label: 'Event volume err %', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞)', timing: true, unitful: false, digits: 2, blurb: 'Mean per-event volume error over observed event windows.', equation: '\\overline{100\\,(V_S-V_O)/V_O}\\ \\text{per event}' }),
   M({ id: 'event_lag', label: 'Event peak lag (median)', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'Median per-event peak lag; + = late.', equation: '\\operatorname{med}_e\\big(t^{S}_{e}-t^{O}_{e}\\big)' }),
   M({ id: 'lag_best', label: 'Lag at best fit', group: 'Timing & shape', optimum: '0', direction: 'zero', range: 'steps', timing: true, unitful: false, digits: 0, blurb: 'Shift that maximises NSE in the lag sweep; the record-wide timing offset a synchronous metric never reports.', equation: '\\arg\\max_{L}\\ \\mathrm{NSE}\\big(O_t,\\,S_{t+L}\\big)' }),
@@ -109,7 +110,7 @@ export const byId = new Map(REGISTRY.map(m => [m.id, m]));
 /** Essentials = exactly the metrics of the paper's Table 2 (its two blocks);
  *  Extended adds every additional verified measure in the catalogue. */
 export const PRESETS: Record<string, string[] | 'all'> = {
-  Essentials: [
+  essentials: [
     'rmse', 'mae', 'rsr', 'r', 'r2', 'd', 'nse', 'kge2009', 'pbias', 've',
     'fhv', 'flv', 'fms',
     'sd_occ', 'sd_amp', 'sd_time',
@@ -117,10 +118,10 @@ export const PRESETS: Record<string, string[] | 'all'> = {
     'xwt_lag',
     'w1',
     'peak_lag_abs', 'peak_lag_signed',
-    'event_vol', 'event_lag',
+    'event_peak', 'event_vol', 'event_lag',
     'de',
   ],
-  'Extended (beta)': 'all',
+  'extended (beta)': 'all',
 };
 
 export interface ComputeContext {
@@ -230,6 +231,7 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
     values.peak_lag_signed = peaks.meanSignedLag;
     values.event_threat = events.threat;
     values.event_vol = events.meanVolumeErrPct;
+    values.event_peak = events.meanPeakErrPct;
     values.event_lag = events.medianPeakLag;
     values.lag_best = sweep.bestLag;
     values.de = de.de; values.de_const = de.brelMean; values.de_dyn = de.bArea;

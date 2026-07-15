@@ -76,7 +76,7 @@ body {
 .headerright { display: flex; align-items: center; gap: 0.45rem; flex-wrap: nowrap; }
 .dsselect select { max-width: 14em; overflow: hidden; text-overflow: ellipsis; }
 .brand { display: flex; align-items: stretch; gap: 0.9rem; }
-.logo { align-self: stretch; width: auto; height: auto; aspect-ratio: 1 / 1; flex: none; border-radius: 13px; box-shadow: 0 1px 4px rgba(0,0,0,0.18); }
+.logo { align-self: stretch; width: auto; height: auto; aspect-ratio: 1 / 1; flex: none; }
 .dsselect { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.86rem; color: var(--ink-soft); white-space: nowrap; }
 .badge {
   display: inline-flex; align-items: center; gap: 6px;

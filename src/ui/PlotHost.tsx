@@ -81,7 +81,7 @@ export function PlotHost({ traces, layout, height = 380, name = 'hme_plot', squa
     let cancelled = false;
     loadPlotly().then(P => {
       if (cancelled || !ref.current) return;
-      P.react(ref.current, traces, { ...BASE_LAYOUT, template: themeTemplate(), ...layout, ...(square ? { width: height, height, autosize: false } : {}) }, {
+      P.react(ref.current, traces, { ...BASE_LAYOUT, template: themeTemplate(), ...layout, ...(square ? { width: height, height, autosize: false } : { width: null, height, autosize: true }) }, {
         responsive: true, displaylogo: false,
         modeBarButtonsToRemove: ['lasso2d', 'select2d'],
         toImageButtonOptions: { format: 'png', filename: 'hme_plot', scale: 2 },

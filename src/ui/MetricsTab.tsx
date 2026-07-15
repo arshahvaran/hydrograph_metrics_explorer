@@ -18,7 +18,7 @@ export function MetricsTab() {
 
 function MetricsTabInner({ ds }: { ds: Dataset }) {
   const updateView = useApp(s => s.updateView);
-  const [preset, setPreset] = useState<string>('Essentials');
+  const [preset, setPreset] = useState<string>('essentials');
   const [refQuery, setRefQuery] = useState('');
 
   const runs = ds.runs.filter(r => r.visible);

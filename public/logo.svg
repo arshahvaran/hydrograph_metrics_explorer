@@ -4,7 +4,6 @@
     @keyframes hmeShift { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(-6px); } }
     @media (prefers-reduced-motion: reduce) { .sim { animation: none; } }
   </style>
-  <rect x="3" y="3" width="58" height="58" rx="14" fill="#ffffff" stroke="#13313a" stroke-width="3"/>
   <path d="M9 47 C15 47 17 14 24 14 C31 14 33 47 55 47" fill="none" stroke="#1f77b4" stroke-width="4.4" stroke-linecap="round"/>
   <g class="sim">
     <path d="M15 47 C21 47 23 21 30 21 C37 21 39 47 55 47" fill="none" stroke="#d95f02" stroke-width="4.4" stroke-linecap="round"/>

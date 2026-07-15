@@ -10,7 +10,7 @@ import { MapTab } from './ui/MapTab'
 import { CompareTab } from './ui/CompareTab'
 import { ReportTab } from './ui/ReportTab'
 import { download } from './ui/format'
-import { APP_VERSION } from './version'
+import { APP_VERSION_SHORT } from './version'
 import type { Project } from './types'
 
 const I = (d: string) => (
@@ -137,7 +137,7 @@ export default function App() {
       <footer className="footer">
         <span>All computation runs in the browser; uploaded data never leaves this page.</span>
         <span>
-          v{APP_VERSION} ·{' '}
+          v{APP_VERSION_SHORT} ·{' '}
           <a href="https://github.com/arshahvaran/hydrograph_metrics_explorer" target="_blank" rel="noreferrer">Source, License, &amp; Citation</a>
         </span>
         <span className="credit">Developed by Shahvaran et al., 2026</span>

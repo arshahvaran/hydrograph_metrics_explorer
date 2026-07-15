@@ -56,6 +56,8 @@ export interface EventReport {
   threat: number;                       // hits/(hits+misses+falseAlarms), optimum 1
   meanAbsPeakLag: number; medianPeakLag: number;
   meanVolumeErrPct: number;
+  /** Mean signed peak-height error % across matched events (Table 2 per-event row). */
+  meanPeakErrPct: number;
 }
 
 export function eventErrors(obs: Vec, sim: Vec, opt: EventOptions, matchTolerance: number): EventReport {
@@ -95,6 +97,7 @@ export function eventErrors(obs: Vec, sim: Vec, opt: EventOptions, matchToleranc
     meanAbsPeakLag: lags.length ? mean(lags.map(Math.abs)) : NaN,
     medianPeakLag: lags.length ? median(lags) : NaN,
     meanVolumeErrPct: errors.length ? mean(errors.map(e => e.volumeErrPct)) : NaN,
+    meanPeakErrPct: errors.length ? mean(errors.map(e => e.peakMagErrPct)) : NaN,
   };
 }
 

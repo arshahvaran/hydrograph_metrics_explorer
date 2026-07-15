@@ -250,3 +250,14 @@ prefixed professional filenames everywhere, hard-locked 1:1 for scatter/FDC/
 Q-Q (fixed layout dims). Logo stretches to exactly the title-to-tagline block
 height (1:1 kept). Switching the active dataset now stays on the current tab
 (and plot type persists). Custom window label; wider DOY inputs.
+
+## v1.3.1 — Table 2 cross-check + round-4 polish
+Essentials verified line-by-line against the attached Table 2: added the
+missing per-event PEAK-HEIGHT metric (event_peak, mean signed %, from the
+existing per-event peakMagErrPct), corrected the PBIAS range metadata to
+(−∞, 100] %; all other ranges/optima/semantics already agreed. Preset names
+lowercased (essentials / extended (beta)). Fixed the square-plot leak: Plotly
+.react retains layout keys that stop being passed, so a visited square plot
+locked width for later plot types — non-square layouts now explicitly unset
+width with autosize on. Logo frame tile removed (transparent curves only);
+heatmap colorbar 376 px; footer shows major.minor (v1.3).
