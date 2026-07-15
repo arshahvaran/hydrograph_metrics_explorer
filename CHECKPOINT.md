@@ -379,3 +379,30 @@ popup-blocked path alerts cleanly; fmtNum renders every non-finite value as
 n/a; conversion errors surface in the Data tab; README and ACCEPTANCE
 feature wording aligned with Simulation. Suite 342 to 352 (units-frame x5,
 stress-final DOM x5, plus the round-7 additions revalidated).
+
+## v1.5: report content round + repository presentation
+Report (both DOCX and print-PDF renderers). Fig. R2 now renders on a square
+460x460 canvas and embeds square (DOCX 320x320; print HTML at 58% width,
+centred), so the 1:1 scatter is truly 1:1 instead of stretched wide. The
+Provenance section (settings JSON dump) removed from both formats. The
+generated-by meta line no longer carries the privacy sentence. The long
+citation paragraph replaced by "Developed by Shahvaran et al., 2026" plus a
+real hyperlink "Source, License, & Citation" to the repository (docx
+ExternalHyperlink; anchor tag in print HTML). Exported REPORT_CREDIT /
+REPORT_CREDIT_LINK_TEXT / REPO_URL consts keep the strings pinned;
+tests/dom/report-round9.test.tsx covers the square figure in both formats and
+the print HTML content (credit present, provenance and privacy sentence
+absent, no three-digit version anywhere).
+Versioning switched to a two-digit user-visible scheme: APP_VERSION is now
+"1.5" (footer, CSV headers, report metas all print v1.5). package.json keeps
+semver "1.5.0" because npm requires three parts; the git tag is v1.5.
+Repository presentation for review. README rewritten in the structure common
+to journal-published web tools (badges, contents, grouped feature sections,
+getting started, input-data format, correctness and testing, documentation
+pointers, citation, license); the checkpoint status table removed from the
+README (this file remains the internal change log). License switched from MIT
+to Creative Commons BY-NC 4.0 using the same note template and LICENSE text
+as the author's cartolab repository; package.json and CITATION.cff aligned
+(version "1.5", release date updated). "How to cite" carries the placeholder
+"Reference paper will be added here once published" plus the software
+citation. Suite 352 to 354 (report-round9 x2).

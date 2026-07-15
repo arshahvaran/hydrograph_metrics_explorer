@@ -5,7 +5,7 @@
 
 import { arrMax } from '../metrics/support/stats'
 import {
-  AlignmentType, Document, HeadingLevel, ImageRun, Packer, Paragraph,
+  AlignmentType, Document, ExternalHyperlink, HeadingLevel, ImageRun, Packer, Paragraph,
   ShadingType, Table, TableCell, TableRow, TextRun, WidthType, BorderStyle,
 } from 'docx'
 import { REGISTRY, GROUPS, type ComputeOutput } from '../metrics/registry'
@@ -24,7 +24,9 @@ export interface ReportSections {
 export interface ReportImage { caption: string; dataUrl: string; w: number; h: number }
 
 const TOOL_URL = 'https://arshahvaran.github.io/hydrograph_metrics_explorer/';
-const CITATION = `Shahvaran, A.R. (2026). Hydrograph Metrics Explorer v${APP_VERSION} [software]. ${TOOL_URL} · Companion to: Shahvaran et al., "Beyond Conventional Metrics: Timing- and Shape-Aware Performance Assessment Frameworks for Hydrologic Model Evaluation."`;
+export const REPO_URL = 'https://github.com/arshahvaran/hydrograph_metrics_explorer';
+export const REPORT_CREDIT = 'Developed by Shahvaran et al., 2026';
+export const REPORT_CREDIT_LINK_TEXT = 'Source, License, & Citation';
 
 export const reportFilename = (ds: Dataset, ext: string) =>
   `${ds.name.replace(/\W+/g, '_')}_evaluation_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.${ext}`;
@@ -58,10 +60,11 @@ export function eventTableRows(ev: EventReport, frame: Frame, ds: Dataset, limit
 }
 
 // ------------------------------------------------------------ figure capture
-async function plotPng(traces: unknown[], layout: Record<string, unknown>): Promise<{ dataUrl: string; w: number; h: number }> {
+async function plotPng(traces: unknown[], layout: Record<string, unknown>, opts: { square?: boolean } = {}): Promise<{ dataUrl: string; w: number; h: number }> {
   const P: any = (await import('plotly.js-dist-min')).default ?? (await import('plotly.js-dist-min'));
+  const px = opts.square ? { w: 460, h: 460 } : { w: 920, h: 430 };
   const host = document.createElement('div');
-  host.style.cssText = 'position:fixed;left:-10000px;top:0;width:920px;height:430px;';
+  host.style.cssText = `position:fixed;left:-10000px;top:0;width:${px.w}px;height:${px.h}px;`;
   document.body.appendChild(host);
   try {
     const base = {
@@ -70,9 +73,9 @@ async function plotPng(traces: unknown[], layout: Record<string, unknown>): Prom
       margin: { t: 40, r: 16, l: 60, b: 48 },
       legend: { orientation: 'h', y: 1.14 },
     };
-    await P.newPlot(host, traces, { ...base, ...layout }, { staticPlot: true });
-    const dataUrl: string = await P.toImage(host, { format: 'png', width: 920, height: 430, scale: 2 });
-    return { dataUrl, w: 620, h: 290 };
+    await P.newPlot(host, traces, { ...base, ...layout, ...(opts.square ? { width: px.w, height: px.h, autosize: false } : {}) }, { staticPlot: true });
+    const dataUrl: string = await P.toImage(host, { format: 'png', width: px.w, height: px.h, scale: 2 });
+    return opts.square ? { dataUrl, w: 320, h: 320 } : { dataUrl, w: 620, h: 290 };
   } finally {
     try { P.purge(host); } catch { /* noop */ }
     host.remove();
@@ -108,6 +111,7 @@ export async function buildReportImages(ds: Dataset, frame: Frame, runs: Run[], 
       { x: lim, y: lim, name: '1:1', type: 'scatter', mode: 'lines', line: { color: '#555', dash: 'dot', width: 1.2 } },
     ],
     { xaxis: { title: `Observed [${UNITS[ds.targetUnit].label}]`, range: lim }, yaxis: { title: `Simulated [${UNITS[ds.targetUnit].label}]`, range: lim, scaleanchor: 'x' } },
+    { square: true },
   ));
 
   const rows = outputs[0]?.extras.sweep?.rows ?? [];
@@ -191,7 +195,7 @@ export async function buildDocx(p: ReportPayload): Promise<Blob> {
     heading: HeadingLevel.TITLE, alignment: AlignmentType.LEFT,
     children: [new TextRun(`Model evaluation report: ${ds.name}`)],
   }));
-  Ptext(`Generated ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC by Hydrograph Metrics Explorer v${APP_VERSION} (${TOOL_URL}). All computation ran in the browser; no data left the device.`, { italic: true });
+  Ptext(`Generated ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC by Hydrograph Metrics Explorer v${APP_VERSION} (${TOOL_URL}).`, { italic: true });
 
   if (sections.summary) {
     H('1. Data and settings');
@@ -281,11 +285,17 @@ export async function buildDocx(p: ReportPayload): Promise<Blob> {
 
   if (notes.trim()) { H('Notes'); Ptext(notes.trim()); }
 
-  H('Provenance', HeadingLevel.HEADING_2);
-  Ptext('Every setting needed to regenerate this report:', { italic: true });
-  const provenance = JSON.stringify({ tool: `HME v${APP_VERSION}`, dataset: ds.name, unit: ds.targetUnit, view: ds.view }, null, 1);
-  for (const line of provenance.split('\n')) Ptext(line, { mono: true });
-  Ptext(CITATION, { italic: true, size: 16 });
+  kids.push(new Paragraph({
+    spacing: { before: 260, after: 40 },
+    children: [new TextRun({ text: REPORT_CREDIT, italics: true, size: 18 })],
+  }));
+  kids.push(new Paragraph({
+    spacing: { after: 80 },
+    children: [new ExternalHyperlink({
+      link: REPO_URL,
+      children: [new TextRun({ text: REPORT_CREDIT_LINK_TEXT, size: 18, color: '0B6E99', underline: {} })],
+    })],
+  }));
 
   const doc = new Document({
     styles: { default: { document: { run: { font: 'Calibri', size: 20 } } } },
@@ -303,7 +313,7 @@ export function openPrintReport(p: ReportPayload): void {
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
   const rowsHtml = (cells: string[], tag = 'td', cls = '') => `<tr class="${cls}">${cells.map(c => `<${tag}>${esc(c)}</${tag}>`).join('')}</tr>`;
   let body = `<h1>Model evaluation report: ${esc(ds.name)}</h1>
-  <p class="meta">Generated ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC by Hydrograph Metrics Explorer v${APP_VERSION}; ${TOOL_URL}. All computation ran in the browser.</p>`;
+  <p class="meta">Generated ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC by Hydrograph Metrics Explorer v${APP_VERSION}; ${TOOL_URL}.</p>`;
   if (sections.summary) {
     body += `<h2>1. Data and settings</h2><table>${summaryPairs(ds, frame).map(([k, v]) => rowsHtml([k, v])).join('')}</table>`;
   }
@@ -318,7 +328,7 @@ export function openPrintReport(p: ReportPayload): void {
     body += '</tbody></table>';
   }
   if (sections.plots) {
-    body += '<h2>3. Figures</h2>' + images.map(i => `<figure><img src="${i.dataUrl}" style="width:100%"/><figcaption>${esc(i.caption)}</figcaption></figure>`).join('');
+    body += '<h2>3. Figures</h2>' + images.map(i => `<figure style="text-align:${i.w === i.h ? 'center' : 'left'}"><img src="${i.dataUrl}" style="width:${i.w === i.h ? '58%' : '100%'}"/><figcaption>${esc(i.caption)}</figcaption></figure>`).join('');
   }
   if (sections.events) {
     body += '<h2>4. Event summary</h2>';
@@ -342,7 +352,7 @@ export function openPrintReport(p: ReportPayload): void {
         : '<p><em>No composite could be computed for the selected priority metrics.</em></p>');
   }
   if (notes.trim()) body += `<h2>Notes</h2><p>${esc(notes.trim())}</p>`;
-  body += `<h2>Provenance</h2><pre>${esc(JSON.stringify({ tool: `HME v${APP_VERSION}`, dataset: ds.name, unit: ds.targetUnit, view: ds.view }, null, 1))}</pre><p class="meta">${esc(CITATION)}</p>`;
+  body += `<p class="meta">${esc(REPORT_CREDIT)}<br/><a href="${REPO_URL}">${esc(REPORT_CREDIT_LINK_TEXT)}</a></p>`;
 
   const w = window.open('', '_blank');
   if (!w) { alert('Pop-up blocked; allow pop-ups to print the PDF report.'); return; }
