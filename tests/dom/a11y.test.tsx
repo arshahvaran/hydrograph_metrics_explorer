@@ -1,4 +1,4 @@
-/** AGENT E — accessibility. axe-core structural scan across every populated
+/** QA accessibility. axe-core structural scan across every populated
  *  tab, plus keyboard semantics for the tab strip. Color-contrast rules need
  *  real layout (measured analytically in ACCESSIBILITY.md instead). */
 import { describe, it, expect, beforeAll } from 'vitest'
@@ -22,20 +22,20 @@ const AXE_OPTS: axe.RunOptions = {
   },
 };
 
-describe('AGENT E: axe structural scan per tab', () => {
+describe('QA accessibility: axe structural scan per tab', () => {
   for (const tab of ['Data', 'Metrics', 'Plots', 'Timing', 'Sandbox', 'Compare', 'Report']) {
     it(`${tab} tab has no axe violations`, async () => {
       render(<App />);
       fireEvent.click(screen.getByRole('tab', { name: tab }));
       await new Promise(r => setTimeout(r, 60));   // let panels resolve
       const res = await axe.run(document.body, AXE_OPTS);
-      const summary = res.violations.map(v => `${v.id}: ${v.nodes.length}× — ${v.help}`);
+      const summary = res.violations.map(v => `${v.id}: ${v.nodes.length}×; ${v.help}`);
       expect(summary, summary.join('\n')).toEqual([]);
     }, 20_000);
   }
 });
 
-describe('AGENT E: keyboard semantics', () => {
+describe('QA accessibility: keyboard semantics', () => {
   it('skip link targets #main', () => {
     render(<App />);
     const skip = screen.getByText(/skip to content/i);

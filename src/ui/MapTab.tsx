@@ -72,8 +72,11 @@ export function MapTab() {
         </div>
       </section>
       <section className="card">
+        <div className="controls">
+          <button disabled title="Planned feature; not active yet">Add gauge station (SHP or KML/KMZ) <span className="badge">beta</span></button>
+          <button disabled title="Planned feature; not active yet">Add catchment (SHP or KML/KMZ) <span className="badge">beta</span></button>
+        </div>
         <div ref={hostRef} className="maphost" />
-        <p className="muted">Map data © OpenStreetMap contributors. The marker and area are stored with the project only in your browser.</p>
       </section>
     </div>
   );

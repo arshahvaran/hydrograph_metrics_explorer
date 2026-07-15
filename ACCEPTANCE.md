@@ -1,7 +1,7 @@
-# Acceptance audit — webtool_v3.md §22 (v1.0.0)
+# Acceptance audit: webtool_v3.md §22 (v1.0.0)
 
 Each criterion below maps to its implementation and, where numeric, its automated evidence
-(`npx vitest run` — 300 tests as of v1.1.1). Honest deviations are listed at the end rather than buried.
+(`npx vitest run`; 300 tests as of v1.1.1). Honest deviations are listed at the end rather than buried.
 
 | # | Criterion (abridged) | Status | Evidence |
 |---|---|---|---|
@@ -14,7 +14,7 @@ Each criterion below maps to its implementation and, where numeric, its automate
 | 7 | Mean / monthly-climatology / persistence benchmark skills | ✅ | `benchmarks.ts` + skill rows in Metrics tab; `tests/benchmarks.test.ts` |
 | 8 | Seven plots + alignment; toggle rules; PNG/SVG/CSV each; DOY plots disable <1 yr | ✅ | `PlotsTab` (timeseries, scatter, FDC, residual, heatmap, spaghetti, climatology, DTW alignment); mutual-exclusion in toggle logic; `PlotHost` download row on every plot; DOY guard on record length |
 | 9 | Seasonal filter, combinable with window, captions reflect both | ✅ | `subset.ts` (wrap-aware DOY span) + `AnalysisBar`; caption surfaces in Metrics note, Compare, Report; `tests/subset.test.ts` |
-| 10 | Event detection + per-event errors + "n/a — no events" | ✅ | `events.ts`; per-event table in Timing tab; hand-calculation pins in `tests/timing.test.ts`; empty-state string when threshold too high |
+| 10 | Event detection + per-event errors + "n/a; no events" | ✅ | `events.ts`; per-event table in Timing tab; hand-calculation pins in `tests/timing.test.ts`; empty-state string when threshold too high |
 | 11 | Sandbox ~100 ms; double-penalty shows NSE/KGE collapse vs W/DTW stability; Mode 2; non-destructive | ✅ | Worker + deferred value + last-good retention keeps interaction fluid; decimation bounds heavy metrics; presets reproduce the paper's contrast; perturbation never mutates stored series |
 | 12 | Lag sweep marks best lag, in sync with shift slider | ✅ | Sweep computed in the same panel as the readout; best-lag markers; shares `shiftSteps` state |
 | 13 | ≥2 runs → C2M-normalised composite ranking + Recommended run | ✅ | `rank.ts` + `CompareTab`; `tests/rank.test.ts` (5 tests: C2M mapping, target-zero, degenerate ties, weight sensitivity, missing-value handling) |
@@ -31,7 +31,7 @@ Each criterion below maps to its implementation and, where numeric, its automate
   worker-lane isolated with live progress) surfaces 95% percentile intervals across every classical
   row and the CSV export. Timing-/shape-aware rows show "CI n/a" by design: block resampling
   destroys the time axis those metrics measure, so an interval there would be statistically
-  meaningless — the exclusion is explained in the UI tooltip. 6 dedicated tests.
+  meaningless; the exclusion is explained in the UI tooltip. 6 dedicated tests.
 - **USGS loader** remains out (spec §21 v1.1 "optional"); the privacy criterion (17) therefore
   holds unconditionally.
 - **DTW/Wasserstein cancellation** (§18) is implemented as *bounded work + superseded-result dropping*

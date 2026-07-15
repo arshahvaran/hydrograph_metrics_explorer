@@ -1,4 +1,4 @@
-/** AGENT F — client-side attack surface: XSS via user-supplied names, the
+/** QA client-side attack surface: XSS via user-supplied names, the
  *  print-report HTML path, and CSV export end-to-end. */
 import { describe, it, expect, beforeAll } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'

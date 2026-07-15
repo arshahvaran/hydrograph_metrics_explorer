@@ -13,7 +13,7 @@ export function download(filename: string, content: string | Blob, mime = 'text/
   URL.revokeObjectURL(url);
 }
 
-/** QA-008: CSV cell hardening — Excel formula-injection guard (OWASP) plus
+/** QA-008: CSV cell hardening: Excel formula-injection guard (OWASP) plus
  *  real quoting. Numbers and numeric-looking strings are left untouched so
  *  negative values stay numeric; non-numeric strings starting with = + - @
  *  or tab/CR are prefixed with an apostrophe. */

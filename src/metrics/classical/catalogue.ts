@@ -18,7 +18,7 @@ export const mdse = (o: Vec, s: Vec) => median(Array.from({ length: o.length }, 
 
 // Log-error family per the defining papers (Törnquist et al., 1985; Jackson et
 // al., 2019 Table 1): error term ln(S/O), which is unit-invariant. NOTE: the
-// HydroErr *code* deviates from the HydroErr *paper* here — it computes
+// HydroErr *code* deviates from the HydroErr *paper* here: it computes
 // log1p(S)−log1p(O) = ln((1+S)/(1+O)), which is not scale-invariant. We follow
 // the paper; tests pin these against independently computed NumPy references.
 // Requires strictly positive flows (zeros/negatives → NaN/−∞, shown as n/a).
@@ -45,13 +45,13 @@ export const mape  = (o: Vec, s: Vec) => {
   return isFinite(v) ? v : NaN;
 };
 /**
- * MAPD % (Jackson et al., 2019 Table 2): 100·Σ|S−O| / Σ|O| — bulk relative
+ * MAPD % (Jackson et al., 2019 Table 2): 100·Σ|S−O| / Σ|O|: bulk relative
  * error (= 100·(1−VE) for positive flows). hydroeval calls this quantity
  * "MARE" and HydroErr's mapd returns the fraction; we use the paper's name
  * and percent scale to avoid colliding with per-element MARE (= MAPE/100).
  */
 export const mapd  = (o: Vec, s: Vec) => { let n = 0, d0 = 0; for (let i = 0; i < o.length; i++) { n += Math.abs(s[i] - o[i]); d0 += Math.abs(o[i]); } return over(100 * n, d0); };
-/** sMAPE on the 0–200 % scale. Denominator (|O|+|S|)/2 — HydroErr uses (S+O)/2,
+/** sMAPE on the 0–200 % scale. Denominator (|O|+|S|)/2: HydroErr uses (S+O)/2,
  * identical for positive flows; the absolute form preserves the stated range. */
 export const smape = (o: Vec, s: Vec) => {
   let sum = 0;
@@ -238,7 +238,7 @@ export const ve = (o: Vec, s: Vec) => {
   const q = over(num, den);
   return Number.isNaN(q) ? NaN : 1 - q;
 };
-/** PBIAS, paper sign convention: 100·Σ(O−S)/ΣO — positive = underestimation. */
+/** PBIAS, paper sign convention: 100·Σ(O−S)/ΣO: positive = underestimation. */
 export const pbias = (o: Vec, s: Vec) => {
   let num = 0, den = 0;
   for (let i = 0; i < o.length; i++) { num += o[i] - s[i]; den += o[i]; }

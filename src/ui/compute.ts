@@ -111,7 +111,7 @@ const ciCache = new Map<string, BootstrapResult>();
 const ciPending = new Map<string, Promise<BootstrapResult>>();
 const ciProgress = new Map<string, number>();
 
-/** CI panels for all runs (single hook — stable order regardless of run count). */
+/** CI panels for all runs (single hook: stable order regardless of run count). */
 export function useBootstrapCIsAll(ds: Dataset, runs: Run[], enabled: boolean): { results: (BootstrapResult | null)[]; progress: number } {
   useRecompute();
   if (!enabled) return { results: runs.map(() => null), progress: 0 };

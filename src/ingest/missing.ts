@@ -15,7 +15,7 @@ export interface MissingOptions {
  *  - only "," present: strict thousands grouping ("1,234,567") is treated as
  *    thousands; a single comma otherwise is a decimal mark ("3,5" -> 3.5);
  *    anything else ("1,23,45") is invalid;
- *  - only "." present: standard JS parsing (dot is always decimal — the
+ *  - only "." present: standard JS parsing (dot is always decimal: the
  *    anglophone default; "1.234" is 1.234, not 1234);
  *  - scientific notation passes through untouched.
  */
@@ -66,7 +66,7 @@ export interface Paired {
 
 /**
  * Apply a NaN policy to one (observed, simulated) pair (§10.4).
- * 'pairwise' (default): drop time steps where either value is missing — the
+ * 'pairwise' (default): drop time steps where either value is missing: the
  * same semantics as HydroErr's default treatment, which our reference vectors pin.
  * 'zero' / 'mean': substitute per-series before computing.
  */

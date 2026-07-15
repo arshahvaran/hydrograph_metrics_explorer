@@ -51,7 +51,7 @@ export function validateDataset(
   const warnings: string[] = [];
 
   if (!observed) errors.push('No column is mapped as Observed; map one to continue.');
-  if (runs.length === 0) errors.push('No column is mapped as Predicted; map at least one run.');
+  if (runs.length === 0) errors.push('No column is mapped as Predicted; map at least one simulation.');
 
   const badDates = dates.filter(d => !isFinite(d)).length;
   if (badDates > 0) {

@@ -2,7 +2,7 @@
 // (spec §21 v1.1 item, pulled into CP8 per the project checkpoint plan).
 //
 // Method: circular moving-block bootstrap on the *paired* index (after the
-// NaN policy), block length L = max(3, round(n^(1/3))) unless overridden —
+// NaN policy), block length L = max(3, round(n^(1/3))) unless overridden,
 // the standard rate that preserves short-range autocorrelation. Each
 // replicate re-applies the evaluation transform (its ε depends on the
 // resampled mean of O), then evaluates the classical block. CIs are
@@ -11,7 +11,7 @@
 // Timing-/shape-aware metrics are deliberately excluded: resampling blocks
 // destroys the very time axis those metrics measure (a peak lag on a
 // spliced series is meaningless). Their rows display "CI n/a" with this
-// explanation — an honest statistical limitation, not an omission.
+// explanation: an honest statistical limitation, not an omission.
 
 import { applyNanPolicy, type NanPolicy } from '../ingest/missing'
 import { applyTransform, type Transform } from './classical/catalogue'

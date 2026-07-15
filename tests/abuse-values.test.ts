@@ -1,4 +1,4 @@
-/** AGENT B — values & timing-metric torture. The core contract under attack:
+/** QA values and timing-metric torture. The core contract under attack:
  *  degrade to NaN (rendered "n/a"), NEVER to ±Infinity or a throw, and never
  *  to a plausible-looking wrong number. */
 import { describe, it, expect } from 'vitest'

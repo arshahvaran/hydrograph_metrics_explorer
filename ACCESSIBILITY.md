@@ -1,4 +1,4 @@
-# Accessibility audit — v1.1.0 (CP8)
+# Accessibility audit: v1.1.0 (CP8)
 
 Scope: WCAG 2.1 AA-oriented review of the shipped SPA (both themes), performed alongside the
 CP8 build. Format: finding → resolution. Items marked *partial* are stated honestly rather than
@@ -11,11 +11,11 @@ claimed.
 | Muted text on panel | 4.96:1 | 6.41:1 | ✅ |
 | Muted text on page background | 4.63:1 | 7.03:1 | ✅ |
 | Accent links/text on panel | 5.67:1 | 4.86:1 | ✅ |
-| Accent text on accent-soft (badges) | 4.95:1 | — | ✅ |
+| Accent text on accent-soft (badges) | 4.95:1 |; | ✅ |
 | Button label on accent (primary) | 5.67:1 | 5.53:1 | ✅ |
-| Body ink on timing-row tint | 17.1:1 | — | ✅ |
+| Body ink on timing-row tint | 17.1:1 |; | ✅ |
 
-Lowest measured pair is 4.63:1 — passes AA for normal text; no reliance on large-text exemptions.
+Lowest measured pair is 4.63:1; passes AA for normal text; no reliance on large-text exemptions.
 
 ## Keyboard & focus
 
@@ -48,7 +48,7 @@ best-in-row cells use bold + underline in addition to colour; timing rows pair t
 
 - **Plotly charts render to canvas** and are not screen-reader readable point-by-point. Each
   plot is paired with a text note summarising what it shows, and every plot offers a CSV
-  download of exactly the plotted data — the accessible equivalent. Modebar buttons expose
+  download of exactly the plotted data; the accessible equivalent. Modebar buttons expose
   native titles.
 - **Leaflet map**: pan/zoom controls are keyboard-operable natively; the marker popup carries
   the dataset name. Location can equally be set through the validated lat/lon inputs, so the

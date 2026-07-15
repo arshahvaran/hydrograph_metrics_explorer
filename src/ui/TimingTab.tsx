@@ -133,7 +133,7 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
 
       <section className="card">
         <h2>Timing summary <span className="muted">(lags in steps of {stepLabel})</span></h2>
-        <div className="mapscroll"><table className="grid" aria-label="Timing summary per run">
+        <div className="mapscroll"><table className="grid" aria-label="Timing summary per simulation">
           <thead><tr><th>Measure</th><th>Optimum</th>{runs.map(r => <th key={r.id} style={{ color: r.color }}>{r.name}</th>)}</tr></thead>
           <tbody>
             {SUMMARY_IDS.map(id => {
@@ -198,13 +198,13 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
             }}
             height={330}
           />
-          <p className="muted">Radius = DE (0 at the centre is perfect; the observed record itself sits there). The top half indicates a constant positive offset (B̄rel &gt; 0), the bottom half a constant negative offset; left vs right separates dynamic high-flow from low-flow error. Marker colour is the timing term r, on a magma scale where dark purple marks 1 (timing match) and yellow marks the low end of the colourbar; the colour range adapts to the runs in view so nearby r values stay distinguishable.</p>
+          <p className="muted">Radius = DE (0 at the centre is perfect; the observed record itself sits there). The top half indicates a constant positive offset (B̄rel &gt; 0), the bottom half a constant negative offset; left vs right separates dynamic high-flow from low-flow error. Marker colour is the timing term r, on a magma scale where dark purple marks 1 (timing match) and yellow marks the low end of the colourbar; the colour range adapts to the simulations in view so nearby r values stay distinguishable.</p>
         </section>
       </div>
 
       <section className="card">
         <h2>Events{' '}
-          <select aria-label="Event report run" value={eventRunIdx} onChange={e => setEventRunIdx(Number(e.target.value))}>
+          <select aria-label="Event report simulation" value={eventRunIdx} onChange={e => setEventRunIdx(Number(e.target.value))}>
             {runs.map((r, i) => <option key={r.id} value={i}>{r.name}</option>)}
           </select>{' '}
           <span className="muted">threshold {fmtNum(evOut.extras.events?.threshold, 2)} {UNITS[ds.targetUnit].label} · tolerance ±{t.peakMatchTolerance} steps</span>{' '}

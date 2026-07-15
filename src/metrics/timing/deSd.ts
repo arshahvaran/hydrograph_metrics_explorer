@@ -1,4 +1,4 @@
-// Diagnostic Efficiency (Schwemmle, Demand & Weiler, 2021) — semantics mirror
+// Diagnostic Efficiency (Schwemmle, Demand & Weiler, 2021): semantics mirror
 // the authors' diag-eff 1.1 package exactly (verified against executed outputs
 // in tests/timing.test.ts): descending FDC sort, zero-diff → zero bias, non-finite
 // bias terms dropped, Simpson integration on a uniform (0,1) grid, and the
@@ -15,9 +15,9 @@ export interface DeResult {
   brelMean: number;         // constant error (mean relative FDC bias)
   bArea: number;            // dynamic error (area of residual FDC bias)
   temporalR: number;        // timing (Pearson r of the time series)
-  phi: number;              // polar angle from arctan2(brelMean, bArea·bDir) — full diag-eff form
+  phi: number;              // polar angle from arctan2(brelMean, bArea·bDir); full diag-eff form
   phiFdc: number;           // arctan2(brelMean, bArea) without the direction sign (fixture-pinned)
-  nonPerennial: boolean;    // observed contains zeros/negatives — DE assumptions violated
+  nonPerennial: boolean;    // observed contains zeros/negatives; DE assumptions violated
 }
 
 const zeroArtefact = (v: number, tol = 0.001) => (Math.abs(v) < tol ? 0 : v);

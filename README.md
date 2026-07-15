@@ -9,13 +9,13 @@ model error: peak-timing offsets, event-scale volume and lag errors, Series Dist
 band-constrained Dynamic Time Warping, cross-wavelet phase lag, Diagnostic Efficiency, and the
 Wasserstein distance between hydrographs treated as distributions of flow mass over time.
 
-Everything — parsing, unit conversion, every metric, every plot, report generation — runs in
+Everything (parsing, unit conversion, every metric, every plot, report generation) runs in
 your browser. **No data ever leaves the page**; there is no server, no database, no account.
 
 ## Features (v1.0)
 
 Data ingestion (paste grid with add-column, CSV/XLSX upload with mapping, Julian dates, unit
-conversion incl. depth↔volume with catchment area) · 62-metric panel — classical families
+conversion incl. depth↔volume with catchment area) · 62-metric panel; classical families
 independently implemented and verified against HydroErr/Hydrostats/hydroeval/hydroGOF (95% block-bootstrap CIs on demand), plus the
 timing- & shape-aware core (peak timing, event errors, Diagnostic Efficiency, Series Distance,
 banded DTW, Wasserstein W₁, cross-wavelet lag) · analysis window / wrap-aware seasonal filter /
@@ -42,11 +42,11 @@ This repository is being built in verified checkpoints. Each checkpoint lands wi
 
 ## Correctness
 
-Metric implementations are written in TypeScript **from the published equations** — no code is
+Metric implementations are written in TypeScript **from the published equations**; no code is
 taken from existing libraries. They are verified value-for-value against *executed* reference
 outputs of HydroErr 2.0.0, Hydrostats 1.0.0, hydroeval 0.1.0 and diag-eff 1.1, pinned in
 [`tests/fixtures/reference_vectors.json`](tests/fixtures/reference_vectors.json) (regenerable
-with [`scripts/generate_reference_vectors.py`](scripts/generate_reference_vectors.py)) —
+with [`scripts/generate_reference_vectors.py`](scripts/generate_reference_vectors.py)),
 including exact NaN-handling semantics and the PBIAS sign convention
 (positive = underestimation). Run the suite with `npm test`.
 
@@ -63,5 +63,5 @@ Deployed to GitHub Pages from the `gh-pages` branch (`dist/` contents).
 
 ## Licence & citation
 
-MIT — see [LICENSE](LICENSE). If you use this software, please cite it via
+MIT; see [LICENSE](LICENSE). If you use this software, please cite it via
 [CITATION.cff](CITATION.cff); a paper reference will be added on publication.

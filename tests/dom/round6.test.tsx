@@ -108,7 +108,7 @@ describe('Sandbox tab, round 6', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Sandbox' }));
     await screen.findByText(/Simulation to perturb/);
     // and the picker itself is still the same accessible control
-    expect(screen.getByLabelText('Perturbation target run')).toBeTruthy();
+    expect(screen.getByLabelText('Perturbation target simulation')).toBeTruthy();
   });
 
   it('all six Metrics-comparison header cells are plain bold headers (none muted)', async () => {

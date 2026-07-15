@@ -69,6 +69,6 @@ export function rankRuns(inputs: RankInput[], priorities: { id: string; weight: 
 
 /** Default priorities when the user hasn't picked any (§14). */
 export const DEFAULT_PRIORITIES = [
-  { id: 'nse', weight: 1 }, { id: 'kge2012', weight: 1 },
+  { id: 'nse', weight: 1 }, { id: 'kge2009', weight: 1 },
   { id: 'w1', weight: 1 }, { id: 'peak_lag_abs', weight: 1 },
 ];

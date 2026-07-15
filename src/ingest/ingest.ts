@@ -22,7 +22,7 @@ export async function parseWorkbook(buf: ArrayBuffer): Promise<RawTable> {
   const toStr = (c: any) => c instanceof Date
     ? new Date(Date.UTC(c.getFullYear(), c.getMonth(), c.getDate(), c.getHours(), c.getMinutes())).toISOString().slice(0, 16).replace('T', ' ')
     : String(c ?? '');
-  // QA-009: the data is not always on the first sheet — take the first sheet
+  // QA-009: the data is not always on the first sheet: take the first sheet
   // with at least a header and one data row, and say which one was used.
   for (const name of wb.SheetNames) {
     const aoa = XLSX.utils.sheet_to_json<any[]>(wb.Sheets[name], { header: 1, defval: '' });

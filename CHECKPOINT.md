@@ -1,8 +1,8 @@
-# CHECKPOINT — CP1–CP3 + full UI (v0.3.0) · 2026-07-13
+# CHECKPOINT: CP1–CP3 + full UI (v0.3.0) · 2026-07-13
 
 State manifest so any future working session can resume by cloning this repository.
-Requirement IDs refer to `AGENT1_requirements_checklist.md` (kept with the project plan;
-ask the author for `HME_PLAN.md` / `AGENT1` / `AGENT2` documents if not present).
+Requirement IDs refer to the project requirements checklist (kept with the project
+plan; ask the author for the HME plan documents if not present).
 
 ## Done at CP1
 - Repo, Vite + React 18 + TS + Zustand scaffold, MIT, CITATION.cff (A1, A2 partial, A10, A12)
@@ -19,15 +19,15 @@ ask the author for `HME_PLAN.md` / `AGENT1` / `AGENT2` documents if not present)
   with `run_shifted` (+3 d) and `run_biased` (+1.5) (C11 partial)
 - App shell: 6 tabs, Data tab live (sample load → validation → seed metric table → preview),
   privacy footer, colourblind-safe palette, reduced-motion CSS (G shell, A8 start, A12)
-- Tests: 32 passing — oracle comparisons ≤1e-10 rel vs HydroErr/hydroeval, exact lag-sweep
+- Tests: 32 passing; oracle comparisons ≤1e-10 rel vs HydroErr/hydroeval, exact lag-sweep
   truth reproduction (argmax = +3, NSE = 1), NaN pair pinning, unit identities
 
 ## Deliberate CP1 simplifications (to revisit)
-- `parseSampleCsv` assumes column order date|obs|runs… — replaced by full mapping UI at CP4
-- Metrics table on Data tab is a temporary seed display — real Metrics tab at CP4
+- `parseSampleCsv` assumes column order date|obs|runs…; replaced by full mapping UI at CP4
+- Metrics table on Data tab is a temporary seed display; real Metrics tab at CP4
 - No workers yet (nothing heavy computed); no window/season subsetting wired to UI
 
-## Next: CP2 — full classical engine
+## Next: CP2: full classical engine
 1. `src/metrics/classical/`: errors (MSE/MAE/MdAE/RSR/NRMSE/MAPE/sMAPE/MAAPE/MSLE/MARE),
    correlation & agreement (R², wR², d, d1, dr), efficiencies (logNSE, KGE′-2012, KGE″-2021
    [Tang], KGEnp, VE, β-NSE, α), FDC signatures (FHV top 2 %, FLV bottom 30 % log, FMS 20–70 %,
@@ -60,10 +60,10 @@ ask the author for `HME_PLAN.md` / `AGENT1` / `AGENT2` documents if not present)
 - Timing engine (`src/metrics/timing/`): events + per-event errors, Gauch peak-timing,
   lag sweep, W₁/W₂² (mass-normalised, inverse-CDF W₂²), Sakoe–Chiba DTW with backtrack,
   Diagnostic Efficiency mirroring diag-eff exactly (incl. artefact zeroing; `phi` full form +
-  `phiFdc` fixture-pinned form — generator passed b_area as b_slope), core Series Distance,
+  `phiFdc` fixture-pinned form; generator passed b_area as b_slope), core Series Distance,
   Morlet XWT with AR1 red-noise 95 % gating + COI (radix-2 FFT in-house). All pinned by
   analytic pure-shift identities (W₁=k, W₂²=k², DTW dist 0 & warp≈k, peak lag=k, sweep argmax k,
-  XWT lag≈k — sign convention locked by test).
+  XWT lag≈k; sign convention locked by test).
 - Registry (`src/metrics/registry.ts`): metadata for ~45 metrics, presets, computeAll orchestrator
   (DTW decimation guard >6000 pts; XWT decimation >16384).
 - UI: all six tabs live. Metrics (grouped table, best-per-row, C2M toggle, benchmark skill,
@@ -86,7 +86,7 @@ ask the author for `HME_PLAN.md` / `AGENT1` / `AGENT2` documents if not present)
 
 ---
 
-# Update · v0.3.1 — metric correctness audit (Jackson et al. 2019 / Roberts et al. 2018 as ground truth)
+# Update · v0.3.1: metric correctness audit (Jackson et al. 2019 / Roberts et al. 2018 as ground truth)
 
 Findings & corrections (details in tests/classical.test.ts):
 1. **MLE/MALE/MSLE/RMSLE corrected to the paper form ln(S/O)** (Törnquist 1985; Jackson Table 1).
@@ -98,16 +98,16 @@ Findings & corrections (details in tests/classical.test.ts):
 3. sqrt transform: negative flows now propagate NaN instead of silent clamping to 0.
 4. benchmarkSeries NaN-safe (mean/climatology over finite values only); skill() guarded when the
    benchmark sits at the optimum.
-5. KgeResult fields renamed {variability, bias} — kge2012 no longer stores γ in a field called
+5. KgeResult fields renamed {variability, bias}; kge2012 no longer stores γ in a field called
    'alpha'; kge2021's β″=(μs−μo)/σo semantics verified against hydroGOF's method="2021" docs
    (Tang et al., 2021).
 6. Added missing registry rows + computeAll outputs: MLE, MALE, RMSLE, MdE, MdSE, MAPD.
 7. Conventions documented as deliberate: PBIAS = 100·Σ(O−S)/ΣO, positive = under-estimation
-   (paper/Moriasi; hydroGOF uses the opposite sign — pinned by test); VE range (−∞,1] with
+   (paper/Moriasi; hydroGOF uses the opposite sign; pinned by test); VE range (−∞,1] with
    optimum 1 (the review paper's "0 ≤ VE < 1, smaller is better" is a misprint vs Criss &
    Winston 2008); sMAPE denominator (|O|+|S|)/2 preserving the stated 0–200 bound (HydroErr uses
-   (S+O)/2 — identical for positive flows); %BiasFMM log form per the Yilmaz-family signature
-   literature (scale-sensitive when median(O)≈1 in the chosen unit — documented).
+   (S+O)/2; identical for positive flows); %BiasFMM log form per the Yilmaz-family signature
+   literature (scale-sensitive when median(O)≈1 in the chosen unit; documented).
 8. Single source of truth: deleted classical/basics.ts; all callers use catalogue.ts.
 9. UI: metric reference is now a grouped table with KaTeX-rendered equations, range, optimum,
    polarity, and blind-spot columns (per-row equation = exactly what the engine computes).
@@ -116,10 +116,10 @@ Tests: 86 passing (was 69).
 
 ---
 
-# Update · v0.4.0 — visual release (studio-family consistency + paper-figure style)
+# Update · v0.4.0: visual release (studio-family consistency + paper-figure style)
 
 - Layout bug fixed: sandbox sliders were a 3-column grid inside minmax(300px) cells → label/value
-  overlap (user screenshot). Now stacked rows (label+value line, full-width slider) — collision-free
+  overlap (user screenshot). Now stacked rows (label+value line, full-width slider); collision-free
   at any width. Wide tables (metrics, timing summary, events) wrapped in horizontal-scroll guards.
 - Design language aligned with the author's studio tools (inspected color_model_studio & cartolab):
   html[data-theme] light/dark with ☽/☀ header toggle (localStorage 'hme_theme', prefers-color-scheme
@@ -139,7 +139,7 @@ Tests: 86 passing (was 69).
 
 ---
 
-# CP8 · v1.0.0 — MVP complete (spec §21) 
+# CP8 · v1.0.0: MVP complete (spec §21) 
 
 New this checkpoint:
 - **Subsetting engine** (`src/metrics/subset.ts`): contiguous window → wrap-aware seasonal DOY filter →
@@ -148,7 +148,7 @@ New this checkpoint:
 - **Web Worker** metric engine (`src/metrics/worker.ts` + async `compute.ts`): full panel off-thread,
   pending states in every tab, last-good retention in the Sandbox so sliders never blank (§18–19).
 - **Compare tab** (`rank.ts` + `CompareTab.tsx`): priority metrics with weights, C2M-normalised scores,
-  composite ranking, Recommended-run callout with timing nudge (AC13). Unit-tested (5 tests) — the tests
+  composite ranking, Recommended-run callout with timing nudge (AC13). Unit-tested (5 tests); the tests
   caught and fixed a degenerate all-equal scoring bug.
 - **Report** (`src/report/report.ts` + tab): client-side DOCX (docx-js; dual-DXA tables, CLEAR shading,
   typed ImageRun, per-line Paragraphs) with data summary, grouped metrics (timing rows shaded ⏱),
@@ -165,30 +165,30 @@ cancellation implemented as bounded decimation + superseded-result drop rather t
 
 ---
 
-# CP8 ✅ (final) · v1.1.0 — the checkpoint's own six items, all delivered
+# CP8 ✅ (final) · v1.1.0: the checkpoint's own six items, all delivered
 
 Per the project checkpoint plan ("Web Workers for very long records, bootstrap CIs, editing grid,
 report generator, acceptance & accessibility audit, release"):
-1. **Web Workers** — full metric panel + bootstrap on dedicated lanes ('panel' / 'boot') so 500-replicate
+1. **Web Workers**; full metric panel + bootstrap on dedicated lanes ('panel' / 'boot') so 500-replicate
    jobs never queue behind live interaction; pending states everywhere; DTW decimation guards ≥50k rows.
-2. **Bootstrap CIs** — `src/metrics/bootstrap.ts`: circular moving-block bootstrap on the paired index,
+2. **Bootstrap CIs**; `src/metrics/bootstrap.ts`: circular moving-block bootstrap on the paired index,
    L = max(3, n^⅓), B = 500, seeded, per-replicate transform re-application, percentile 95% CIs;
    `classicalValues()` extracted from `computeAll` (no behaviour change, suite-verified) as the replicate
    unit; worker progress → "bootstrapping… N%"; CI sub-lines in every classical cell + CSV lo/hi columns;
    timing rows honestly excluded with in-UI rationale. Tests +6 (reproducibility, bracketing, width-vs-n,
    classical-only coverage, block-length rate, progress) → **101 total**.
-3. **Editing grid** — shipped earlier in CP8 (EditableGrid, Appendix C).
-4. **Report generator** — shipped earlier in CP8 (DOCX + matching PDF).
-5. **Acceptance & accessibility audit** — ACCEPTANCE.md updated (CI deviation resolved);
+3. **Editing grid**; shipped earlier in CP8 (EditableGrid, Appendix C).
+4. **Report generator**; shipped earlier in CP8 (DOCX + matching PDF).
+5. **Acceptance & accessibility audit**; ACCEPTANCE.md updated (CI deviation resolved);
    **ACCESSIBILITY.md** added with measured WCAG contrast (10 pairs, all ≥4.5:1, worst 4.63:1),
    plus fixes landed this checkpoint: skip-to-content link, ARIA tabs pattern with roving tabindex +
    Arrow/Home/End activation, file inputs made keyboard-reachable (hidden → .vh), aria-labels on all
    icon-only controls and key tables, polite live regions for async status. Partials stated
    (canvas plots ↔ CSV-equivalent alternative; light grid has no arrow-key nav).
-6. **Release** — v1.1.0 tagged + deployed.
+6. **Release**; v1.1.0 tagged + deployed.
 
 
-## v1.1.1 — pre-release QA campaign (adversarial multi-agent)
+## v1.1.1: pre-release QA campaign (adversarial, charter-based)
 Full REPRODUCE→ROOT-CAUSE→FIX→REGRESSION-TEST loop on every defect. 13 defects
 logged (7×S1, 4×S2, 2×S3), all fixed; 1 suspicion refuted by test (QA-006).
 Highlights: rules-of-hooks crashes on Timing/Sandbox first visit under real
@@ -204,7 +204,7 @@ reversed windows. Suite grew 101 → 300 tests incl. DOM (jsdom+RTL), fast-check
 fuzz, axe-core a11y, perf numbers, worker-race, privacy manifest, and a
 rules-of-hooks lint gate.
 
-## v1.2.0 — interface revision from manual inspection
+## v1.2.0: interface revision from manual inspection
 Header rebuilt: animated 1:1 logo (same art as the favicon; simulated curve
 shifts in a loop, reduced-motion aware), new tagline, no em dashes anywhere in
 the UI, "Active dataset:" label, Duplicate/Save swapped, badge removed. Tabs
@@ -222,7 +222,7 @@ tab only, with "Use this data →" materialising the selection as a new dataset
 (commitSubsetDataset); all analysis tabs now always see full records. Suite
 300 → 306.
 
-## v1.2.1 — plots polish round
+## v1.2.1: plots polish round
 Solid simulated lines everywhere (logo/favicon, hydrographs, DTW overlay,
 sandbox, report figures). Logo enlarged to 55 px. Data commit jumps to Plots;
 "simulations" wording; live-editable column names in the mapping header that
@@ -234,7 +234,7 @@ the report renderer, real unit labels (m³/s not m3s) in every axis/caption,
 capitalised and corrected plot captions, Log(y) checkbox label, heatmap
 colorbar sized to the plot. Header right no longer wraps internally.
 
-## v1.3.0 — Metrics governance + plots round 3
+## v1.3.0: Metrics governance + plots round 3
 Presets reduced to two: Essentials (exactly the paper's Table 2, both blocks,
 25 metrics) and Extended (beta) = full catalogue; default Essentials. Audit of
 all 37 Extended-only metrics: 35 already pinned against reference libraries or
@@ -251,18 +251,18 @@ Q-Q (fixed layout dims). Logo stretches to exactly the title-to-tagline block
 height (1:1 kept). Switching the active dataset now stays on the current tab
 (and plot type persists). Custom window label; wider DOY inputs.
 
-## v1.3.1 — Table 2 cross-check + round-4 polish
+## v1.3.1: Table 2 cross-check + round-4 polish
 Essentials verified line-by-line against the attached Table 2: added the
 missing per-event PEAK-HEIGHT metric (event_peak, mean signed %, from the
 existing per-event peakMagErrPct), corrected the PBIAS range metadata to
 (−∞, 100] %; all other ranges/optima/semantics already agreed. Preset names
 lowercased (essentials / extended (beta)). Fixed the square-plot leak: Plotly
 .react retains layout keys that stop being passed, so a visited square plot
-locked width for later plot types — non-square layouts now explicitly unset
+locked width for later plot types; non-square layouts now explicitly unset
 width with autosize on. Logo frame tile removed (transparent curves only);
 heatmap colorbar 376 px; footer shows major.minor (v1.3).
 
-## v1.3.2 — round 5: theme default, timing & sandbox overhaul
+## v1.3.2: round 5: theme default, timing & sandbox overhaul
 Light theme on first open (stored choice still respected). Logo tile frame
 restored (the doubled CSS frame stays gone). Colorbar 370 px. Timing summary
 now shows exactly the 13 essentials timing metrics; extra rows dropped;
@@ -279,7 +279,7 @@ simulation", Simulation label, four preset buttons removed (Reset kept),
 "Metrics comparison" card with Perturbed/Original series headers, unbolded
 values.
 
-## v1.3.3 — round 6: logo frame, timing switch, readable DE polar, sandbox wording
+## v1.3.3: round 6: logo frame, timing switch, readable DE polar, sandbox wording
 Logo tile frame thinned (rect stroke-width 3 to 2) in public/logo.svg; the
 unreferenced public/icon.svg brought back in line with the same art (thin frame,
 simulated curve made SOLID per the house rule; it still had the pre-v1.2.1
@@ -300,3 +300,45 @@ muted class so all six headers are uniform bold (original VALUE cells stay
 muted). Suite 309 to 319 (branding x3, round6 DOM x7: deColorFloor pins,
 polar trace floor + distinguishability, switch semantics, sandbox label,
 header boldness).
+
+## v1.4.0: round 7, Compare overhaul, Simulation wording, map placeholders, report fix, style scrub
+Compare tab. Priority panel split in two: a checklist of candidates on the
+left and a Metric/Weight table on the right; ticking a metric adds a row with
+weight 1, the weight is edited in place, and a remove button clears the row.
+Subtitle now reads "select the metrics that matter for your application, then
+enter the relative weights". Candidates reduced to the essentials-only subset
+of the previous list (nse, kge2009, r2, ve, rmse, pbias, peak_lag_abs, w1,
+dtw_warp, de, xwt_lag); kge2012, dr, lognse, event_threat and lag_best
+dropped. DEFAULT_PRIORITIES and the defaultView seed both read nse, kge2009,
+w1, peak_lag_abs (they previously disagreed; the seed had only kge2009 and
+nse, so the declared default was dead code). Composite direction audit: for
+every candidate, a value nearer the stated optimum must outrank one further
+away, whatever the polarity (higher-better, lower-better, zero-target); 13 new
+pins in tests/rank.test.ts confirm the existing math was already correct, no
+engine change. Score explanation rewritten for lay readers (1 = closest to the
+ideal among the simulations compared, 0 = furthest, composite = weighted
+average, higher always better). Ranking table: "Simulation" column, per-cell
+sub-header "value . score (weight w)", and no bold anywhere outside header
+rows (run-name weight and the strong wrapper removed). Recommendation sentence
+now reads "at a more proper time, not just a more proper average".
+Global wording: every user-visible "run" is now "simulation" (Timing summary,
+Event report picker, Sandbox target, Metrics captions and table names, Report
+warning, ingest validation, project-load errors, DOCX and PDF ranking
+sections); sample column names such as run_shifted are data, not chrome, and
+stay. Tests that pinned the old accessible names were updated to the new ones.
+Header: Load now precedes New. Map tab: two inactive placeholder buttons with
+beta badges for gauge-station and catchment uploads (SHP or KML/KMZ); the
+caption paragraph under the map removed (the on-map Leaflet attribution
+remains, which keeps the OpenStreetMap licence satisfied).
+Report bug fixed: "Report generation failed: Invalid time value". Both
+renderers read fields that never existed on EventError (e.start, e.obsPeak,
+e.simPeak, e.volBiasPct) behind an any cast, so the date lookup indexed with
+undefined and Date.toISOString threw the moment a single event existed. Both
+paths now share typed eventTableRows() reading the real shape (obs.start,
+obs.peakQ, peakMagErrPct, volumeErrPct) with an n/a guard for non-finite
+stamps; pinned by tests/report-events.test.ts including an end-to-end DOCX
+build with events present.
+Repository style scrub: QA suite headers reworded, plan-document references
+neutralised, and every em dash in tracked md/ts/tsx/html/css files replaced
+with commas, semicolons, colons, or parentheses as context requires. Suite
+319 to 342 (rank direction audit x13, report-events x4, round7 DOM x6).

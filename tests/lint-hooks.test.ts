@@ -9,7 +9,7 @@ import { ESLint } from 'eslint'
 describe('rules of hooks (structural regression guard)', () => {
   it('no component violates react-hooks/rules-of-hooks', async () => {
     const eslint = new ESLint(({
-      // eslint 8 flat/legacy typing mismatch under @types/eslint 9 — options are valid at runtime
+      // eslint 8 flat/legacy typing mismatch under @types/eslint 9: options are valid at runtime
       useEslintrc: false,
       overrideConfig: ({
         parser: '@typescript-eslint/parser',

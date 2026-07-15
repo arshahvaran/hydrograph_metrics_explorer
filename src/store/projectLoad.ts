@@ -2,7 +2,7 @@
  * QA-007: hardened project-file loading. Every dataset in a loaded file is
  * rebuilt through the SAME normalisation path as a fresh commit (alignByDate:
  * joint sort + dedup + finite-date filter), unknown keys are dropped (which
- * also neutralises hostile __proto__/constructor payloads — we never copy
+ * also neutralises hostile __proto__/constructor payloads: we never copy
  * arbitrary keys), and missing newer fields get defaults (forward compat for
  * projects saved by older versions).
  */
@@ -28,7 +28,7 @@ function loadView(v: unknown, stepMs: number, n: number): ViewState {
   if (typeof v !== 'object' || v === null) return base;
   const o = v as Record<string, unknown>;
   const out: ViewState = { ...base };
-  // whitelist known keys only — anything else in the file is ignored
+  // whitelist known keys only: anything else in the file is ignored
   if (o.transform === 'none' || o.transform === 'log' || o.transform === 'sqrt' || o.transform === 'inverse') out.transform = o.transform;
   if (o.nanPolicy === 'pairwise' || o.nanPolicy === 'zero' || o.nanPolicy === 'mean') out.nanPolicy = o.nanPolicy;
   if (Array.isArray(o.window) && o.window.length === 2 && o.window.every(x => typeof x === 'number')) out.window = [o.window[0] as number, o.window[1] as number];
@@ -65,10 +65,10 @@ function loadDataset(raw: unknown, errors: string[]): Dataset | null {
     if (typeof rr !== 'object' || rr === null) continue;
     const r = rr as Record<string, unknown>;
     const vals = arrNum(r.values);
-    if (!vals || vals.length !== dates.length) { errors.push(`dataset "${name}": run "${str(r.name, '?')}" has mismatched length`); return null; }
-    runsIn.push({ name: str(r.name, `run ${runsIn.length + 1}`), values: vals, unit: unitId(r.inputUnit), visible: r.visible !== false, color: typeof r.color === 'string' ? r.color : undefined });
+    if (!vals || vals.length !== dates.length) { errors.push(`dataset "${name}": simulation "${str(r.name, '?')}" has mismatched length`); return null; }
+    runsIn.push({ name: str(r.name, `simulation ${runsIn.length + 1}`), values: vals, unit: unitId(r.inputUnit), visible: r.visible !== false, color: typeof r.color === 'string' ? r.color : undefined });
   }
-  if (!runsIn.length) { errors.push(`dataset "${name}": no valid runs`); return null; }
+  if (!runsIn.length) { errors.push(`dataset "${name}": no valid simulations`); return null; }
 
   // Reuse the exact commit-path invariants: joint sort, dedup-first, finite dates.
   const aligned = alignByDate({

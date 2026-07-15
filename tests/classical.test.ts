@@ -96,7 +96,7 @@ describe('vs executed hydroeval 0.1.0 (PBIAS sign, KGEnp, C2M family, MARE)', ()
       close(C.c2m(C.kge2009(o, s).value), num(he.kge_c2m))
       close(C.c2m(C.kge2012(o, s).value), num(he.kgeprime_c2m))
       // hydroeval breaks Spearman ties by numpy's unstable quicksort order;
-      // ours are stable-by-index — identical when there are no ties, ≤1e-5 with.
+      // ours are stable-by-index: identical when there are no ties, ≤1e-5 with.
       close(C.c2m(C.kgenp(o, s).value), num(he.kgenp_c2m), 1e-5)
     })
   }
@@ -171,7 +171,7 @@ describe('audit pins: polarity, sign conventions, ranges, edge cases', () => {
 })
 
 describe('audit pins added for the Extended catalogue (v1.3.0)', () => {
-  // wR² — Krause, Boyle & Bäse (2005): |b|·R² for b ≤ 1, R²/|b| otherwise,
+  // wR²: Krause, Boyle & Bäse (2005): |b|·R² for b ≤ 1, R²/|b| otherwise,
   // with b the OLS slope of simulated on observed (hydroGOF br2 semantics).
   it('wr2 matches the Krause (2005) formula on a hand-worked vector', async () => {
     const { wr2, pearson } = { ...(await import('../src/metrics/classical/catalogue')), ...(await import('../src/metrics/support/stats')) } as any;
@@ -184,7 +184,7 @@ describe('audit pins added for the Extended catalogue (v1.3.0)', () => {
     const expected = Math.abs(b) <= 1 ? Math.abs(b) * r2 : r2 / Math.abs(b);
     expect(wr2(o, s)).toBeCloseTo(expected, 12);
   });
-  // logNSE — NSE on ln(Q + ε), ε = mean(obs)/100 (Pushpalatha et al., 2012).
+  // logNSE: NSE on ln(Q + ε), ε = mean(obs)/100 (Pushpalatha et al., 2012).
   it('logNse equals NSE of the ε-shifted logs, computed independently', async () => {
     const { logNse } = await import('../src/metrics/classical/catalogue') as any;
     const o = [2, 5, 9, 4, 7, 3], s = [2.4, 4.6, 8.1, 4.4, 7.9, 2.7];

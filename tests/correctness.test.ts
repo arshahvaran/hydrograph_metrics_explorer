@@ -1,6 +1,6 @@
 /**
- * AGENT C — NUMERICAL CORRECTNESS AUDITOR.
- * Synthetic cases with KNOWN answers, asserted exactly. This is the agent the
+ * QA numerical correctness audit.
+ * Synthetic cases with KNOWN answers, asserted exactly. This is the suite the
  * paper depends on: if the shift battery fails, the paper's Section 6 claim
  * is false.
  */
@@ -56,7 +56,7 @@ const ctxTol = (n: number, tol: number) => {
   return { ...c, timing: { ...c.timing, peakMatchTolerance: tol } };
 };
 
-describe('C3: pure time shift — the paper\'s central demonstration', () => {
+describe('C3: pure time shift; the paper\'s central demonstration', () => {
   const K = 4;
   const o = hydro(240, 0), s = hydro(240, K); // simulation is K steps LATE
   // Peak-match tolerance is set >= the expected lag, as an analyst would.
@@ -94,7 +94,7 @@ describe('C3: pure time shift — the paper\'s central demonstration', () => {
     expect(wasserstein1(bump(0), bump(K))).toBeCloseTo(K, 6);
   });
 
-  it('a true lag beyond the search window answers n/a — never a clamped number', () => {
+  it('a true lag beyond the search window answers n/a; never a clamped number', () => {
     // With tolerance 3 and true lag 4, the old code confidently reported 3.
     const clamped = computeAll(o, s, ctxTol(240, 3));
     expect(Number.isNaN(clamped.values.peak_lag_abs)).toBe(true);
@@ -146,7 +146,7 @@ describe('C5: pure scaling about zero', () => {
 });
 
 describe('C6: DTW path properties (seeded property loop)', () => {
-  it('monotonic, corner-to-corner, inside the band — 40 random pairs', () => {
+  it('monotonic, corner-to-corner, inside the band; 40 random pairs', () => {
     const rng = mulberry32(2024);
     for (let iter = 0; iter < 40; iter++) {
       const n = 8 + Math.floor(rng() * 110);

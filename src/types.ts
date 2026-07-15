@@ -128,8 +128,10 @@ export function defaultView(stepMs: number, n: number): ViewState {
     benchmark: 'mean',
     selectedMetrics: ['nse', 'kge2009', 'rmse', 'pbias', 'r'],
     priorityMetrics: [
-      { id: 'kge2009', weight: 1 },
       { id: 'nse', weight: 1 },
+      { id: 'kge2009', weight: 1 },
+      { id: 'w1', weight: 1 },
+      { id: 'peak_lag_abs', weight: 1 },
     ],
     boundedDisplay: false,
     showBootstrapCIs: false,

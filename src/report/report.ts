@@ -15,6 +15,7 @@ import { UNITS } from '../units/registry'
 import { exportTemplate } from '../ui/PlotHost'
 import { APP_VERSION } from '../version'
 import type { Dataset, Run } from '../types'
+import type { EventReport, EventError } from '../metrics/timing/events'
 import type { Frame } from '../ui/compute'
 
 export interface ReportSections {
@@ -27,6 +28,34 @@ const CITATION = `Shahvaran, A.R. (2026). Hydrograph Metrics Explorer v${APP_VER
 
 export const reportFilename = (ds: Dataset, ext: string) =>
   `${ds.name.replace(/\W+/g, '_')}_evaluation_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.${ext}`;
+
+/** ISO day for a millisecond stamp; 'n/a' when the stamp is missing or invalid
+ *  (a Date built from undefined/NaN throws 'Invalid time value' on toISOString,
+ *  which used to abort whole reports). */
+export function isoDay(ms: number | undefined): string {
+  return Number.isFinite(ms as number) ? new Date(ms as number).toISOString().slice(0, 10) : 'n/a';
+}
+
+/** One string row per event for the report tables (DOCX and PDF share this).
+ *  Root cause of the historic 'Report generation failed: Invalid time value':
+ *  both renderers read fields that do not exist on EventError (e.start,
+ *  e.obsPeak, e.simPeak, e.volBiasPct) behind an 'any' cast, so the date lookup
+ *  indexed with undefined and Date.toISOString threw as soon as a single event
+ *  existed. This helper reads the real shape (e.obs.start, e.obs.peakQ,
+ *  peakMagErrPct, volumeErrPct) and is pinned by tests/report-events.test.ts. */
+export function eventTableRows(ev: EventReport, frame: Frame, ds: Dataset, limit = 12): string[][] {
+  return ev.events.slice(0, limit).map((e: EventError, k: number) => {
+    const simPeak = e.obs.peakQ * (1 + e.peakMagErrPct / 100);
+    return [
+      String(k + 1),
+      isoDay(frame.dates[e.obs.start] ?? ds.dates[e.obs.start]),
+      fmtNum(e.obs.peakQ, 2),
+      fmtNum(simPeak, 2),
+      fmtNum(e.peakLag, 1),
+      fmtNum(e.volumeErrPct, 1),
+    ];
+  });
+}
 
 // ------------------------------------------------------------ figure capture
 async function plotPng(traces: unknown[], layout: Record<string, unknown>): Promise<{ dataUrl: string; w: number; h: number }> {
@@ -216,10 +245,7 @@ export async function buildDocx(p: ReportPayload): Promise<Blob> {
       const w = Math.floor(CONTENT / 6);
       kids.push(tableOf(
         ['#', 'Start', 'Obs peak', 'Sim peak', 'Peak lag [steps]', 'Volume bias %'],
-        ev.events.slice(0, 12).map((e: any, k: number) => ({
-          cells: [String(k + 1), new Date(frame.dates[e.start] ?? ds.dates[e.start]).toISOString().slice(0, 10),
-            fmtNum(e.obsPeak, 2), fmtNum(e.simPeak, 2), fmtNum(e.peakLag, 1), fmtNum(e.volBiasPct, 1)],
-        })),
+        eventTableRows(ev, frame, ds).map(cells => ({ cells })),
         [w, w, w, w, w, CONTENT - 5 * w],
       ));
       if (ev.events.length > 12) Ptext(`… ${ev.events.length - 12} more events omitted; export the full table from the Timing tab.`, { italic: true });
@@ -227,14 +253,14 @@ export async function buildDocx(p: ReportPayload): Promise<Blob> {
   }
 
   if (sections.ranking && runs.length >= 2) {
-    H('5. Run ranking and recommendation');
+    H('5. Simulation ranking and recommendation');
     const priorities = ds.view.priorityMetrics.length ? ds.view.priorityMetrics : DEFAULT_PRIORITIES;
     const rows: RankRow[] = rankRuns(runs.map((r, i) => ({ runName: r.name, values: outputs[i].values })), priorities);
     const order = rows.map((_, i) => i).sort((a, b) => rows[a].rank - rows[b].rank);
     const w0 = 900, wn = 2600;
     const wm = Math.max(900, Math.floor((CONTENT - w0 - wn - 1400) / priorities.length));
     kids.push(tableOf(
-      ['Rank', 'Run', ...priorities.map(pr => `${pr.id} (w=${pr.weight})`), 'Composite'],
+      ['Rank', 'Simulation', ...priorities.map(pr => `${pr.id} (w=${pr.weight})`), 'Composite'],
       order.map(i => ({
         cells: [String(rows[i].rank), rows[i].runName,
           ...priorities.map(pr => (isFinite(rows[i].perMetric[pr.id]) ? rows[i].perMetric[pr.id].toFixed(2) : 'n/a')),
@@ -295,14 +321,14 @@ export function openPrintReport(p: ReportPayload): void {
       if (!ev || !ev.events.length) { body += '<p><em>n/a; no events at this threshold.</em></p>'; return; }
       body += `<p>Hits ${ev.hits} · misses ${ev.misses} · false alarms ${ev.falseAlarms} · threat ${fmtNum(ev.threat, 2)}.</p>`;
       body += `<table><thead>${rowsHtml(['#', 'Start', 'Obs peak', 'Sim peak', 'Peak lag', 'Vol bias %'], 'th')}</thead><tbody>` +
-        ev.events.slice(0, 12).map((e: any, k: number) => rowsHtml([String(k + 1), new Date(frame.dates[e.start] ?? ds.dates[e.start]).toISOString().slice(0, 10), fmtNum(e.obsPeak, 2), fmtNum(e.simPeak, 2), fmtNum(e.peakLag, 1), fmtNum(e.volBiasPct, 1)])).join('') + '</tbody></table>';
+        eventTableRows(ev, frame, ds).map(cells => rowsHtml(cells)).join('') + '</tbody></table>';
     });
   }
   if (sections.ranking && runs.length >= 2) {
     const priorities = ds.view.priorityMetrics.length ? ds.view.priorityMetrics : DEFAULT_PRIORITIES;
     const rows = rankRuns(runs.map((r, i) => ({ runName: r.name, values: outputs[i].values })), priorities);
     const order = rows.map((_, i) => i).sort((a, b) => rows[a].rank - rows[b].rank);
-    body += `<h2>5. Run ranking</h2><table><thead>${rowsHtml(['Rank', 'Run', ...priorities.map(p2 => `${p2.id} (w=${p2.weight})`), 'Composite'], 'th')}</thead><tbody>` +
+    body += `<h2>5. Simulation ranking</h2><table><thead>${rowsHtml(['Rank', 'Simulation', ...priorities.map(p2 => `${p2.id} (w=${p2.weight})`), 'Composite'], 'th')}</thead><tbody>` +
       order.map(i => rowsHtml([String(rows[i].rank), rows[i].runName, ...priorities.map(p2 => (isFinite(rows[i].perMetric[p2.id]) ? rows[i].perMetric[p2.id].toFixed(2) : 'n/a')), rows[i].composite.toFixed(3)], 'td', rows[i].rank === 1 ? 'timing' : '')).join('') + '</tbody></table>' +
       `<p><strong>Recommended run: ${esc(rows[order[0]].runName)}</strong> (composite ${rows[order[0]].composite.toFixed(3)}).</p>`;
   }

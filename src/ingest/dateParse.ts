@@ -88,7 +88,7 @@ export function parseDates(raws: string[], fmt: DateFormat = 'auto'): ParsedDate
   let ambiguous = false;
   if (sawFirstGt12 && !sawSecondGt12) used = 'dmy';
   else if (sawSecondGt12 && !sawFirstGt12) used = 'mdy';
-  else ambiguous = true; // undecidable (or contradictory) — UI must ask
+  else ambiguous = true; // undecidable (or contradictory); UI must ask
 
   const ms = trimmed.map(s => parseOne(s, used));
   return { ms, used, ambiguous, failures: ms.filter(Number.isNaN).length };

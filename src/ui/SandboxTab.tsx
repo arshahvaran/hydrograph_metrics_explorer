@@ -73,7 +73,7 @@ function SandboxTabInner({ ds }: { ds: Dataset }) {
           </label>
           {sb.mode === 'perturb' && (
             <label>Simulation to perturb{' '}
-              <select aria-label="Perturbation target run" value={target?.id} onChange={e => set({ targetRunId: e.target.value })}>
+              <select aria-label="Perturbation target simulation" value={target?.id} onChange={e => set({ targetRunId: e.target.value })}>
                 {runs.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
             </label>

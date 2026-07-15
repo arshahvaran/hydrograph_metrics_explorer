@@ -1,4 +1,4 @@
-/** AGENT F — privacy manifest. The headline promise: user series data never
+/** Privacy manifest. The headline promise: user series data never
  *  leaves the browser. This test freezes the egress surface; adding any new
  *  network call fails it until the manifest is consciously updated. */
 import { describe, it, expect } from 'vitest'
@@ -22,7 +22,7 @@ describe('privacy manifest', () => {
     }
     expect(hits.sort()).toEqual([
       'src/ingest/ingest.ts:107',   // same-origin sample loader (BASE_URL/samples/…)
-      'src/report/report.ts:141',   // data: URLs only (plot images into the DOCX)
+      'src/report/report.ts:170',   // data: URLs only (plot images into the DOCX)
     ]);
   });
   it('src has no beacons, sockets, or geolocation', () => {

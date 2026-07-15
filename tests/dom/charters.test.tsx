@@ -1,5 +1,5 @@
 /**
- * AGENT A — exploratory charters, encoded. Each charter is a session a rushed
+ * QA charters, encoded. Each charter is a session a rushed
  * hydrologist might actually have. Assertions are "no crash + coherent state",
  * with a console.error trap for React render errors throughout.
  */
@@ -41,8 +41,8 @@ const commit = (name = 'charter', n = 90, phase = 0) =>
     name, unit: 'm3s', dateFormat: 'auto', missingValue: null, roles: ['date', 'observed', 'run', 'run'],
   }).commit!);
 
-describe('AGENT A charters', () => {
-  it('A1: cold start — touch every reachable control before any data exists', () => {
+describe('QA charters', () => {
+  it('A1: cold start; touch every reachable control before any data exists', () => {
     render(<App />);
     // every non-data tab must be disabled and clicking must not navigate or throw
     for (const t of ['Metrics', 'Plots', 'Timing', 'Sandbox', 'Compare', 'Map', 'Report']) {
@@ -67,7 +67,7 @@ describe('AGENT A charters', () => {
     expect(screen.getAllByText(/Perturbation sandbox/i).length).toBeGreaterThan(0);
   });
 
-  it('A3: sandbox abuse — extremes, rapid drags, presets, nonsense combos', async () => {
+  it('A3: sandbox abuse; extremes, rapid drags, presets, nonsense combos', async () => {
     commit();
     render(<App />);
     fireEvent.click(screen.getByRole('tab', { name: 'Sandbox' }));
@@ -96,7 +96,7 @@ describe('AGENT A charters', () => {
     commit('ds-two', 120, 4);
     render(<App />);
     fireEvent.click(screen.getByRole('tab', { name: 'Metrics' }));
-    const grab = () => (screen.getByRole('table', { name: /metric values per run/i }).textContent ?? '');
+    const grab = () => (screen.getByRole('table', { name: /metric values per simulation/i }).textContent ?? '');
     const first = grab();
     // hammer settings back and forth
     const st = useApp.getState();
@@ -110,7 +110,7 @@ describe('AGENT A charters', () => {
     expect(second).toEqual(first); // same input, same answer
   });
 
-  it('A5: soak-lite — 200 rapid mixed interactions without degradation', () => {
+  it('A5: soak-lite; 200 rapid mixed interactions without degradation', () => {
     commit();
     render(<App />);
     const tabs = ['Metrics', 'Plots', 'Timing', 'Sandbox', 'Compare', 'Map', 'Report'];

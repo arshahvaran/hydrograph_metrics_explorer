@@ -154,7 +154,7 @@ export type ComputeCtx = ComputeContext;
 /** The synchronous (classical) metric block on an already-paired, already-
  *  transformed pair; the unit resampled by the bootstrap. */
 
-/** Contract barrier: metric values are finite or NaN, never ±Infinity —
+/** Contract barrier: metric values are finite or NaN, never ±Infinity,
  *  IEEE754 overflow on degenerate data must read "n/a", not a number.
  *  Per-metric guards handle the statistically meaningful zero-denominator
  *  cases; this enforces the contract against overflow in any remaining or

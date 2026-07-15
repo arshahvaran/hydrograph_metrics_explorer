@@ -1,4 +1,4 @@
-/** AGENT C — property-based fuzz (fast-check). Universal invariants that must
+/** QA property-based fuzz (fast-check). Universal invariants that must
  *  hold for ANY finite input, not just crafted cases. */
 import { describe, it, expect } from 'vitest'
 import fc from 'fast-check'

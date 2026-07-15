@@ -92,7 +92,7 @@ export interface XwtResult {
 /**
  * Cross-wavelet phase lag. Positive lag = simulation late.
  * The cross spectrum W_os = W_o · conj(W_s) has phase φ = arg(W_os); with the
- * convention above, sim lagging obs by k gives φ < 0? — sign is fixed so that a
+ * convention above, sim lagging obs by k gives φ < 0?: sign is fixed so that a
  * pure sim delay of k steps yields headlineLag ≈ +k (verified by unit test).
  */
 export function xwtLag(obsIn: Vec, simIn: Vec): XwtResult {
@@ -127,7 +127,7 @@ export function xwtLag(obsIn: Vec, simIn: Vec): XwtResult {
   const Ws = cwt(s, scales);
 
   const aO = ar1(o), aS = ar1(s);
-  const Z95 = 3.999; // ν = 2 (complex wavelet), 95 % — Torrence & Compo / Grinsted
+  const Z95 = 3.999; // ν = 2 (complex wavelet), 95 %; Torrence & Compo / Grinsted
   const redNoise = (a: number, period: number) => {
     const f = 1 / period; // cycles per step
     return (1 - a * a) / (1 + a * a - 2 * a * Math.cos(2 * Math.PI * f));

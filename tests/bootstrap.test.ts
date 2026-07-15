@@ -54,7 +54,7 @@ describe('block-bootstrap CIs (spec §21 v1.1 → CP8)', () => {
     expect(width(b, 'nse')).toBeLessThan(width(a, 'nse'));
   });
 
-  it('covers only the classical block — no timing ids in the CI map', () => {
+  it('covers only the classical block; no timing ids in the CI map', () => {
     const { o, s } = synth(300);
     const res = bootstrapCIs(o, s, CTX, { B: 60, seed: 9 });
     for (const id of ['peak_lag_abs', 'dtw_dist', 'w1', 'de', 'xwt_lag', 'event_threat']) {

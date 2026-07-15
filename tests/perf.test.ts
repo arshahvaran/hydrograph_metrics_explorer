@@ -1,4 +1,4 @@
-/** AGENT D — performance & memory. Measured, not guessed. Budgets are loose
+/** QA performance and memory. Measured, not guessed. Budgets are loose
  *  (CI-safe); the printed numbers are the deliverable. */
 import { describe, it, expect } from 'vitest'
 import { computeAll, classicalValues } from '../src/metrics/registry'
@@ -14,7 +14,7 @@ const ctxFor = (n: number) => {
 };
 const time = (f: () => void): number => { const t0 = performance.now(); f(); return performance.now() - t0; };
 
-describe('AGENT D: performance numbers', () => {
+describe('QA performance numbers', () => {
   it('heavy panel at 50k (spec-scale) and 500k (10x)', () => {
     const o50 = mk(50_000), s50 = mk(50_000, 4);
     const t50 = time(() => computeAll(o50, s50, ctxFor(50_000)));

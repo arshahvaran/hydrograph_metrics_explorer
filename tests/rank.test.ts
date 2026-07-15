@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { rankRuns, scoreMetric } from '../src/metrics/rank'
+import { rankRuns, scoreMetric, DEFAULT_PRIORITIES } from '../src/metrics/rank'
+import { byId, PRESETS } from '../src/metrics/registry'
+import { CANDIDATE_IDS } from '../src/ui/CompareTab'
 import { c2m } from '../src/metrics/classical/catalogue'
 
 describe('composite priority ranking (spec §14, AC13)', () => {
@@ -45,5 +47,38 @@ describe('composite priority ranking (spec §14, AC13)', () => {
     const a = rows.find(r => r.runName === 'A')!;
     expect(Number.isFinite(a.composite)).toBe(true);
     expect(Number.isNaN(a.perMetric['w1'])).toBe(true);
+  });
+});
+
+/* Round 7: the author asked for a direction audit of the composite ("for some
+ * metrics the optimal point might be different; sometimes less is good and
+ * sometimes more is good"). For every Compare-tab candidate, a value closer to
+ * the metric's stated optimum must score strictly higher, whatever the
+ * direction. Also pins governance: candidates are essentials-only and the
+ * default priorities are always selectable. */
+
+describe('composite direction audit (round 7)', () => {
+  const pairs: Record<string, [number, number]> = {
+    max: [0.9, 0.4],    // higher is better: 0.9 must outrank 0.4
+    min: [0.2, 1.0],    // lower is better
+    zero: [-0.1, 0.6],  // closest to 0 wins, sign-blind
+    one: [0.95, 0.5],   // closest to 1 wins
+  };
+  for (const id of CANDIDATE_IDS) {
+    it(`${id}: the value nearer its optimum scores higher (direction ${byId.get(id)!.direction})`, () => {
+      const dir = byId.get(id)!.direction as keyof typeof pairs;
+      const [good, bad] = pairs[dir];
+      const [sGood, sBad] = scoreMetric(id, [good, bad]);
+      expect(sGood).toBeGreaterThan(sBad);
+      expect(sGood).toBeCloseTo(1, 9); // relative scoring: best of the pair pins to 1
+      expect(sBad).toBeCloseTo(0, 9);  // and the other end of the pair pins to 0
+    });
+  }
+  it('every Compare candidate is in the essentials preset', () => {
+    const ess = new Set(PRESETS.essentials as string[]);
+    for (const id of CANDIDATE_IDS) expect(ess.has(id), id).toBe(true);
+  });
+  it('the default priorities are all selectable candidates', () => {
+    for (const p of DEFAULT_PRIORITIES) expect((CANDIDATE_IDS as readonly string[]).includes(p.id), p.id).toBe(true);
   });
 });

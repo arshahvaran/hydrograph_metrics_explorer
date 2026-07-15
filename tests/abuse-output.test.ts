@@ -1,4 +1,4 @@
-/** AGENT B — output & project-file abuse. Guards QA-007 (hostile/legacy/broken
+/** QA output and project-file abuse. Guards QA-007 (hostile/legacy/broken
  *  project files) and QA-008 (CSV formula injection + quoting). */
 import { describe, it, expect } from 'vitest'
 import { csvCell, csvLine } from '../src/ui/format'

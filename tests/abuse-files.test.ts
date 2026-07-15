@@ -1,4 +1,4 @@
-/** AGENT B — file-format abuse: workbooks, ragged/hostile delimited text,
+/** QA file-format abuse: workbooks, ragged/hostile delimited text,
  *  reversed windows, and wide reports. Guards QA-009 and the S2/S3 layout
  *  and subsetting defects. */
 import { describe, it, expect } from 'vitest'

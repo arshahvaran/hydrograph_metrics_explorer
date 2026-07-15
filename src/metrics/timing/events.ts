@@ -156,7 +156,7 @@ export function peakTiming(
 
   // QA-011b: an argmax sitting ON the window boundary while the simulation is
   // still rising beyond it means the true peak lies outside the window. The
-  // old code reported the clamped boundary lag as truth — a confidently wrong
+  // old code reported the clamped boundary lag as truth: a confidently wrong
   // number. Such pairs are UNRESOLVED: excluded from the means and counted.
   const peaks: PeakMatch[] = [];
   let unresolved = 0;

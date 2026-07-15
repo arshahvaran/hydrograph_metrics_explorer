@@ -1,6 +1,6 @@
 // Wasserstein distances between hydrographs treated as unit-mass distributions
-// of flow over TIME (Magyar & Sambridge, 2023) — the time-axis reading, distinct
-// from divergences on the marginal flow-value distribution — and Dynamic Time
+// of flow over TIME (Magyar & Sambridge, 2023): the time-axis reading, distinct
+// from divergences on the marginal flow-value distribution: and Dynamic Time
 // Warping with a Sakoe–Chiba band (Sakoe & Chiba, 1978).
 
 import type { Vec } from '../support/stats'
@@ -60,7 +60,7 @@ export function wasserstein2sq(obs: Vec, sim: Vec): number {
 export interface DtwResult {
   distance: number;         // accumulated |a − b| along the optimal path
   normalized: number;       // distance / path length
-  meanAbsWarp: number;      // mean |i − j| along the path — the timing readout
+  meanAbsWarp: number;      // mean |i − j| along the path; the timing readout
   path: [number, number][]; // optimal alignment (decimate for display)
   band: number;
 }

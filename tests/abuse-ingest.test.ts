@@ -1,4 +1,4 @@
-/** AGENT B — ingest abuse battery. QA-005 (decimal comma) and QA-006 (unsorted /
+/** QA ingest abuse battery. QA-005 (decimal comma) and QA-006 (unsorted /
  *  duplicated dates) are S1 silent-wrongness defects; the rest probe graceful
  *  degradation. */
 import { describe, it, expect } from 'vitest'
@@ -9,7 +9,7 @@ import { computeForRun, __resetComputeCachesForTests } from '../src/ui/compute'
 
 describe('QA-005 numeric cell parsing (S1: silent wrong values)', () => {
   const cases: [string, number][] = [
-    ['3,5', 3.5],          // European decimal comma — was parsed as 35
+    ['3,5', 3.5],          // European decimal comma; was parsed as 35
     ['12,34', 12.34],
     ['1,234', 1234],       // anglophone thousands
     ['1,234.5', 1234.5],   // thousands + dot decimal

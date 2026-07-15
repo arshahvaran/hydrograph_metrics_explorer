@@ -1,4 +1,4 @@
-/** AGENT D — concurrency: a slow worker result for dataset A arriving AFTER
+/** QA concurrency: a slow worker result for dataset A arriving AFTER
  *  the user switched to dataset B must neither overwrite B's panel nor crash;
  *  switching back to A shows A's own (late) result. */
 import { describe, it, expect, beforeAll } from 'vitest'
@@ -45,13 +45,13 @@ describe('worker race: stale results never cross datasets', () => {
     st.setActiveDataset(idB);
     useApp.getState().updateView({ activeTab: 'metrics' });   // activeTab is per-dataset
     const bodyHas = (re: RegExp) => re.test(document.body.textContent ?? '');
-    await waitFor(() => expect(bodyHas(/Valid pairs per run \(n\):\s*m:\s*80/)).toBe(true), { timeout: 3000 });
-    // Let A's stale result arrive while B is displayed — must not corrupt B.
+    await waitFor(() => expect(bodyHas(/Valid pairs per simulation \(n\):\s*m:\s*80/)).toBe(true), { timeout: 3000 });
+    // Let A's stale result arrive while B is displayed: must not corrupt B.
     await new Promise(r => setTimeout(r, 150));
-    expect(bodyHas(/Valid pairs per run \(n\):\s*m:\s*80/)).toBe(true);
-    expect(bodyHas(/Valid pairs per run \(n\):\s*m:\s*120/)).toBe(false);
+    expect(bodyHas(/Valid pairs per simulation \(n\):\s*m:\s*80/)).toBe(true);
+    expect(bodyHas(/Valid pairs per simulation \(n\):\s*m:\s*120/)).toBe(false);
     // Back to A: its late-arrived result is served from cache, correctly.
     useApp.getState().setActiveDataset(idA);
-    await waitFor(() => expect(bodyHas(/Valid pairs per run \(n\):\s*m:\s*120/)).toBe(true), { timeout: 3000 });
+    await waitFor(() => expect(bodyHas(/Valid pairs per simulation \(n\):\s*m:\s*120/)).toBe(true), { timeout: 3000 });
   });
 });

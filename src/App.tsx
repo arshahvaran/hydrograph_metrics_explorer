@@ -85,11 +85,11 @@ export default function App() {
               if (json.length > 25_000_000) alert(`Heads-up: this project serialises to ${(json.length / 1e6).toFixed(0)} MB (spec suggests staying under 25 MB). It will still save, but loading may be slow.`);
               download(`hme_project_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.hme.json`, json, 'application/json');
             }}>Save</button>
-          <button title="Start a new empty project" disabled={!project.datasets.length}
-            onClick={() => { if (confirm('Clear all datasets and start a new project? Unsaved work is lost.')) useApp.getState().loadProject({ schemaVersion: 1, datasets: [], activeDatasetId: null }); }}>New</button>
           <label className="filebtn" title="Load a saved project">Load
             <input ref={loadRef} type="file" accept=".json" className="vh" aria-label="Load a saved .hme.json project" onChange={e => e.target.files?.[0] && onLoadProject(e.target.files[0])} />
           </label>
+          <button title="Start a new empty project" disabled={!project.datasets.length}
+            onClick={() => { if (confirm('Clear all datasets and start a new project? Unsaved work is lost.')) useApp.getState().loadProject({ schemaVersion: 1, datasets: [], activeDatasetId: null }); }}>New</button>
           <button className="theme-toggle" onClick={toggleTheme} title="Toggle light or dark interface" aria-label="Toggle colour theme">
             {theme === 'dark' ? '\u2600\uFE0E' : '\u263D'}
           </button>

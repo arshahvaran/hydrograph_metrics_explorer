@@ -43,7 +43,7 @@ export function ReportTab() {
     <div>
       <section className="card">
         <h2>Report <span className="muted">Word or PDF, generated entirely in your browser</span></h2>
-        {!runs.length && <p className="warning">Add at least one visible model run first.</p>}
+        {!runs.length && <p className="warning">Add at least one visible model simulation first.</p>}
         <div className="controls">
           {(
             [['summary', 'Data & settings'], ['metrics', 'Metrics table (timing rows flagged)'],

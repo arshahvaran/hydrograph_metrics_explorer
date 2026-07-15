@@ -106,12 +106,12 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
           <button className="primary" onClick={() => exportCsv(',')}>Export CSV</button>
         </div>
         <p className="muted" aria-live="polite">
-          Valid pairs per run (n): {runs.map((r, i) => `${r.name}: ${outputs[i]?.n ?? '…'}`).join(' · ')}.{busy ? ' Computing in a background worker…' : ''}{frame.caption ? ` Subset: ${frame.caption}.` : ''}
+          Valid pairs per simulation (n): {runs.map((r, i) => `${r.name}: ${outputs[i]?.n ?? '…'}`).join(' · ')}.{busy ? ' Computing in a background worker…' : ''}{frame.caption ? ` Subset: ${frame.caption}.` : ''}
           {ds.view.transform !== 'none' && ' Metrics are computed on the transformed series.'}
           {' '}Rows tinted <span className="timingchip">⏱</span> are the timing- &amp; shape-aware measures, recommended as complements to conventional metrics. For datasets with multiple simulations, the better value in each row is underlined.
         </p>
         {outputs.flatMap(o => o?.notes ?? []).filter((v, i, a) => a.indexOf(v) === i).map(nn => <div key={nn} className="warning">{nn}</div>)}
-        <div className="mapscroll"><table className="grid metricstable" aria-label="Metric values per run">
+        <div className="mapscroll"><table className="grid metricstable" aria-label="Metric values per simulation">
           <thead>
             <tr><th>Metric</th><th>Optimum</th>{runs.map(r => <th key={r.id} style={{ color: r.color }}>{r.name}</th>)}</tr>
           </thead>
