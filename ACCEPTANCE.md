@@ -17,7 +17,7 @@ Each criterion below maps to its implementation and, where numeric, its automate
 | 10 | Event detection + per-event errors + "n/a; no events" | ✅ | `events.ts`; per-event table in Timing tab; hand-calculation pins in `tests/timing.test.ts`; empty-state string when threshold too high |
 | 11 | Sandbox ~100 ms; double-penalty shows NSE/KGE collapse vs W/DTW stability; Mode 2; non-destructive | ✅ | Worker + deferred value + last-good retention keeps interaction fluid; decimation bounds heavy metrics; presets reproduce the paper's contrast; perturbation never mutates stored series |
 | 12 | Lag sweep marks best lag, in sync with shift slider | ✅ | Sweep computed in the same panel as the readout; best-lag markers; shares `shiftSteps` state |
-| 13 | ≥2 runs → C2M-normalised composite ranking + Recommended run | ✅ | `rank.ts` + `CompareTab`; `tests/rank.test.ts` (5 tests: C2M mapping, target-zero, degenerate ties, weight sensitivity, missing-value handling) |
+| 13 | ≥2 runs → C2M-normalised composite ranking + Recommended simulation | ✅ | `rank.ts` + `CompareTab`; `tests/rank.test.ts` (5 tests: C2M mapping, target-zero, degenerate ties, weight sensitivity, missing-value handling) |
 | 14 | Map centres on WGS84; marker click switches datasets | ✅ | `MapTab` (Leaflet + OSM, dark-mode tile filter) |
 | 15 | Report DOCX (metrics incl. timing rows, plots, event summary) + matching PDF | ✅ | `report.ts` + Report tab; DOCX via docx-js, PDF via print-styled window with identical content; filename `<dataset>_evaluation_<yyyymmdd>` |
 | 16 | `.hme.json` save/load restores faithfully | ✅ | `serialiseProject`/`loadProject` round-trip full `Project`; schemaVersion check; >25 MB warning |

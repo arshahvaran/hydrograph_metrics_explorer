@@ -27,7 +27,7 @@ function SandboxTabInner({ ds }: { ds: Dataset }) {
   const baseStats = useMemo(() => {
     const fin = Array.from(baseSeries as ArrayLike<number>).filter(isFinite);
     return { mean: mean(fin), std: stdPop(fin) };
-  }, [ds.id, sb.mode, target?.id]);
+  }, [baseSeries]); // identity changes on dataset switch, target/mode change, AND unit conversion
 
   const deferred = useDeferredValue(JSON.stringify(sb));
   const perturbed = useMemo(

@@ -22,7 +22,7 @@ describe('privacy manifest', () => {
     }
     expect(hits.sort()).toEqual([
       'src/ingest/ingest.ts:107',   // same-origin sample loader (BASE_URL/samples/…)
-      'src/report/report.ts:170',   // data: URLs only (plot images into the DOCX)
+      'src/report/report.ts:173',   // data: URLs only (plot images into the DOCX)
     ]);
   });
   it('src has no beacons, sockets, or geolocation', () => {

@@ -39,8 +39,12 @@ function loadView(v: unknown, stepMs: number, n: number): ViewState {
   if (o.resample === 'native' || o.resample === 'daily' || o.resample === 'monthly') out.resample = o.resample;
   if (typeof o.benchmark === 'string') out.benchmark = str(o.benchmark, base.benchmark) as ViewState['benchmark'];
   if (Array.isArray(o.priorityMetrics)) {
-    const pm = (o.priorityMetrics as unknown[]).filter((x): x is { id: string; weight: number } =>
-      typeof x === 'object' && x !== null && typeof (x as any).id === 'string' && typeof (x as any).weight === 'number');
+    const seen = new Set<string>();
+    const pm = (o.priorityMetrics as unknown[])
+      .filter((x): x is { id: string; weight: number } =>
+        typeof x === 'object' && x !== null && typeof (x as any).id === 'string'
+        && Number.isFinite((x as any).weight) && (x as any).weight >= 0)
+      .filter(x => (seen.has(x.id) ? false : (seen.add(x.id), true)));
     if (pm.length) out.priorityMetrics = pm.map(x => ({ id: x.id, weight: x.weight }));
   }
   if (typeof o.showBootstrapCIs === 'boolean') out.showBootstrapCIs = o.showBootstrapCIs;

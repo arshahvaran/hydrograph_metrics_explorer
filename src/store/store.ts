@@ -1,3 +1,4 @@
+import { UNITS } from '../units/registry'
 import { create } from 'zustand'
 import type { Dataset, Project, Run, UnitId, ViewState, TimingConfig, SandboxState, AreaUnitId } from '../types'
 import { defaultView, RUN_PALETTE } from '../types'
@@ -175,6 +176,7 @@ export const useApp = create<AppState>((set, get) => ({
     const s = get();
     const ds = s.project.datasets.find(d => d.id === s.project.activeDatasetId);
     if (!ds) return 'No active dataset';
+    if (!UNITS[to]) return `Unknown unit "${to}"`;
     try {
       const ctx = {
         area: ds.area, stepMs: ds.step.ms,
@@ -182,7 +184,23 @@ export const useApp = create<AppState>((set, get) => ({
       };
       const observed = { ...ds.observed, values: Array.from(convertSeries(ds.observed.values, { ...ctx, from: ds.targetUnit, to })) };
       const runs = ds.runs.map(r => ({ ...r, values: Array.from(convertSeries(r.values, { ...ctx, from: ds.targetUnit, to })) }));
-      set(st => mutateActive(st, d => ({ ...d, observed, runs, targetUnit: to })));
+      // A user-set ABSOLUTE event threshold is a value in the old unit; leaving
+      // the number as-is silently redefines every event (8 m3/s became "8 L/s").
+      // When the conversion factor is uniform across the record (all flow<->flow
+      // conversions, and depth<->volume on a fixed step) the threshold converts
+      // exactly; a non-uniform (monthly depth) factor has no single right answer,
+      // so the value is then left for the user, who is shown the new unit anyway.
+      let view = ds.view;
+      const et = view.timingConfig.eventThreshold;
+      if (et.kind === 'absolute' && Number.isFinite(et.value)) {
+        const probe = convertSeries(ds.dates.map(() => 1), { ...ctx, from: ds.targetUnit, to });
+        let lo = Infinity, hi = -Infinity;
+        for (const f of probe) { if (f < lo) lo = f; if (f > hi) hi = f; }
+        if (Number.isFinite(lo) && hi - lo <= 1e-9 * Math.max(1, Math.abs(hi))) {
+          view = { ...view, timingConfig: { ...view.timingConfig, eventThreshold: { ...et, value: et.value * lo } } };
+        }
+      }
+      set(st => mutateActive(st, d => ({ ...d, observed, runs, targetUnit: to, view })));
       return null;
     } catch (e) {
       return e instanceof Error ? e.message : String(e);

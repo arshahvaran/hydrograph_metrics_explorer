@@ -83,32 +83,36 @@ export async function buildReportImages(ds: Dataset, frame: Frame, runs: Run[], 
   const dates = frame.dates.map(m => new Date(m).toISOString().slice(0, 10));
   const clean = (v: ArrayLike<number>) => Array.from(v, x => (isFinite(x as number) ? (x as number) : null));
   const images: ReportImage[] = [];
+  // One misbehaving canvas must not abort the whole report: each figure is
+  // isolated; a failed figure is skipped (logged) and the rest still render.
+  const tryFigure = async (caption: string, build: () => Promise<{ dataUrl: string; w: number; h: number }>) => {
+    try { images.push({ caption, ...(await build()) }); }
+    catch (e) { console.error(`Report figure skipped (${caption}):`, e); }
+  };
 
-  const hydro = await plotPng(
+  await tryFigure(`Fig. R1. Observed vs simulated hydrographs${frame.caption ? ` (${frame.caption})` : ''}.`, () => plotPng(
     [
       { x: dates, y: clean(frame.obs), name: ds.observed.name || 'Observed', type: 'scatter', mode: 'lines', line: { color: '#1f77b4', width: 2.2 } },
       ...runs.map(r => ({ x: dates, y: clean(frame.apply(r.values)), name: r.name, type: 'scatter', mode: 'lines', line: { color: r.color, width: 1.6 } })),
     ],
     { yaxis: { title: `Q [${UNITS[ds.targetUnit].label}]` }, xaxis: { title: '' } },
-  );
-  images.push({ caption: `Fig. R1. Observed vs simulated hydrographs${frame.caption ? ` (${frame.caption})` : ''}.`, ...hydro });
+  ));
 
   const r0 = runs[0];
   const o = clean(frame.obs), s = clean(frame.apply(r0.values));
   const finite = o.map((v, i) => (v != null && s[i] != null ? [v, s[i]!] as [number, number] : null)).filter((x): x is [number, number] => !!x);
   const lim = [0, arrMax(finite.map(p => Math.max(p[0], p[1]))) * 1.05];
-  const scat = await plotPng(
+  await tryFigure(`Fig. R2. Predicted–observed scatter, ${r0.name}.`, () => plotPng(
     [
       { x: finite.map(p => p[0]), y: finite.map(p => p[1]), name: r0.name, type: 'scattergl', mode: 'markers', marker: { color: r0.color, size: 4, opacity: 0.55 } },
       { x: lim, y: lim, name: '1:1', type: 'scatter', mode: 'lines', line: { color: '#555', dash: 'dot', width: 1.2 } },
     ],
     { xaxis: { title: `Observed [${UNITS[ds.targetUnit].label}]`, range: lim }, yaxis: { title: `Simulated [${UNITS[ds.targetUnit].label}]`, range: lim, scaleanchor: 'x' } },
-  );
-  images.push({ caption: `Fig. R2. Predicted–observed scatter, ${r0.name}.`, ...scat });
+  ));
 
   const rows = outputs[0]?.extras.sweep?.rows ?? [];
   if (rows.length) {
-    const sweep = await plotPng(
+    await tryFigure(`Fig. R3. Lag sweep for ${r0.name}: time-synchronous NSE vs the transport-based W₁.`, () => plotPng(
       [
         { x: rows.map((r: any) => r.lag), y: rows.map((r: any) => r.nse), name: 'NSE', type: 'scatter', mode: 'lines', line: { color: '#1f77b4', width: 2.2 } },
         { x: rows.map((r: any) => r.lag), y: rows.map((r: any) => r.w1), name: 'W₁', yaxis: 'y2', type: 'scatter', mode: 'lines', line: { color: '#d95f02', width: 2, dash: 'dot' } },
@@ -118,8 +122,7 @@ export async function buildReportImages(ds: Dataset, frame: Frame, runs: Run[], 
         yaxis: { title: 'NSE' }, yaxis2: { title: 'W₁', overlaying: 'y', side: 'right' },
         shapes: [{ type: 'line', x0: 0, x1: 0, yref: 'paper', y0: 0, y1: 1, line: { color: '#888', width: 1, dash: 'dot' } }],
       },
-    );
-    images.push({ caption: `Fig. R3. Lag sweep for ${r0.name}: time-synchronous NSE vs the transport-based W₁.`, ...sweep });
+    ));
   }
   return images;
 }
@@ -269,7 +272,11 @@ export async function buildDocx(p: ReportPayload): Promise<Blob> {
       })),
       [w0, wn, ...priorities.map(() => wm), 1400],
     ));
-    Ptext(`Recommended run: ${rows[order[0]].runName} (composite ${rows[order[0]].composite.toFixed(3)}). Scores are relative to the compared runs; unbounded efficiencies are normalised through C2M = E/(2−E) before weighting.`);
+    if (isFinite(rows[order[0]].composite)) {
+      Ptext(`Recommended simulation: ${rows[order[0]].runName} (composite ${rows[order[0]].composite.toFixed(3)}). Scores are relative to the compared simulations; unbounded efficiencies are normalised through C2M = E/(2−E) before weighting.`);
+    } else {
+      Ptext('No composite could be computed for the selected priority metrics.', { italic: true });
+    }
   }
 
   if (notes.trim()) { H('Notes'); Ptext(notes.trim()); }
@@ -330,7 +337,9 @@ export function openPrintReport(p: ReportPayload): void {
     const order = rows.map((_, i) => i).sort((a, b) => rows[a].rank - rows[b].rank);
     body += `<h2>5. Simulation ranking</h2><table><thead>${rowsHtml(['Rank', 'Simulation', ...priorities.map(p2 => `${p2.id} (w=${p2.weight})`), 'Composite'], 'th')}</thead><tbody>` +
       order.map(i => rowsHtml([String(rows[i].rank), rows[i].runName, ...priorities.map(p2 => (isFinite(rows[i].perMetric[p2.id]) ? rows[i].perMetric[p2.id].toFixed(2) : 'n/a')), rows[i].composite.toFixed(3)], 'td', rows[i].rank === 1 ? 'timing' : '')).join('') + '</tbody></table>' +
-      `<p><strong>Recommended run: ${esc(rows[order[0]].runName)}</strong> (composite ${rows[order[0]].composite.toFixed(3)}).</p>`;
+      (isFinite(rows[order[0]].composite)
+        ? `<p><strong>Recommended simulation: ${esc(rows[order[0]].runName)}</strong> (composite ${rows[order[0]].composite.toFixed(3)}).</p>`
+        : '<p><em>No composite could be computed for the selected priority metrics.</em></p>');
   }
   if (notes.trim()) body += `<h2>Notes</h2><p>${esc(notes.trim())}</p>`;
   body += `<h2>Provenance</h2><pre>${esc(JSON.stringify({ tool: `HME v${APP_VERSION}`, dataset: ds.name, unit: ds.targetUnit, view: ds.view }, null, 1))}</pre><p class="meta">${esc(CITATION)}</p>`;

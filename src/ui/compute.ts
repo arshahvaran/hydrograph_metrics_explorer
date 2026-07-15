@@ -27,7 +27,10 @@ const frameCache = new Map<string, Frame>();
 /** Full-record frame: analysis tabs always see the whole dataset. Subsetting
  *  is done in the Plots tab and materialised via commitSubsetDataset. */
 export function frameFor(ds: Dataset): Frame {
-  const key = ['full', ds.id, ds.dates.length].join('|');
+  // targetUnit is part of the key: convertUnits rewrites the value arrays in
+  // place under the same dataset id, and a unit-blind cache once served old-unit
+  // observed values against new-unit simulations (catastrophic metric values).
+  const key = ['full', ds.id, ds.dates.length, ds.targetUnit].join('|');
   const hit = frameCache.get(key);
   if (hit) return hit;
   const frame: Frame = {
@@ -46,7 +49,7 @@ export function frameFor(ds: Dataset): Frame {
 /** Subset preview for the Plots tab only (window / season / resample). */
 export function subsetFrameFor(ds: Dataset): Frame {
   const v = ds.view;
-  const key = [ds.id, ds.dates.length, JSON.stringify(v.window), JSON.stringify(v.season), v.resample].join('|');
+  const key = [ds.id, ds.dates.length, ds.targetUnit, JSON.stringify(v.window), JSON.stringify(v.season), v.resample].join('|');
   const hit = frameCache.get(key);
   if (hit) return hit;
   const base = applySubset(ds.dates, [ds.observed.values], v, ds.step);

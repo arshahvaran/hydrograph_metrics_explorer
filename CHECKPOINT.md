@@ -342,3 +342,40 @@ Repository style scrub: QA suite headers reworded, plan-document references
 neutralised, and every em dash in tracked md/ts/tsx/html/css files replaced
 with commas, semicolons, colons, or parentheses as context requires. Suite
 319 to 342 (rank direction audit x13, report-events x4, round7 DOM x6).
+
+## v1.4.1: final QA campaign (adversarial pass across the whole tool)
+Systematic cross-feature hunt with the reviewer in mind; five defects found
+and fixed, each with regression tests that fail on the pre-fix code.
+1. CRITICAL, stale frame cache after unit conversion. convertUnits rewrites
+   value arrays in place under the same dataset id, but frames were cached on
+   id + length only, so every tab kept comparing old-unit observed values
+   against new-unit simulations (NSE about -6.5 million on a healthy fit,
+   shown as a real result until reload). Both frame caches now key on
+   targetUnit; tests/units-frame.test.ts crosses the features (scale-free
+   metrics invariant, unitful metrics scale exactly, subset frame included)
+   and a DOM journey asserts the Metrics tab digits.
+2. Absolute event thresholds now convert with the units: a threshold of
+   8 m3/s silently meant "8 L/s" after conversion, redefining every event.
+   The store scales the value exactly when the conversion factor is uniform
+   across the record (all flow-to-flow conversions); non-uniform monthly
+   depth factors have no single correct answer and are left for the user.
+   Round-trip pinned.
+3. Compare tab NaN states: zeroing every weight (reachable through the new
+   weights table) produced a literal "composite NaN" recommendation chosen
+   alphabetically; both report renderers had the same unguarded toFixed plus
+   a leftover "Recommended run" wording. The tab now explains and recovers,
+   both reports print a fallback sentence, wording unified; junk weight
+   keystrokes coerce to 0 instead of storing NaN, and hostile project files
+   can no longer smuggle NaN, negative, or duplicate priority weights in
+   (loader hardened).
+4. Sandbox slider ranges went stale after a unit conversion (memo keyed on
+   ids while conversion replaces arrays); now keyed on the series identity,
+   with a DOM test asserting the offset range rescales by the factor.
+5. Report figures are now isolated per figure: one misbehaving canvas skips
+   that figure instead of aborting the whole report.
+Also verified this pass: the em-dash scrub touched no string literals or
+KaTeX equations in src; print-report escaping covers names and notes; the
+popup-blocked path alerts cleanly; fmtNum renders every non-finite value as
+n/a; conversion errors surface in the Data tab; README and ACCEPTANCE
+feature wording aligned with Simulation. Suite 342 to 352 (units-frame x5,
+stress-final DOM x5, plus the round-7 additions revalidated).

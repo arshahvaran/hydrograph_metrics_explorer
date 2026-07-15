@@ -86,7 +86,7 @@ function CompareTabInner({ ds }: { ds: Dataset }) {
                       <td>{byId.get(p.id)?.timing ? '⏱ ' : ''}{byId.get(p.id)?.label ?? p.id}</td>
                       <td><input type="number" min={0} step={0.5} value={p.weight} style={{ width: '4.5em' }}
                         aria-label={`weight for ${byId.get(p.id)?.label ?? p.id}`}
-                        onChange={e => setWeight(p.id, Math.max(0, Number(e.target.value)))} /></td>
+                        onChange={e => { const w = Number(e.target.value); setWeight(p.id, Number.isFinite(w) ? Math.max(0, w) : 0); }} /></td>
                       <td><button aria-label={`remove ${byId.get(p.id)?.label ?? p.id}`} title="Remove"
                         onClick={() => removeMetric(p.id)}>✕</button></td>
                     </tr>
@@ -100,6 +100,9 @@ function CompareTabInner({ ds }: { ds: Dataset }) {
 
       <section className="card">
         <h2>Ranking</h2>
+        {activePriorities.length === 0 ? (
+          <p className="muted">All weights are zero; give at least one metric a weight above zero to rank the simulations.</p>
+        ) : (<>
         <div className="mapscroll"><table className="grid" aria-label="Composite ranking of simulations">
           <thead>
             <tr><th>Rank</th><th>Simulation</th>
@@ -123,6 +126,7 @@ function CompareTabInner({ ds }: { ds: Dataset }) {
             ))}
           </tbody>
         </table></div>
+        {isFinite(winner.composite) ? (
         <div className="callout">
           <strong>Recommended simulation: <span style={{ color: winnerRun.color }}>{winner.runName}</span></strong>
           {' '}· composite {winner.composite.toFixed(3)} across {activePriorities.length} priority metrics
@@ -131,6 +135,10 @@ function CompareTabInner({ ds }: { ds: Dataset }) {
             ? ' Timing-aware metrics are included, so this ranking rewards getting events at a more proper time, not just a more proper average.'
             : ' Tip: add a timing-aware metric (⏱) so the ranking cannot be won by a magnitude-only fit.'}
         </div>
+        ) : (
+          <p className="muted">No composite could be computed: the selected priority metrics are unavailable for these simulations.</p>
+        )}
+        </>)}
       </section>
     </div>
   );

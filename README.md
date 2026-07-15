@@ -20,8 +20,8 @@ independently implemented and verified against HydroErr/Hydrostats/hydroeval/hyd
 timing- & shape-aware core (peak timing, event errors, Diagnostic Efficiency, Series Distance,
 banded DTW, Wasserstein W₁, cross-wavelet lag) · analysis window / wrap-aware seasonal filter /
 resampling · benchmark skill scores · eight linked plots with PNG/SVG/CSV export · interactive
-double-penalty Sandbox with live lag sweep · C2M-normalised multi-run ranking with a recommended
-run · Leaflet map · client-side DOCX + PDF reports with full settings provenance · `.hme.json`
+double-penalty Sandbox with live lag sweep · C2M-normalised multi-simulation ranking with a
+recommended simulation · Leaflet map · client-side DOCX + PDF reports with full settings provenance · `.hme.json`
 projects. Everything runs in the browser; no data leaves the device. See ACCEPTANCE.md for the
 criterion-by-criterion audit and PAPER_CHANGES.md for the manuscript-consistency notes.
 
