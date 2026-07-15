@@ -11,6 +11,8 @@ import {
 import { REGISTRY, GROUPS, type ComputeOutput } from '../metrics/registry'
 import { rankRuns, DEFAULT_PRIORITIES, type RankRow } from '../metrics/rank'
 import { fmtNum } from '../ui/format'
+import { UNITS } from '../units/registry'
+import { exportTemplate } from '../ui/PlotHost'
 import { APP_VERSION } from '../version'
 import type { Dataset, Run } from '../types'
 import type { Frame } from '../ui/compute'
@@ -35,7 +37,7 @@ async function plotPng(traces: unknown[], layout: Record<string, unknown>): Prom
   try {
     const base = {
       paper_bgcolor: '#ffffff', plot_bgcolor: '#ffffff',
-      font: { family: '"STIX Two Text","Times New Roman",serif', size: 13, color: '#101113' },
+      template: exportTemplate(),
       margin: { t: 40, r: 16, l: 60, b: 48 },
       legend: { orientation: 'h', y: 1.14 },
     };
@@ -56,9 +58,9 @@ export async function buildReportImages(ds: Dataset, frame: Frame, runs: Run[], 
   const hydro = await plotPng(
     [
       { x: dates, y: clean(frame.obs), name: ds.observed.name || 'Observed', type: 'scatter', mode: 'lines', line: { color: '#1f77b4', width: 2.2 } },
-      ...runs.map(r => ({ x: dates, y: clean(frame.apply(r.values)), name: r.name, type: 'scatter', mode: 'lines', line: { color: r.color, width: 1.6, dash: 'dash' } })),
+      ...runs.map(r => ({ x: dates, y: clean(frame.apply(r.values)), name: r.name, type: 'scatter', mode: 'lines', line: { color: r.color, width: 1.6 } })),
     ],
-    { yaxis: { title: `Q [${ds.targetUnit}]` }, xaxis: { title: '' } },
+    { yaxis: { title: `Q [${UNITS[ds.targetUnit].label}]` }, xaxis: { title: '' } },
   );
   images.push({ caption: `Fig. R1. Observed vs simulated hydrographs${frame.caption ? ` (${frame.caption})` : ''}.`, ...hydro });
 
@@ -71,7 +73,7 @@ export async function buildReportImages(ds: Dataset, frame: Frame, runs: Run[], 
       { x: finite.map(p => p[0]), y: finite.map(p => p[1]), name: r0.name, type: 'scattergl', mode: 'markers', marker: { color: r0.color, size: 4, opacity: 0.55 } },
       { x: lim, y: lim, name: '1:1', type: 'scatter', mode: 'lines', line: { color: '#555', dash: 'dot', width: 1.2 } },
     ],
-    { xaxis: { title: `Observed [${ds.targetUnit}]`, range: lim }, yaxis: { title: `Simulated [${ds.targetUnit}]`, range: lim, scaleanchor: 'x' } },
+    { xaxis: { title: `Observed [${UNITS[ds.targetUnit].label}]`, range: lim }, yaxis: { title: `Simulated [${UNITS[ds.targetUnit].label}]`, range: lim, scaleanchor: 'x' } },
   );
   images.push({ caption: `Fig. R2. Predicted–observed scatter, ${r0.name}.`, ...scat });
 
@@ -100,7 +102,7 @@ export function summaryPairs(ds: Dataset, frame: Frame): [string, string][] {
     ['Record', `${new Date(ds.dates[0]).toISOString().slice(0, 10)} – ${new Date(ds.dates[ds.dates.length - 1]).toISOString().slice(0, 10)} (${ds.dates.length} steps of ${ds.step.label}${ds.step.irregular ? ', irregular' : ''})`],
     ['Analysis subset', frame.caption || 'full record'],
     ['Steps in analysis', String(frame.dates.length)],
-    ['Unit', ds.targetUnit + (ds.area ? ` · area ${ds.area.value} ${ds.area.unit}` : '')],
+    ['Unit', UNITS[ds.targetUnit].label + (ds.area ? ` · area ${ds.area.value} ${ds.area.unit}` : '')],
     ['Location', ds.location ? `${ds.location.lat.toFixed(4)}, ${ds.location.lon.toFixed(4)} (WGS84)` : 'n/a'],
     ['NaN policy / transform / benchmark', `${v.nanPolicy} / ${v.transform} / ${v.benchmark}`],
     ['Timing config', `events ≥ P${v.timingConfig.eventThreshold.value}${v.timingConfig.eventThreshold.kind === 'absolute' ? ' (abs)' : ''}, min-distance ${v.timingConfig.eventMinDistance}, peak window ±${v.timingConfig.peakMatchTolerance}, DTW band ${Math.round(v.timingConfig.dtwBandFraction * 100)}%`],

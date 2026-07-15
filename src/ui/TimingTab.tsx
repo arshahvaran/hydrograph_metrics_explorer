@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { Dataset } from '../types'
+import { UNITS } from '../units/registry'
 import { useApp } from '../store/store'
 import { PlotHost } from './PlotHost'
 import { useRunOutputs, frameFor } from './compute'
@@ -183,10 +184,10 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
           <select aria-label="Event report run" value={eventRunIdx} onChange={e => setEventRunIdx(Number(e.target.value))}>
             {runs.map((r, i) => <option key={r.id} value={i}>{r.name}</option>)}
           </select>{' '}
-          <span className="muted">threshold {fmtNum(evOut.extras.events?.threshold, 2)} {ds.targetUnit} · tolerance ±{t.peakMatchTolerance} steps</span>
+          <span className="muted">threshold {fmtNum(evOut.extras.events?.threshold, 2)} {UNITS[ds.targetUnit].label} · tolerance ±{t.peakMatchTolerance} steps</span>
         </h2>
         <div className="mapscroll"><table className="grid" aria-label="Detected events and per-event errors">
-          <thead><tr><th>#</th><th>window</th><th>obs peak [{ds.targetUnit}]</th><th>peak lag</th><th>peak mag err %</th><th>volume err %</th></tr></thead>
+          <thead><tr><th>#</th><th>window</th><th>obs peak [{UNITS[ds.targetUnit].label}]</th><th>peak lag</th><th>peak mag err %</th><th>volume err %</th></tr></thead>
           <tbody>
             {(evOut.extras.events?.events ?? []).slice(0, 40).map((e, i) => (
               <tr key={i}>

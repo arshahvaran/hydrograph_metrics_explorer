@@ -13,6 +13,24 @@ export const BASE_LAYOUT = {
   hovermode: 'x unified',
 } as const;
 
+/** Fixed light palette for exports that must be readable on white (JPG). */
+export function exportTemplate(): any {
+  const ink = '#1a1a1a', soft = '#4a5563', grid = '#d7dbe0';
+  const axis = {
+    gridcolor: grid, zerolinecolor: soft,
+    showline: true, linecolor: soft, linewidth: 1.2,
+    ticks: 'outside', ticklen: 4, tickcolor: soft,
+    automargin: true, title: { standoff: 10 },
+  };
+  return {
+    layout: {
+      font: { family: '"STIX Two Text", "Times New Roman", Georgia, serif', size: 13.5, color: ink },
+      xaxis: axis, yaxis: axis,
+      legend: { font: { color: ink } },
+    },
+  };
+}
+
 /** Theme-aware Plotly template: figure-style serif type on the current palette. */
 function themeTemplate(): any {
   const css = getComputedStyle(document.documentElement);
@@ -20,7 +38,13 @@ function themeTemplate(): any {
   const ink = v('--ink', '#101113');
   const soft = v('--ink-soft', '#697080');
   const grid = v('--plotgrid', '#e3e6ea');
-  const axis = { gridcolor: grid, zerolinecolor: soft, linecolor: grid, tickcolor: grid };
+  const axis = {
+    gridcolor: grid, zerolinecolor: soft,
+    // visible axis lines and consistent tick spacing on every figure
+    showline: true, linecolor: soft, linewidth: 1.2,
+    ticks: 'outside', ticklen: 4, tickcolor: soft,
+    automargin: true, title: { standoff: 10 },
+  };
   return {
     layout: {
       font: { family: '"STIX Two Text", "Times New Roman", Georgia, serif', size: 13.5, color: ink },
@@ -50,7 +74,7 @@ function tracesToCsv(traces: any[]): string {
   return lines.join('\n');
 }
 
-export function PlotHost({ traces, layout, height = 380, name = 'hme_plot' }: { traces: any[]; layout: any; height?: number; name?: string }) {
+export function PlotHost({ traces, layout, height = 380, name = 'hme_plot', square = false }: { traces: any[]; layout: any; height?: number; name?: string; square?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const theme = useApp(s => s.theme);
   useEffect(() => {
@@ -68,9 +92,22 @@ export function PlotHost({ traces, layout, height = 380, name = 'hme_plot' }: { 
   useEffect(() => () => {
     if (ref.current) loadPlotly().then(P => P.purge(ref.current!));
   }, []);
+  const exportW = square ? height : 1100;
   const dl = (format: 'png' | 'svg') => {
     if (!ref.current) return;
-    loadPlotly().then(P => P.downloadImage(ref.current!, { format, filename: name, width: 1100, height, scale: format === 'png' ? 2 : 1 }));
+    loadPlotly().then(P => P.downloadImage(ref.current!, { format, filename: name, width: exportW, height, scale: format === 'png' ? 2 : 1 }));
+  };
+  const dlJpg = async () => {
+    // JPG has no alpha: render on a white background with dark type,
+    // regardless of the on-screen theme.
+    const P = await loadPlotly();
+    const fig = {
+      data: traces,
+      layout: { ...BASE_LAYOUT, template: exportTemplate(), ...layout, paper_bgcolor: '#ffffff', plot_bgcolor: '#ffffff', width: exportW, height },
+    };
+    const url = await P.toImage(fig, { format: 'jpeg', width: exportW, height, scale: 2 });
+    const a = document.createElement('a');
+    a.href = url; a.download = `${name}.jpg`; a.click();
   };
   const dlCsv = () => {
     const blob = new Blob([tracesToCsv(traces)], { type: 'text/csv' });
@@ -82,8 +119,10 @@ export function PlotHost({ traces, layout, height = 380, name = 'hme_plot' }: { 
   };
   return (
     <div>
-      <div ref={ref} style={{ width: '100%', height }} className="plothost" />
+      <div ref={ref} style={{ width: '100%', maxWidth: square ? height : undefined, height }} className="plothost" />
       <div className="dlrow" aria-label="download this plot">
+        <span className="ctrl-label">Download plot:</span>
+        <button onClick={dlJpg} title="Download JPG (white background)">JPG</button>
         <button onClick={() => dl('png')} title="Download PNG">PNG</button>
         <button onClick={() => dl('svg')} title="Download SVG">SVG</button>
         <button onClick={dlCsv} title="Download plotted data as CSV">CSV</button>

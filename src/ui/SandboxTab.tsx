@@ -6,6 +6,7 @@ import { fmtNum } from './format'
 import { mean, stdPop } from '../metrics/support/stats'
 import { OBSERVED_COLOR } from '../types'
 import type { Dataset, SandboxState } from '../types'
+import { UNITS } from '../units/registry'
 
 const CLASSICAL: [string, string, number][] = [['nse', 'NSE', 3], ['kge2009', 'KGE', 3], ['r', 'r', 3], ['rmse', 'RMSE', 3], ['pbias', 'PBIAS %', 2]];
 const TIMING: [string, string, number][] = [['w1', 'W₁ [steps]', 2], ['w2sq', 'W₂² [steps²]', 2], ['dtw_warp', 'DTW |warp| [steps]', 2], ['peak_lag_abs', 'Peak |lag| [steps]', 2], ['lag_best', 'Best-fit lag [steps]', 0], ['xwt_lag', 'XWT lag [steps]', 2]];
@@ -140,9 +141,9 @@ function SandboxTabInner({ ds }: { ds: Dataset }) {
           traces={[
             { x: dates, y: clean(ds.observed.values), name: 'Observed', type: 'scatter', mode: 'lines', line: { color: OBSERVED_COLOR, width: 2.2 } },
             ...(sb.mode === 'perturb' ? [{ x: dates, y: clean(target.values), name: `${target.name} (original)`, type: 'scatter', mode: 'lines', line: { color: target.color, width: 1, dash: 'dot' }, opacity: 0.4 }] : []),
-            { x: dates, y: clean(perturbed), name: 'Perturbed S′', type: 'scatter', mode: 'lines', line: { color: '#d95f02', width: 1.9, dash: 'dash' } },
+            { x: dates, y: clean(perturbed), name: 'Perturbed S′', type: 'scatter', mode: 'lines', line: { color: '#d95f02', width: 1.9 } },
           ]}
-          layout={{ xaxis: { rangeslider: { visible: true } }, yaxis: { title: `Q [${ds.targetUnit}]` } }}
+          layout={{ xaxis: { rangeslider: { visible: true } }, yaxis: { title: `Q [${UNITS[ds.targetUnit].label}]` } }}
           height={380}
         />
       </section>

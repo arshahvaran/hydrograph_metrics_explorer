@@ -25,6 +25,7 @@ export function DataTab() {
 
   const [table, setTable] = useState<RawTable | null>(null);
   const [roles, setRoles] = useState<ColumnRole[]>([]);
+  const [colNames, setColNames] = useState<string[]>([]);
   const [dateFormat, setDateFormat] = useState<DateFormat>('auto');
   const [unit, setUnit] = useState<UnitId>('m3s');
   const [missingValue, setMissingValue] = useState('');
@@ -37,11 +38,12 @@ export function DataTab() {
 
   const mv = missingValue.trim() === '' ? null : Number(missingValue.trim().replace(',', '.'));
   const staged = table && roles.length
-    ? stage(table, { name, roles, dateFormat, unit, missingValue: mv !== null && isFinite(mv) ? mv : null })
+    ? stage({ ...table, header: colNames }, { name, roles, dateFormat, unit, missingValue: mv !== null && isFinite(mv) ? mv : null })
     : null;
 
   function loadTable(t: RawTable, suggestedName: string, rolesOverride?: ColumnRole[]) {
     setTable(t);
+    setColNames(t.header.slice());
     // Uploaded / pasted data starts unmapped: the user assigns every column
     // deliberately. Samples and the sheet arrive pre-mapped.
     setRoles(rolesOverride ?? t.header.map(() => 'ignore' as ColumnRole));
@@ -72,7 +74,7 @@ export function DataTab() {
   function commit() {
     if (!staged?.commit) return;
     commitDataset(staged.commit);
-    setActiveTab('metrics');
+    setActiveTab('plots');
   }
 
   return (
@@ -131,7 +133,9 @@ export function DataTab() {
               <thead>
                 <tr>{table.header.map((h, j) => (
                   <th key={j}>
-                    <div>{h || `col ${j + 1}`}</div>
+                    <input className="colname" aria-label={`Name of column ${j + 1}`}
+                      value={colNames[j] ?? ''} placeholder={`col ${j + 1}`}
+                      onChange={e => setColNames(cn => cn.map((x, k) => (k === j ? e.target.value : x)))} />
                     <select aria-label={`Role for column ${table.header[j] || j + 1}`} value={roles[j]} onChange={e => setRoles(roles.map((r, k) => (k === j ? e.target.value as ColumnRole : r)))}>
                       {ROLE_OPTIONS.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                     </select>
@@ -177,7 +181,7 @@ export function DataTab() {
             <tr><th>Rows</th><td>{ds.dates.length.toLocaleString()}</td></tr>
             <tr><th>Range</th><td>{fmtDate(ds.dates[0])} → {fmtDate(ds.dates[ds.dates.length - 1])}</td></tr>
             <tr><th>Step</th><td>{ds.step.label}{ds.step.irregular ? ' (irregular)' : ''}</td></tr>
-            <tr><th>Series</th><td>{ds.observed.name || 'Observed'} + {ds.runs.length} run{ds.runs.length === 1 ? '' : 's'}</td></tr>
+            <tr><th>Series</th><td>{ds.observed.name || 'Observed'} + {ds.runs.length} simulation{ds.runs.length === 1 ? '' : 's'}</td></tr>
             <tr><th>Unit</th><td>
               <select aria-label="Convert units to" value={ds.targetUnit} onChange={e => setConvertMsg(convertUnits(e.target.value as UnitId))}>
                 {Object.values(UNITS).filter(u => u.kind !== 'dimensionless' || ds.targetUnit === 'dimensionless').map(u => <option key={u.id} value={u.id}>{u.label}</option>)}

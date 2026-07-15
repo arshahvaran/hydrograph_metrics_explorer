@@ -221,3 +221,15 @@ template. Subsetting restructured: window/season/resample moved into the Plots
 tab only, with "Use this data →" materialising the selection as a new dataset
 (commitSubsetDataset); all analysis tabs now always see full records. Suite
 300 → 306.
+
+## v1.2.1 — plots polish round
+Solid simulated lines everywhere (logo/favicon, hydrographs, DTW overlay,
+sandbox, report figures). Logo enlarged to 55 px. Data commit jumps to Plots;
+"simulations" wording; live-editable column names in the mapping header that
+flow into the staged summary and every plot label. Plots tab: "Plot type:" and
+"Download plot:" labels, JPG export on a forced-white light template, 1:1
+aspect (width only) for scatter/FDC/Q-Q, axis lines + outside ticks + tick
+standoff unified through the Plotly template across Plots/Timing/Sandbox and
+the report renderer, real unit labels (m³/s not m3s) in every axis/caption,
+capitalised and corrected plot captions, Log(y) checkbox label, heatmap
+colorbar sized to the plot. Header right no longer wraps internally.

@@ -6,6 +6,7 @@ import { AnalysisBar } from './AnalysisBar'
 import { quantile } from '../metrics/support/stats'
 import { OBSERVED_COLOR } from '../types'
 import { arrMax } from '../metrics/support/stats'
+import { UNITS } from '../units/registry'
 import type { Dataset } from '../types'
 
 const PLOTS = [
@@ -20,7 +21,7 @@ function seriesOf(ds: Dataset, frame: { obs: Float64Array; apply: (v: ArrayLike<
   const clean = (v: ArrayLike<number>) => Array.from(v, x => (isFinite(x as number) ? (x as number) : null));
   return [
     { name: ds.observed.name || 'Observed', color: OBSERVED_COLOR, y: clean(frame.obs), width: 2.2, dash: 'solid' as const },
-    ...ds.runs.filter(r => r.visible).map(r => ({ name: r.name, color: r.color, y: clean(frame.apply(r.values)), width: 1.7, dash: 'dash' as const })),
+    ...ds.runs.filter(r => r.visible).map(r => ({ name: r.name, color: r.color, y: clean(frame.apply(r.values)), width: 1.7, dash: 'solid' as const })),
   ];
 }
 
@@ -71,7 +72,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
   const alignRun = ds.runs.filter(r => r.visible)[Math.max(0, Math.min(focusIdx - 1, ds.runs.length - 1))] ?? ds.runs[0] ?? null;
   const alignOut = useRunOutput(ds, plot === 'alignment' ? alignRun : null);
   const all = useMemo(() => seriesOf(ds, frame), [ds, frame.key]);
-  const unit = ds.targetUnit;
+  const unit = UNITS[ds.targetUnit].label;
 
   const { traces, layout, note } = useMemo(() => {
     const yTitle = `Q [${unit}]`;
@@ -110,7 +111,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
         const p = v.map((_, i) => (100 * (i + 1)) / (v.length + 1));
         return { x: p, y: v, name: s.name, type: 'scatter', mode: 'lines', line: { color: s.color, width: s.width, dash: s.dash } };
       });
-      return { traces: t, layout: { xaxis: { title: 'Exceedance probability [%]' }, yaxis: { title: yTitle, type: 'log' }, hovermode: 'closest' }, note: 'log-y flow duration curves (Weibull plotting position)' };
+      return { traces: t, layout: { xaxis: { title: 'Exceedance probability [%]' }, yaxis: { title: yTitle, type: 'log' }, hovermode: 'closest' }, note: 'Log(y) flow duration curves (Weibull plotting position)' };
     }
 
     if (plot === 'qq') {
@@ -146,7 +147,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
         }
         t.push({ x: doys, y: med, name: `${s.name} (median)`, type: 'scatter', mode: 'lines', line: { color: s.color, width: s.width, dash: s.dash } });
       });
-      return { traces: t, layout: { xaxis: { title: 'Day of year' }, yaxis: { title: yTitle, type: logY ? 'log' : 'linear' } }, note: 'medians by day of year; shaded band = observed interquartile range' };
+      return { traces: t, layout: { xaxis: { title: 'Day of year' }, yaxis: { title: yTitle, type: logY ? 'log' : 'linear' } }, note: 'Medians by day of year; shaded band = observed interquartile range (IQR)' };
     }
 
     if (plot === 'heatmap' || plot === 'spaghetti') {
@@ -161,16 +162,16 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
       const years = [...byYear.keys()].sort((a, b) => a - b);
       if (plot === 'heatmap') {
         return {
-          traces: [{ z: years.map(y => byYear.get(y)!), x: Array.from({ length: 366 }, (_, i) => i + 1), y: years, type: 'heatmap', colorscale: 'Viridis', colorbar: { title: unit } }],
+          traces: [{ z: years.map(y => byYear.get(y)!), x: Array.from({ length: 366 }, (_, i) => i + 1), y: years, type: 'heatmap', colorscale: 'Viridis', colorbar: { title: { text: unit, side: 'right' }, len: 1, lenmode: 'fraction', y: 0.5, yanchor: 'middle', thickness: 14, outlinewidth: 0 } }],
           layout: { xaxis: { title: 'Day of year' }, yaxis: { title: 'Year', dtick: 1 }, hovermode: 'closest' },
-          note: `annual regime of ${s.name}`,
+          note: `Annual regime of ${s.name}`,
         };
       }
       const t = years.map((y, i) => ({
         x: Array.from({ length: 366 }, (_, k) => k + 1), y: byYear.get(y)!, name: String(y), type: 'scatter', mode: 'lines',
         line: { color: i === years.length - 1 ? s.color : 'rgba(120,130,140,0.45)', width: i === years.length - 1 ? 2 : 1 },
       }));
-      return { traces: t, layout: { xaxis: { title: 'Day of year' }, yaxis: { title: yTitle, type: logY ? 'log' : 'linear' }, hovermode: 'closest' }, note: `one line per year of ${s.name}; latest year highlighted` };
+      return { traces: t, layout: { xaxis: { title: 'Day of year' }, yaxis: { title: yTitle, type: logY ? 'log' : 'linear' }, hovermode: 'closest' }, note: `One line per year of ${s.name}; latest year highlighted in color` };
     }
 
     // alignment
@@ -188,11 +189,11 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
     return {
       traces: [
         { x: dates, y: paired.o, name: 'Observed', type: 'scatter', mode: 'lines', line: { color: OBSERVED_COLOR, width: 2.2 } },
-        { x: dates, y: paired.s, name: run.name, type: 'scatter', mode: 'lines', line: { color: run.color, width: 1.7, dash: 'dash' } },
+        { x: dates, y: paired.s, name: run.name, type: 'scatter', mode: 'lines', line: { color: run.color, width: 1.7 } },
         { x: cx, y: cy, name: 'DTW alignment', type: 'scatter', mode: 'lines', line: { color: 'rgba(150,150,160,0.5)', width: 1 }, hoverinfo: 'skip' },
       ],
       layout: { xaxis: { rangeslider: { visible: true } }, yaxis: { title: yTitle } },
-      note: `optimal Sakoe–Chiba alignment (band ${alignOut.extras.dtw?.band} steps); mean |warp| ${alignOut.values.dtw_warp?.toFixed(2)} steps; grey ties connect matched points`,
+      note: `Optimal Sakoe-Chiba alignment (band ${alignOut.extras.dtw?.band} steps); mean |warp| ${alignOut.values.dtw_warp?.toFixed(2)} steps; grey ties connect matched points`,
     };
   }, [ds, plot, mode, logY, movAvg, threshold, focusIdx, dates, all, unit, frame.key, alignOut]);
 
@@ -203,6 +204,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
       <AnalysisBar />
       <section className="card">
         <div className="controls">
+          <span className="ctrl-label">Plot type:</span>
           {PLOTS.map(([id, label]) => (
             <button key={id} className={plot === id ? 'primary' : ''} onClick={() => setPlot(id)}>{label}</button>
           ))}
@@ -223,7 +225,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
             </>
           )}
           {(plot === 'timeseries' || plot === 'doy' || plot === 'spaghetti') && (
-            <label><input type="checkbox" checked={logY} onChange={e => setLogY(e.target.checked)} /> log y</label>
+            <label><input type="checkbox" checked={logY} onChange={e => setLogY(e.target.checked)} /> Log(y)</label>
           )}
           {needsFocus && (
             <label>Series{' '}
@@ -236,7 +238,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
           )}
         </div>
         {note && <p className="muted">{note}</p>}
-        <PlotHost traces={traces} layout={layout} height={440} />
+        <PlotHost traces={traces} layout={layout} height={440} square={plot === 'scatter' || plot === 'fdc' || plot === 'qq'} name={`hme_${plot}`} />
       </section>
     </div>
   );
