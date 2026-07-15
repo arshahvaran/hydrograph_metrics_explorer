@@ -72,7 +72,7 @@ function SandboxTabInner({ ds }: { ds: Dataset }) {
             </select>
           </label>
           {sb.mode === 'perturb' && (
-            <label>Simulation{' '}
+            <label>Simulation to perturb{' '}
               <select aria-label="Perturbation target run" value={target?.id} onChange={e => set({ targetRunId: e.target.value })}>
                 {runs.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
@@ -103,7 +103,7 @@ function SandboxTabInner({ ds }: { ds: Dataset }) {
         <h2>Metrics comparison <span className="muted">performance of perturbed and original simulations against observed data</span></h2>
         <div className="twocol">
           <table className="grid">
-            <thead><tr><th>Classical</th><th>Perturbed series</th><th className="muted">Original series</th></tr></thead>
+            <thead><tr><th>Classical</th><th>Perturbed series</th><th>Original series</th></tr></thead>
             <tbody>
               {CLASSICAL.map(([id, label, dg]) => (
                 <tr key={id}><td>{label}</td><td>{fmtNum(out.values[id], dg)}</td><td className="muted">{fmtNum(baseline.values[id], dg)}</td></tr>
@@ -111,7 +111,7 @@ function SandboxTabInner({ ds }: { ds: Dataset }) {
             </tbody>
           </table>
           <table className="grid">
-            <thead><tr><th>⏱ Timing &amp; shape</th><th>Perturbed series</th><th className="muted">Original series</th></tr></thead>
+            <thead><tr><th>⏱ Timing &amp; shape</th><th>Perturbed series</th><th>Original series</th></tr></thead>
             <tbody>
               {TIMING.map(([id, label, dg]) => (
                 <tr key={id} className="timingrow"><td>{label}</td><td>{fmtNum(out.values[id], dg)}</td><td className="muted">{fmtNum(baseline.values[id], dg)}</td></tr>

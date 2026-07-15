@@ -278,3 +278,25 @@ series" title with subtitle, Time x-axis, new header copy, "perturb a model
 simulation", Simulation label, four preset buttons removed (Reset kept),
 "Metrics comparison" card with Perturbed/Original series headers, unbolded
 values.
+
+## v1.3.3 — round 6: logo frame, timing switch, readable DE polar, sandbox wording
+Logo tile frame thinned (rect stroke-width 3 to 2) in public/logo.svg; the
+unreferenced public/icon.svg brought back in line with the same art (thin frame,
+simulated curve made SOLID per the house rule; it still had the pre-v1.2.1
+dash). New tests/branding.test.ts pins frame width, solidity, and art parity.
+Timing tab: the "Default settings (switch off to customise)" checkbox is now
+dressed as a toggle switch (CSS track + knob on the same native checkbox, so
+label association, keyboard use, and the fieldset enable/disable semantics are
+unchanged; focus-visible ring on the track; reduced-motion covered by the
+global rule). DE polar readability fix: with the reference-style fixed [0, 1]
+colour axis, Sample 2's runs (timing r = 0.974 vs 1.000) both rendered
+near-black and looked identical; the colour axis lower bound now floats one
+0.05 step below the worst finite r in view via exported deColorFloor()
+(clamped to [-1, 0.9], span never under 0.1, no marker at the extreme yellow),
+cmax stays 1, and the caption explains the adaptive range. Metric VALUES are
+untouched and still reference-pinned. Sandbox: target picker label "Simulation
+to perturb"; both Metrics-comparison "Original series" header cells lost the
+muted class so all six headers are uniform bold (original VALUE cells stay
+muted). Suite 309 to 319 (branding x3, round6 DOM x7: deColorFloor pins,
+polar trace floor + distinguishability, switch semantics, sandbox label,
+header boldness).

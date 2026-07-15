@@ -11,6 +11,20 @@ import { byId } from '../metrics/registry'
 /** Exactly the timing block of the Metrics tab's essentials preset (13). */
 const SUMMARY_IDS = ['sd_occ', 'sd_amp', 'sd_time', 'dtw_warp', 'dtw_dist', 'xwt_lag', 'w1', 'peak_lag_abs', 'peak_lag_signed', 'event_peak', 'event_vol', 'event_lag', 'de'];
 
+/** Lower bound of the DE-polar colour axis. The reference tool (diag-eff) fixes the
+ *  axis to [0, 1], but real runs cluster near r = 1, where a full-range magma ramp
+ *  paints every marker the same near-black (author round 6: Sample 2 runs looked
+ *  identical although r = 0.974 vs 1.000). We keep cmax = 1 and float cmin one 0.05
+ *  grid step below the worst finite r in view, clamped to [-1, 0.9]: the span is
+ *  never narrower than 0.1, no marker sits at the extreme yellow, anticorrelated
+ *  runs stay representable, and the colourbar states the working range honestly. */
+export function deColorFloor(rValues: number[]): number {
+  const finite = rValues.filter(Number.isFinite);
+  if (!finite.length) return 0;
+  const lo = Math.min(...finite);
+  return Math.max(-1, Math.min(Math.floor(lo * 20) / 20 - 0.05, 0.9));
+}
+
 export function TimingTab() {
   const ds = useApp(s => s.project.datasets.find(d => d.id === s.project.activeDatasetId) ?? null);
   if (!ds) return null;
@@ -56,6 +70,7 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
     return { x: rows.map(x => x.meanLag), y: rows.map(x => x.period), name: r.name, type: 'scatter', mode: 'lines+markers', marker: { size: 5, color: r.color }, line: { color: r.color, width: 2 }, connectgaps: false };
   });
 
+  const polarR = runs.map((_r, i) => outputs[i].extras.de?.temporalR ?? NaN);
   const polarTraces = [{
     type: 'scatterpolar', mode: 'markers+text', showlegend: false, name: 'Observed',
     r: [0], theta: [0], text: ['Observed'], textposition: 'bottom center',
@@ -67,8 +82,8 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
     text: runs.map(r => r.name), textposition: 'top center',
     marker: {
       size: 15, line: { color: '#ffffff', width: 1.5 },
-      color: runs.map((_r, i) => outputs[i].extras.de?.temporalR ?? NaN),
-      colorscale: 'Magma', reversescale: true, cmin: 0, cmax: 1,
+      color: polarR,
+      colorscale: 'Magma', reversescale: true, cmin: deColorFloor(polarR), cmax: 1,
       colorbar: { title: { text: 'timing r' }, thickness: 12, len: 0.75, x: 1.06 },
     },
   }];
@@ -80,11 +95,11 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
     <div>
       <section className="card">
         <h2>Timing &amp; shape configuration <span className="muted">(applies to every timing metric, live)</span></h2>
-        <label className="cfgdefault"><input type="checkbox" checked={useDefaults} onChange={e => {
+        <label className="cfgdefault"><span className="switch"><input type="checkbox" checked={useDefaults} onChange={e => {
           const on = e.target.checked;
           setUseDefaults(on);
           if (on) updateTiming(defaultTimingConfig(ds.step.ms, ds.dates.length));
-        }} /> Default settings (switch off to customise)</label>
+        }} /><span className="knob" aria-hidden="true" /></span> Default settings (switch off to customise)</label>
         <fieldset className="cfgfields" disabled={useDefaults}>
         <div className="controls">
           <label>Event threshold{' '}
@@ -183,7 +198,7 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
             }}
             height={330}
           />
-          <p className="muted">Radius = DE (0 at the centre is perfect; the observed record itself sits there). The top half indicates a constant positive offset (B̄rel &gt; 0), the bottom half a constant negative offset; left vs right separates dynamic high-flow from low-flow error. Marker colour is the timing term r, on a magma scale where yellow marks 0 (timing mismatch) and dark purple marks 1 (timing match).</p>
+          <p className="muted">Radius = DE (0 at the centre is perfect; the observed record itself sits there). The top half indicates a constant positive offset (B̄rel &gt; 0), the bottom half a constant negative offset; left vs right separates dynamic high-flow from low-flow error. Marker colour is the timing term r, on a magma scale where dark purple marks 1 (timing match) and yellow marks the low end of the colourbar; the colour range adapts to the runs in view so nearby r values stay distinguishable.</p>
         </section>
       </div>
 
