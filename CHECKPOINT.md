@@ -261,3 +261,20 @@ lowercased (essentials / extended (beta)). Fixed the square-plot leak: Plotly
 locked width for later plot types — non-square layouts now explicitly unset
 width with autosize on. Logo frame tile removed (transparent curves only);
 heatmap colorbar 376 px; footer shows major.minor (v1.3).
+
+## v1.3.2 — round 5: theme default, timing & sandbox overhaul
+Light theme on first open (stored choice still respected). Logo tile frame
+restored (the doubled CSS frame stays gone). Colorbar 370 px. Timing summary
+now shows exactly the 13 essentials timing metrics; extra rows dropped;
+Optimum header. DE polar: observed dot at the centre, Magma scale with yellow
+at r = 0; description rewritten (no paper mention, no em dash); XWT
+description likewise; "in-cone" replaced by "edge effects excluded". Default
+toggle on the timing configuration (fieldset-disabled controls; switching on
+resets to the dataset's defaults). Events table gains Export CSV
+(dataset_events_run.csv). Naming audit: metrics CSV → Dataset_metrics.csv,
+project → hme_project_YYYYMMDD.hme.json, DE polar figure named; all exports
+now Dataset-first at 300 dpi. Sandbox: bold "Hydrograph of the perturbed
+series" title with subtitle, Time x-axis, new header copy, "perturb a model
+simulation", Simulation label, four preset buttons removed (Reset kept),
+"Metrics comparison" card with Perturbed/Original series headers, unbolded
+values.

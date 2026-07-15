@@ -64,7 +64,7 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
           return [v, ci ? ci[0] : '', ci ? ci[1] : ''];
         })], sep));
     }
-    download(`hme_metrics_${ds!.name.replace(/\W+/g, '_')}.${sep === ',' ? 'csv' : 'tsv'}`,
+    download(`${ds!.name.replace(/[^\w-]+/g, '_')}_metrics.csv`,
       lines.join('\n'), sep === ',' ? 'text/csv' : 'text/tab-separated-values');
   }
 

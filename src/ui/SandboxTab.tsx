@@ -11,13 +11,6 @@ import { UNITS } from '../units/registry'
 const CLASSICAL: [string, string, number][] = [['nse', 'NSE', 3], ['kge2009', 'KGE', 3], ['r', 'r', 3], ['rmse', 'RMSE', 3], ['pbias', 'PBIAS %', 2]];
 const TIMING: [string, string, number][] = [['w1', 'W₁ [steps]', 2], ['w2sq', 'W₂² [steps²]', 2], ['dtw_warp', 'DTW |warp| [steps]', 2], ['peak_lag_abs', 'Peak |lag| [steps]', 2], ['lag_best', 'Best-fit lag [steps]', 0], ['xwt_lag', 'XWT lag [steps]', 2]];
 
-const PRESETS: { name: string; hint: string; patch: Partial<SandboxState> }[] = [
-  { name: 'Double penalty (+5 shift)', hint: 'Pure timing error: NSE/KGE collapse, Wasserstein reads the 5-step lag exactly.', patch: { shiftSteps: 5, offset: 0, scale: 1, dampen: 0, noiseAmp: 0 } },
-  { name: 'Bias blindness', hint: 'Constant offset: r and R² stay perfect while PBIAS and KGE-β move.', patch: { shiftSteps: 0, scale: 1, dampen: 0, noiseAmp: 0, offset: NaN /* set to 20% of mean at click */ } },
-  { name: 'Variance damping', hint: 'Peaks flattened toward the mean: α and FDC signatures react, bias metrics sleep.', patch: { shiftSteps: 0, offset: 0, scale: 1, dampen: 0.5, noiseAmp: 0 } },
-  { name: 'Noise', hint: 'Seeded white noise: correlation degrades smoothly; timing metrics stay near zero.', patch: { shiftSteps: 0, offset: 0, scale: 1, dampen: 0, noiseAmp: NaN /* 0.5σ at click */ } },
-];
-
 export function SandboxTab() {
   const ds = useApp(s => s.project.datasets.find(d => d.id === s.project.activeDatasetId) ?? null);
   if (!ds) return null;
@@ -70,29 +63,21 @@ function SandboxTabInner({ ds }: { ds: Dataset }) {
   return (
     <div>
       <section className="card">
-        <h2>Perturbation sandbox <span className="muted">break a hydrograph on purpose and watch which metrics notice (paper §6)</span></h2>
+        <h2>Perturbation sandbox <span className="muted">customize your hydrograph on purpose and watch how metrics change on-the-fly</span></h2>
         <div className="controls">
           <label>Base{' '}
             <select value={sb.mode} onChange={e => set({ mode: e.target.value as any })}>
-              <option value="perturb">perturb a model run</option>
+              <option value="perturb">perturb a model simulation</option>
               <option value="synthetic">synthetic twin of observed</option>
             </select>
           </label>
           {sb.mode === 'perturb' && (
-            <label>Run{' '}
+            <label>Simulation{' '}
               <select aria-label="Perturbation target run" value={target?.id} onChange={e => set({ targetRunId: e.target.value })}>
                 {runs.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
             </label>
           )}
-          {PRESETS.map(p => (
-            <button key={p.name} title={p.hint} onClick={() => {
-              const patch = { ...p.patch };
-              if (Number.isNaN(patch.offset as number)) patch.offset = +(0.2 * baseStats.mean).toFixed(3);
-              if (Number.isNaN(patch.noiseAmp as number)) patch.noiseAmp = +(0.5 * baseStats.std).toFixed(3);
-              set(patch);
-            }}>{p.name}</button>
-          ))}
           <button onClick={() => set({ shiftSteps: 0, offset: 0, scale: 1, dampen: 0, noiseAmp: 0 })}>Reset</button>
         </div>
         <div className="slidergrid">
@@ -115,21 +100,21 @@ function SandboxTabInner({ ds }: { ds: Dataset }) {
       </section>
 
       <section className="card">
-        <h2>Who noticed? <span className="muted">perturbed series scored against observed (baseline in grey)</span></h2>
+        <h2>Metrics comparison <span className="muted">performance of perturbed and original simulations against observed data</span></h2>
         <div className="twocol">
           <table className="grid">
-            <thead><tr><th>Classical</th><th>value</th><th className="muted">baseline</th></tr></thead>
+            <thead><tr><th>Classical</th><th>Perturbed series</th><th className="muted">Original series</th></tr></thead>
             <tbody>
               {CLASSICAL.map(([id, label, dg]) => (
-                <tr key={id}><td>{label}</td><td><strong>{fmtNum(out.values[id], dg)}</strong></td><td className="muted">{fmtNum(baseline.values[id], dg)}</td></tr>
+                <tr key={id}><td>{label}</td><td>{fmtNum(out.values[id], dg)}</td><td className="muted">{fmtNum(baseline.values[id], dg)}</td></tr>
               ))}
             </tbody>
           </table>
           <table className="grid">
-            <thead><tr><th>⏱ Timing &amp; shape</th><th>value</th><th className="muted">baseline</th></tr></thead>
+            <thead><tr><th>⏱ Timing &amp; shape</th><th>Perturbed series</th><th className="muted">Original series</th></tr></thead>
             <tbody>
               {TIMING.map(([id, label, dg]) => (
-                <tr key={id} className="timingrow"><td>{label}</td><td><strong>{fmtNum(out.values[id], dg)}</strong></td><td className="muted">{fmtNum(baseline.values[id], dg)}</td></tr>
+                <tr key={id} className="timingrow"><td>{label}</td><td>{fmtNum(out.values[id], dg)}</td><td className="muted">{fmtNum(baseline.values[id], dg)}</td></tr>
               ))}
             </tbody>
           </table>
@@ -137,13 +122,14 @@ function SandboxTabInner({ ds }: { ds: Dataset }) {
       </section>
 
       <section className="card">
+        <h2>Hydrograph of the perturbed series <span className="muted">observed, original, and perturbed series update live as the controls change</span></h2>
         <PlotHost
           traces={[
             { x: dates, y: clean(ds.observed.values), name: 'Observed', type: 'scatter', mode: 'lines', line: { color: OBSERVED_COLOR, width: 2.2 } },
             ...(sb.mode === 'perturb' ? [{ x: dates, y: clean(target.values), name: `${target.name} (original)`, type: 'scatter', mode: 'lines', line: { color: target.color, width: 1, dash: 'dot' }, opacity: 0.4 }] : []),
             { x: dates, y: clean(perturbed), name: 'Perturbed S′', type: 'scatter', mode: 'lines', line: { color: '#d95f02', width: 1.9 } },
           ]}
-          layout={{ xaxis: { rangeslider: { visible: true } }, yaxis: { title: `Q [${UNITS[ds.targetUnit].label}]` } }}
+          layout={{ xaxis: { rangeslider: { visible: true }, title: 'Time', showline: false }, yaxis: { title: `Q [${UNITS[ds.targetUnit].label}]`, zeroline: true } }}
           height={380}
         />
       </section>

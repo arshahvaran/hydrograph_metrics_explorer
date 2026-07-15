@@ -83,7 +83,7 @@ export default function App() {
             onClick={() => {
               const json = serialiseProject(project);
               if (json.length > 25_000_000) alert(`Heads-up: this project serialises to ${(json.length / 1e6).toFixed(0)} MB (spec suggests staying under 25 MB). It will still save, but loading may be slow.`);
-              download('project.hme.json', json, 'application/json');
+              download(`hme_project_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.hme.json`, json, 'application/json');
             }}>Save</button>
           <button title="Start a new empty project" disabled={!project.datasets.length}
             onClick={() => { if (confirm('Clear all datasets and start a new project? Unsaved work is lost.')) useApp.getState().loadProject({ schemaVersion: 1, datasets: [], activeDatasetId: null }); }}>New</button>

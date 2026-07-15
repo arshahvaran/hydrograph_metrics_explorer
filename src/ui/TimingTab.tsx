@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react'
 import type { Dataset } from '../types'
 import { UNITS } from '../units/registry'
+import { OBSERVED_COLOR, defaultTimingConfig } from '../types'
 import { useApp } from '../store/store'
 import { PlotHost } from './PlotHost'
 import { useRunOutputs, frameFor } from './compute'
-import { fmtNum, fmtDate } from './format'
+import { csvLine, download, fmtDate, fmtNum } from './format'
 import { byId } from '../metrics/registry'
 
-const SUMMARY_IDS = ['peak_lag_abs', 'peak_lag_signed', 'event_threat', 'event_lag', 'event_vol', 'lag_best', 'de', 'de_const', 'de_dyn', 'sd_occ', 'sd_amp', 'sd_time', 'dtw_warp', 'w1', 'w2sq', 'xwt_lag'];
+/** Exactly the timing block of the Metrics tab's essentials preset (13). */
+const SUMMARY_IDS = ['sd_occ', 'sd_amp', 'sd_time', 'dtw_warp', 'dtw_dist', 'xwt_lag', 'w1', 'peak_lag_abs', 'peak_lag_signed', 'event_peak', 'event_vol', 'event_lag', 'de'];
 
 export function TimingTab() {
   const ds = useApp(s => s.project.datasets.find(d => d.id === s.project.activeDatasetId) ?? null);
@@ -20,6 +22,8 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
   const [eventRunIdx, setEventRunIdx] = useState(0);
 
   const t = ds.view.timingConfig;
+  const [useDefaults, setUseDefaults] = useState(
+    () => JSON.stringify(t) === JSON.stringify(defaultTimingConfig(ds.step.ms, ds.dates.length)));
   const runs = ds.runs.filter(r => r.visible);
   const rawOutputs = useRunOutputs(ds, runs);
   const frame = frameFor(ds);
@@ -53,6 +57,10 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
   });
 
   const polarTraces = [{
+    type: 'scatterpolar', mode: 'markers+text', showlegend: false, name: 'Observed',
+    r: [0], theta: [0], text: ['Observed'], textposition: 'bottom center',
+    marker: { size: 12, symbol: 'circle', color: OBSERVED_COLOR, line: { color: '#ffffff', width: 1.5 } },
+  }, {
     type: 'scatterpolar', mode: 'markers+text', showlegend: false,
     r: runs.map((_r, i) => outputs[i].extras.de?.de ?? NaN),
     theta: runs.map((_r, i) => ((outputs[i].extras.de?.phi ?? 0) * 180) / Math.PI),
@@ -60,7 +68,7 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
     marker: {
       size: 15, line: { color: '#ffffff', width: 1.5 },
       color: runs.map((_r, i) => outputs[i].extras.de?.temporalR ?? NaN),
-      colorscale: 'Plasma', reversescale: true, cmin: 0, cmax: 1,
+      colorscale: 'Magma', reversescale: true, cmin: 0, cmax: 1,
       colorbar: { title: { text: 'timing r' }, thickness: 12, len: 0.75, x: 1.06 },
     },
   }];
@@ -72,6 +80,12 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
     <div>
       <section className="card">
         <h2>Timing &amp; shape configuration <span className="muted">(applies to every timing metric, live)</span></h2>
+        <label className="cfgdefault"><input type="checkbox" checked={useDefaults} onChange={e => {
+          const on = e.target.checked;
+          setUseDefaults(on);
+          if (on) updateTiming(defaultTimingConfig(ds.step.ms, ds.dates.length));
+        }} /> Default settings (switch off to customise)</label>
+        <fieldset className="cfgfields" disabled={useDefaults}>
         <div className="controls">
           <label>Event threshold{' '}
             <select value={t.eventThreshold.kind} onChange={e => updateTiming({ eventThreshold: { ...t.eventThreshold, kind: e.target.value as any } })}>
@@ -99,12 +113,13 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
           <label>DTW band <input type="number" min={1} max={50} value={Math.round(t.dtwBandFraction * 100)} style={{ width: '4em' }}
             onChange={e => updateTiming({ dtwBandFraction: Number(e.target.value) / 100 })} /> % of n</label>
         </div>
+        </fieldset>
       </section>
 
       <section className="card">
         <h2>Timing summary <span className="muted">(lags in steps of {stepLabel})</span></h2>
         <div className="mapscroll"><table className="grid" aria-label="Timing summary per run">
-          <thead><tr><th>Measure</th><th>optimum</th>{runs.map(r => <th key={r.id} style={{ color: r.color }}>{r.name}</th>)}</tr></thead>
+          <thead><tr><th>Measure</th><th>Optimum</th>{runs.map(r => <th key={r.id} style={{ color: r.color }}>{r.name}</th>)}</tr></thead>
           <tbody>
             {SUMMARY_IDS.map(id => {
               const m = byId.get(id)!;
@@ -115,14 +130,6 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
                 </tr>
               );
             })}
-            <tr title="Hits / misses / false alarms of threshold events">
-              <td>Events hit / miss / false</td><td className="muted">n/0/0</td>
-              {outputs.map((o, i) => <td key={runs[i].id}>{o.extras.events ? `${o.extras.events.hits} / ${o.extras.events.misses} / ${o.extras.events.falseAlarms}` : 'n/a'}</td>)}
-            </tr>
-            <tr title="Share of the cross-wavelet plane (inside the cone of influence) above the 95 % red-noise level">
-              <td>XWT significant fraction</td><td className="muted">n/a</td>
-              {outputs.map((o, i) => <td key={runs[i].id}>{fmtNum((o.extras.xwt?.fracSignificant ?? NaN) * 100, 1)} %</td>)}
-            </tr>
           </tbody>
         </table></div>
       </section>
@@ -147,7 +154,7 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
 
       <div className="twocol">
         <section className="card">
-          <h2>Cross-wavelet lag by scale <span className="muted">significant, in-cone regions only</span></h2>
+          <h2>Cross-wavelet lag by scale <span className="muted">significant regions, edge effects excluded</span></h2>
           <PlotHost
             traces={xwtTraces}
             layout={{
@@ -158,12 +165,13 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
             }}
             height={330}
           />
-          <p className="muted">Read like the paper's timing-error-by-scale panel: fast scales at the top, slow at the bottom. Gaps = no significant common power at that scale.</p>
+          <p className="muted">Timing error by timescale: fast scales at the top, slow at the bottom. Gaps mean the two series share no significant common power at that scale.</p>
         </section>
 
         <section className="card">
           <h2>Diagnostic-efficiency polar <span className="muted">(Schwemmle et al., 2021)</span></h2>
           <PlotHost
+            name={`${ds.name.replace(/[^\w-]+/g, '_')}_de_polar`}
             traces={polarTraces}
             layout={{
               polar: {
@@ -175,7 +183,7 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
             }}
             height={330}
           />
-          <p className="muted">As in the paper's diagnostic polar figure: radius = DE (0 at the centre is perfect), the top half is constant positive offset (B̄rel &gt; 0), the bottom half constant negative offset, left/right = dynamic high-vs-low-flow error; marker colour is the timing term r (yellow = mismatch → purple = match).</p>
+          <p className="muted">Radius = DE (0 at the centre is perfect; the observed record itself sits there). The top half indicates a constant positive offset (B̄rel &gt; 0), the bottom half a constant negative offset; left vs right separates dynamic high-flow from low-flow error. Marker colour is the timing term r, on a magma scale where yellow marks 0 (timing mismatch) and dark purple marks 1 (timing match).</p>
         </section>
       </div>
 
@@ -184,7 +192,16 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
           <select aria-label="Event report run" value={eventRunIdx} onChange={e => setEventRunIdx(Number(e.target.value))}>
             {runs.map((r, i) => <option key={r.id} value={i}>{r.name}</option>)}
           </select>{' '}
-          <span className="muted">threshold {fmtNum(evOut.extras.events?.threshold, 2)} {UNITS[ds.targetUnit].label} · tolerance ±{t.peakMatchTolerance} steps</span>
+          <span className="muted">threshold {fmtNum(evOut.extras.events?.threshold, 2)} {UNITS[ds.targetUnit].label} · tolerance ±{t.peakMatchTolerance} steps</span>{' '}
+          <button onClick={() => {
+            const evs = evOut.extras.events?.events ?? [];
+            const rows = [csvLine(['event', 'window_start', 'window_end', `obs_peak_${ds.targetUnit}`, 'peak_lag_steps', 'peak_mag_err_pct', 'volume_err_pct'])];
+            evs.forEach((e, i) => rows.push(csvLine([i + 1,
+              new Date(ds.dates[e.obs.start]).toISOString().slice(0, 10),
+              new Date(ds.dates[e.obs.end]).toISOString().slice(0, 10),
+              e.obs.peakQ, e.peakLag, e.peakMagErrPct, e.volumeErrPct])));
+            download(`${ds.name.replace(/[^\w-]+/g, '_')}_events_${evRun.name.replace(/[^\w-]+/g, '_')}.csv`, rows.join('\n'), 'text/csv');
+          }}>Export CSV</button>
         </h2>
         <div className="mapscroll"><table className="grid" aria-label="Detected events and per-event errors">
           <thead><tr><th>#</th><th>window</th><th>obs peak [{UNITS[ds.targetUnit].label}]</th><th>peak lag</th><th>peak mag err %</th><th>volume err %</th></tr></thead>
