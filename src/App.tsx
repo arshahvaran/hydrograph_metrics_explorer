@@ -9,13 +9,25 @@ import { SandboxTab } from './ui/SandboxTab'
 import { MapTab } from './ui/MapTab'
 import { CompareTab } from './ui/CompareTab'
 import { ReportTab } from './ui/ReportTab'
-import { AnalysisBar } from './ui/AnalysisBar'
 import { download } from './ui/format'
-import { APP_VERSION, CHECKPOINT } from './version'
+import { APP_VERSION } from './version'
 import type { Project } from './types'
 
+const I = (d: string) => (
+  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d={d} /></svg>
+);
+const ICONS: Record<string, JSX.Element> = {
+  data: I('M4 5h16v14H4z M4 10h16 M10 5v14'),
+  plots: I('M4 19V5 M4 19h16 M6.5 15l4-6 3.5 3.5 4-6.5'),
+  metrics: I('M6 20V10 M12 20V4 M18 20v-7'),
+  timing: I('M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 7v5l3.5 2'),
+  sandbox: I('M4 7h10 M18 7h2 M14 5v4 M4 12h3 M11 12h9 M7 10v4 M4 17h12 M20 17h0.5 M16 15v4'),
+  compare: I('M9 4v16 M15 4v16 M4 8h5 M4 16h5 M15 8h5 M15 16h5'),
+  map: I('M12 21s-6.5-5.4-6.5-10A6.5 6.5 0 0 1 12 4.5 6.5 6.5 0 0 1 18.5 11c0 4.6-6.5 10-6.5 10z M12 13a2 2 0 1 0 0-4 2 2 0 0 0 0 4z'),
+  report: I('M7 3h7l4 4v14H7z M14 3v4h4 M10 12h5 M10 16h5'),
+};
 const TABS = [
-  ['data', 'Data'], ['metrics', 'Metrics'], ['plots', 'Plots'],
+  ['data', 'Data'], ['plots', 'Plots'], ['metrics', 'Metrics'],
   ['timing', 'Timing'], ['sandbox', 'Sandbox'], ['compare', 'Compare'],
   ['map', 'Map'], ['report', 'Report'],
 ] as const;
@@ -49,31 +61,35 @@ export default function App() {
     <div className="app">
       <a href="#main" className="skip">Skip to content</a>
       <header className="header">
-        <div>
-          <h1>Hydrograph Metrics Explorer</h1>
-          <p className="tagline">Timing- and shape-aware evaluation of hydrologic model simulations — beyond NSE and KGE.</p>
+        <div className="brand">
+          <img className="logo" src={`${import.meta.env.BASE_URL}logo.svg`} alt="" aria-hidden="true" />
+          <div>
+            <h1>Hydrograph Metrics Explorer</h1>
+            <p className="tagline">Evaluate hydrological model performance beyond conventional NSE or KGE with timing- and shape-aware measures.</p>
+          </div>
         </div>
         <div className="headerright">
           {project.datasets.length > 0 && (
-            <select value={ds?.id ?? ''} onChange={e => setActiveDataset(e.target.value)} title="Active dataset" aria-label="Active dataset">
-              {project.datasets.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
+            <label className="dsselect">Active dataset:{' '}
+              <select value={ds?.id ?? ''} onChange={e => setActiveDataset(e.target.value)} title="Active dataset" aria-label="Active dataset">
+                {project.datasets.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </label>
           )}
           {ds && <button title="Remove active dataset" aria-label="Remove active dataset" onClick={() => removeDataset(ds.id)}>✕</button>}
+          <button title="Duplicate the active dataset" disabled={!ds}
+            onClick={() => useApp.getState().duplicateDataset()}>Duplicate</button>
           <button title="Save project (.hme.json)" disabled={!project.datasets.length}
             onClick={() => {
               const json = serialiseProject(project);
               if (json.length > 25_000_000) alert(`Heads-up: this project serialises to ${(json.length / 1e6).toFixed(0)} MB (spec suggests staying under 25 MB). It will still save, but loading may be slow.`);
               download('project.hme.json', json, 'application/json');
             }}>Save</button>
-          <button title="Duplicate the active dataset" disabled={!ds}
-            onClick={() => useApp.getState().duplicateDataset()}>Duplicate</button>
           <button title="Start a new empty project" disabled={!project.datasets.length}
             onClick={() => { if (confirm('Clear all datasets and start a new project? Unsaved work is lost.')) useApp.getState().loadProject({ schemaVersion: 1, datasets: [], activeDatasetId: null }); }}>New</button>
           <label className="filebtn" title="Load a saved project">Load
             <input ref={loadRef} type="file" accept=".json" className="vh" aria-label="Load a saved .hme.json project" onChange={e => e.target.files?.[0] && onLoadProject(e.target.files[0])} />
           </label>
-          <span className="badge">{CHECKPOINT}</span>
           <button className="theme-toggle" onClick={toggleTheme} title="Toggle light or dark interface" aria-label="Toggle colour theme">
             {theme === 'dark' ? '\u2600\uFE0E' : '\u263D'}
           </button>
@@ -102,13 +118,12 @@ export default function App() {
             disabled={!ds && id !== 'data'}
             title={!ds && id !== 'data' ? 'Load data first' : undefined}
             onClick={() => ds && setActiveTab(id)}>
-            {label}
+            {ICONS[id]}<span>{label}</span>
           </button>
         ))}
       </div></nav>
 
       <main className="main" id="main">
-        {tab !== 'data' && ds && <AnalysisBar />}
         {tab === 'data' && <DataTab />}
         {tab === 'metrics' && ds && <MetricsTab />}
         {tab === 'plots' && ds && <PlotsTab />}
@@ -120,15 +135,12 @@ export default function App() {
       </main>
 
       <footer className="footer">
-        <span>All computation runs in your browser; your data never leaves this page.</span>
+        <span>All computation runs in the browser; uploaded data never leaves this page.</span>
         <span>
-          HME v{APP_VERSION} · MIT ·{' '}
-          <a href="https://github.com/arshahvaran/hydrograph_metrics_explorer" target="_blank" rel="noreferrer">source &amp; citation</a>
+          v{APP_VERSION} ·{' '}
+          <a href="https://github.com/arshahvaran/hydrograph_metrics_explorer" target="_blank" rel="noreferrer">Source, License, &amp; Citation</a>
         </span>
-        <span className="credit">
-          Developed by Ali Reza Shahvaran ·{' '}
-          <a href="https://github.com/arshahvaran/" target="_blank" rel="noopener noreferrer">github.com/arshahvaran</a>
-        </span>
+        <span className="credit">Developed by Shahvaran et al., 2026</span>
       </footer>
     </div>
   );

@@ -1,6 +1,6 @@
 // Report generation (spec §16): Word (.docx) and PDF, entirely client-side.
 // DOCX via docx-js (dual DXA widths on tables, ShadingType.CLEAR, typed
-// ImageRun, one Paragraph per line — per the documented gotchas). PDF via a
+// ImageRun, one Paragraph per line; per the documented gotchas). PDF via a
 // print-styled window that mirrors the same content, so the two match.
 
 import { arrMax } from '../metrics/support/stats'
@@ -21,7 +21,7 @@ export interface ReportSections {
 export interface ReportImage { caption: string; dataUrl: string; w: number; h: number }
 
 const TOOL_URL = 'https://arshahvaran.github.io/hydrograph_metrics_explorer/';
-const CITATION = `Shahvaran, A.R. (2026). Hydrograph Metrics Explorer v${APP_VERSION} [software]. ${TOOL_URL} — companion to: Shahvaran et al., "Beyond Conventional Metrics: Timing- and Shape-Aware Performance Assessment Frameworks for Hydrologic Model Evaluation."`;
+const CITATION = `Shahvaran, A.R. (2026). Hydrograph Metrics Explorer v${APP_VERSION} [software]. ${TOOL_URL} · Companion to: Shahvaran et al., "Beyond Conventional Metrics: Timing- and Shape-Aware Performance Assessment Frameworks for Hydrologic Model Evaluation."`;
 
 export const reportFilename = (ds: Dataset, ext: string) =>
   `${ds.name.replace(/\W+/g, '_')}_evaluation_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.${ext}`;
@@ -60,7 +60,7 @@ export async function buildReportImages(ds: Dataset, frame: Frame, runs: Run[], 
     ],
     { yaxis: { title: `Q [${ds.targetUnit}]` }, xaxis: { title: '' } },
   );
-  images.push({ caption: `Fig. R1 — Observed vs simulated hydrographs${frame.caption ? ` (${frame.caption})` : ''}.`, ...hydro });
+  images.push({ caption: `Fig. R1. Observed vs simulated hydrographs${frame.caption ? ` (${frame.caption})` : ''}.`, ...hydro });
 
   const r0 = runs[0];
   const o = clean(frame.obs), s = clean(frame.apply(r0.values));
@@ -73,7 +73,7 @@ export async function buildReportImages(ds: Dataset, frame: Frame, runs: Run[], 
     ],
     { xaxis: { title: `Observed [${ds.targetUnit}]`, range: lim }, yaxis: { title: `Simulated [${ds.targetUnit}]`, range: lim, scaleanchor: 'x' } },
   );
-  images.push({ caption: `Fig. R2 — Predicted–observed scatter, ${r0.name}.`, ...scat });
+  images.push({ caption: `Fig. R2. Predicted–observed scatter, ${r0.name}.`, ...scat });
 
   const rows = outputs[0]?.extras.sweep?.rows ?? [];
   if (rows.length) {
@@ -83,12 +83,12 @@ export async function buildReportImages(ds: Dataset, frame: Frame, runs: Run[], 
         { x: rows.map((r: any) => r.lag), y: rows.map((r: any) => r.w1), name: 'W₁', yaxis: 'y2', type: 'scatter', mode: 'lines', line: { color: '#d95f02', width: 2, dash: 'dot' } },
       ],
       {
-        xaxis: { title: `lag [steps of ${frame.step.label}] — positive = simulation late`, zeroline: true },
+        xaxis: { title: `lag [steps of ${frame.step.label}] (positive = simulation late)`, zeroline: true },
         yaxis: { title: 'NSE' }, yaxis2: { title: 'W₁', overlaying: 'y', side: 'right' },
         shapes: [{ type: 'line', x0: 0, x1: 0, yref: 'paper', y0: 0, y1: 1, line: { color: '#888', width: 1, dash: 'dot' } }],
       },
     );
-    images.push({ caption: `Fig. R3 — Lag sweep for ${r0.name}: time-synchronous NSE vs the transport-based W₁.`, ...sweep });
+    images.push({ caption: `Fig. R3. Lag sweep for ${r0.name}: time-synchronous NSE vs the transport-based W₁.`, ...sweep });
   }
   return images;
 }
@@ -101,7 +101,7 @@ export function summaryPairs(ds: Dataset, frame: Frame): [string, string][] {
     ['Analysis subset', frame.caption || 'full record'],
     ['Steps in analysis', String(frame.dates.length)],
     ['Unit', ds.targetUnit + (ds.area ? ` · area ${ds.area.value} ${ds.area.unit}` : '')],
-    ['Location', ds.location ? `${ds.location.lat.toFixed(4)}, ${ds.location.lon.toFixed(4)} (WGS84)` : '—'],
+    ['Location', ds.location ? `${ds.location.lat.toFixed(4)}, ${ds.location.lon.toFixed(4)} (WGS84)` : 'n/a'],
     ['NaN policy / transform / benchmark', `${v.nanPolicy} / ${v.transform} / ${v.benchmark}`],
     ['Timing config', `events ≥ P${v.timingConfig.eventThreshold.value}${v.timingConfig.eventThreshold.kind === 'absolute' ? ' (abs)' : ''}, min-distance ${v.timingConfig.eventMinDistance}, peak window ±${v.timingConfig.peakMatchTolerance}, DTW band ${Math.round(v.timingConfig.dtwBandFraction * 100)}%`],
   ];
@@ -155,7 +155,7 @@ export async function buildDocx(p: ReportPayload): Promise<Blob> {
 
   kids.push(new Paragraph({
     heading: HeadingLevel.TITLE, alignment: AlignmentType.LEFT,
-    children: [new TextRun(`Model evaluation report — ${ds.name}`)],
+    children: [new TextRun(`Model evaluation report: ${ds.name}`)],
   }));
   Ptext(`Generated ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC by Hydrograph Metrics Explorer v${APP_VERSION} (${TOOL_URL}). All computation ran in the browser; no data left the device.`, { italic: true });
 
@@ -209,7 +209,7 @@ export async function buildDocx(p: ReportPayload): Promise<Blob> {
     for (let i = 0; i < runs.length; i++) {
       const ev = outputs[i].extras.events;
       H(`${runs[i].name}`, HeadingLevel.HEADING_2);
-      if (!ev || !ev.events.length) { Ptext('n/a — no events at this threshold.', { italic: true }); continue; }
+      if (!ev || !ev.events.length) { Ptext('n/a; no events at this threshold.', { italic: true }); continue; }
       Ptext(`Hits ${ev.hits} · misses ${ev.misses} · false alarms ${ev.falseAlarms} · threat score ${fmtNum(ev.threat, 2)}.`);
       const w = Math.floor(CONTENT / 6);
       kids.push(tableOf(
@@ -235,8 +235,8 @@ export async function buildDocx(p: ReportPayload): Promise<Blob> {
       ['Rank', 'Run', ...priorities.map(pr => `${pr.id} (w=${pr.weight})`), 'Composite'],
       order.map(i => ({
         cells: [String(rows[i].rank), rows[i].runName,
-          ...priorities.map(pr => (isFinite(rows[i].perMetric[pr.id]) ? rows[i].perMetric[pr.id].toFixed(2) : '—')),
-          isFinite(rows[i].composite) ? rows[i].composite.toFixed(3) : '—'],
+          ...priorities.map(pr => (isFinite(rows[i].perMetric[pr.id]) ? rows[i].perMetric[pr.id].toFixed(2) : 'n/a')),
+          isFinite(rows[i].composite) ? rows[i].composite.toFixed(3) : 'n/a'],
         shaded: rows[i].rank === 1, boldFirst: true,
       })),
       [w0, wn, ...priorities.map(() => wm), 1400],
@@ -267,8 +267,8 @@ export function openPrintReport(p: ReportPayload): void {
   const { ds, frame, runs, outputs, images, sections, notes } = p;
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
   const rowsHtml = (cells: string[], tag = 'td', cls = '') => `<tr class="${cls}">${cells.map(c => `<${tag}>${esc(c)}</${tag}>`).join('')}</tr>`;
-  let body = `<h1>Model evaluation report — ${esc(ds.name)}</h1>
-  <p class="meta">Generated ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC by Hydrograph Metrics Explorer v${APP_VERSION} — ${TOOL_URL}. All computation ran in the browser.</p>`;
+  let body = `<h1>Model evaluation report: ${esc(ds.name)}</h1>
+  <p class="meta">Generated ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC by Hydrograph Metrics Explorer v${APP_VERSION}; ${TOOL_URL}. All computation ran in the browser.</p>`;
   if (sections.summary) {
     body += `<h2>1. Data and settings</h2><table>${summaryPairs(ds, frame).map(([k, v]) => rowsHtml([k, v])).join('')}</table>`;
   }
@@ -290,7 +290,7 @@ export function openPrintReport(p: ReportPayload): void {
     runs.forEach((r, i) => {
       const ev = outputs[i].extras.events;
       body += `<h3>${esc(r.name)}</h3>`;
-      if (!ev || !ev.events.length) { body += '<p><em>n/a — no events at this threshold.</em></p>'; return; }
+      if (!ev || !ev.events.length) { body += '<p><em>n/a; no events at this threshold.</em></p>'; return; }
       body += `<p>Hits ${ev.hits} · misses ${ev.misses} · false alarms ${ev.falseAlarms} · threat ${fmtNum(ev.threat, 2)}.</p>`;
       body += `<table><thead>${rowsHtml(['#', 'Start', 'Obs peak', 'Sim peak', 'Peak lag', 'Vol bias %'], 'th')}</thead><tbody>` +
         ev.events.slice(0, 12).map((e: any, k: number) => rowsHtml([String(k + 1), new Date(frame.dates[e.start] ?? ds.dates[e.start]).toISOString().slice(0, 10), fmtNum(e.obsPeak, 2), fmtNum(e.simPeak, 2), fmtNum(e.peakLag, 1), fmtNum(e.volBiasPct, 1)])).join('') + '</tbody></table>';
@@ -301,14 +301,14 @@ export function openPrintReport(p: ReportPayload): void {
     const rows = rankRuns(runs.map((r, i) => ({ runName: r.name, values: outputs[i].values })), priorities);
     const order = rows.map((_, i) => i).sort((a, b) => rows[a].rank - rows[b].rank);
     body += `<h2>5. Run ranking</h2><table><thead>${rowsHtml(['Rank', 'Run', ...priorities.map(p2 => `${p2.id} (w=${p2.weight})`), 'Composite'], 'th')}</thead><tbody>` +
-      order.map(i => rowsHtml([String(rows[i].rank), rows[i].runName, ...priorities.map(p2 => (isFinite(rows[i].perMetric[p2.id]) ? rows[i].perMetric[p2.id].toFixed(2) : '—')), rows[i].composite.toFixed(3)], 'td', rows[i].rank === 1 ? 'timing' : '')).join('') + '</tbody></table>' +
+      order.map(i => rowsHtml([String(rows[i].rank), rows[i].runName, ...priorities.map(p2 => (isFinite(rows[i].perMetric[p2.id]) ? rows[i].perMetric[p2.id].toFixed(2) : 'n/a')), rows[i].composite.toFixed(3)], 'td', rows[i].rank === 1 ? 'timing' : '')).join('') + '</tbody></table>' +
       `<p><strong>Recommended run: ${esc(rows[order[0]].runName)}</strong> (composite ${rows[order[0]].composite.toFixed(3)}).</p>`;
   }
   if (notes.trim()) body += `<h2>Notes</h2><p>${esc(notes.trim())}</p>`;
   body += `<h2>Provenance</h2><pre>${esc(JSON.stringify({ tool: `HME v${APP_VERSION}`, dataset: ds.name, unit: ds.targetUnit, view: ds.view }, null, 1))}</pre><p class="meta">${esc(CITATION)}</p>`;
 
   const w = window.open('', '_blank');
-  if (!w) { alert('Pop-up blocked — allow pop-ups to print the PDF report.'); return; }
+  if (!w) { alert('Pop-up blocked; allow pop-ups to print the PDF report.'); return; }
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${reportFilename(ds, 'pdf').replace(/\.pdf$/, '')}</title><style>
     body{font-family:"Times New Roman",Georgia,serif;color:#101113;margin:26mm 20mm;line-height:1.45;font-size:11pt}
     h1{font-size:17pt;margin:0 0 4pt} h2{font-size:13pt;margin:14pt 0 4pt} h3{font-size:11.5pt;margin:10pt 0 2pt}

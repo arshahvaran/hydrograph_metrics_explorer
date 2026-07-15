@@ -24,7 +24,27 @@ export interface Frame {
 
 const frameCache = new Map<string, Frame>();
 
+/** Full-record frame: analysis tabs always see the whole dataset. Subsetting
+ *  is done in the Plots tab and materialised via commitSubsetDataset. */
 export function frameFor(ds: Dataset): Frame {
+  const key = ['full', ds.id, ds.dates.length].join('|');
+  const hit = frameCache.get(key);
+  if (hit) return hit;
+  const frame: Frame = {
+    dates: ds.dates,
+    obs: Float64Array.from(ds.observed.values as ArrayLike<number>),
+    step: { ms: ds.step.ms, label: ds.step.label },
+    caption: '',
+    key,
+    apply: (values) => Float64Array.from(values as ArrayLike<number>),
+  };
+  if (frameCache.size > 40) frameCache.clear();
+  frameCache.set(key, frame);
+  return frame;
+}
+
+/** Subset preview for the Plots tab only (window / season / resample). */
+export function subsetFrameFor(ds: Dataset): Frame {
   const v = ds.view;
   const key = [ds.id, ds.dates.length, JSON.stringify(v.window), JSON.stringify(v.season), v.resample].join('|');
   const hit = frameCache.get(key);

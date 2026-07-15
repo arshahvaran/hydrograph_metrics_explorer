@@ -29,7 +29,7 @@ export async function parseWorkbook(buf: ArrayBuffer): Promise<RawTable> {
     const rows = aoa.filter(r => r.some((c: any) => String(c ?? '').trim() !== ''));
     if (rows.length >= 2) {
       const note = wb.SheetNames.length > 1
-        ? `Workbook has ${wb.SheetNames.length} sheets — using “${name}”. Move your data to a single sheet if this is the wrong one.`
+        ? `Workbook has ${wb.SheetNames.length} sheets; using “${name}”. Move your data to a single sheet if this is the wrong one.`
         : undefined;
       return { header: rows[0].map(toStr).map((s: string) => s.trim()), rows: rows.slice(1).map(r => r.map(toStr)), note };
     }
@@ -44,7 +44,7 @@ export interface StageOptions {
   roles: ColumnRole[];        // one per column
   dateFormat: DateFormat;
   unit: UnitId;               // applied to every value column
-  sentinels: boolean;         // -9999/-999 → missing
+  missingValue: number | null; // user-declared no-data value, e.g. -999
 }
 
 export interface Staged {
@@ -77,7 +77,7 @@ export function stage(table: RawTable, opt: StageOptions): Staged {
     ? parseDates(table.rows.map(r => r[dateCol] ?? ''), opt.dateFormat)
     : { ms: table.rows.map(() => NaN), used: 'none', ambiguous: false, failures: table.rows.length };
 
-  const col = (j: number) => table.rows.map(r => parseValue(r[j], { sentinels: opt.sentinels }));
+  const col = (j: number) => table.rows.map(r => parseValue(r[j], { missingValue: opt.missingValue }));
   const label = (j: number) => (table.header[j] || `col ${j + 1}`).replace(/\s*\[.+?\]\s*/, '').trim();
 
   const observed = obsCol >= 0 ? { name: label(obsCol), values: col(obsCol) } : null;
@@ -86,7 +86,7 @@ export function stage(table: RawTable, opt: StageOptions): Staged {
   const validation = validateDataset(dates.ms, observed, runs);
   if (dateCol < 0) validation.errors.unshift('No column is mapped as Date.');
   if (dates.ambiguous && opt.dateFormat === 'auto') {
-    validation.errors.push('Day/month order is ambiguous in this file — pick MDY or DMY explicitly in the date-format selector.');
+    validation.errors.push('Day/month order is ambiguous in this file; pick MDY or DMY explicitly in the date-format selector.');
   }
 
   const ok = validation.errors.length === 0 && observed;

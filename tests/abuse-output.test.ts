@@ -41,7 +41,7 @@ describe('QA-007 project-file loading', () => {
     useApp.getState().loadProject({ schemaVersion: 1, datasets: [], activeDatasetId: null });
     const rows = ['date,observed,m1,m2'];
     for (let i = 0; i < 30; i++) rows.push(`${new Date(Date.UTC(2002, 0, 1) + i * 864e5).toISOString().slice(0, 10)},${5 + Math.sin(i / 3)},${5 + Math.sin((i - 1) / 3)},${4.4 + Math.sin(i / 3)}`);
-    useApp.getState().commitDataset(stage(parseDelimited(rows.join('\n')), { name: 'rt', unit: 'm3s', dateFormat: 'auto', sentinels: true, roles: ['date', 'observed', 'run', 'run'] }).commit!);
+    useApp.getState().commitDataset(stage(parseDelimited(rows.join('\n')), { name: 'rt', unit: 'm3s', dateFormat: 'auto', missingValue: null, roles: ['date', 'observed', 'run', 'run'] }).commit!);
     return serialiseProject(useApp.getState().project);
   };
 

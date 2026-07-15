@@ -203,3 +203,21 @@ project files (QA-007); XLSX sheet-0 only (QA-009); DOCX >6-run overflow;
 reversed windows. Suite grew 101 → 300 tests incl. DOM (jsdom+RTL), fast-check
 fuzz, axe-core a11y, perf numbers, worker-race, privacy manifest, and a
 rules-of-hooks lint gate.
+
+## v1.2.0 — interface revision from manual inspection
+Header rebuilt: animated 1:1 logo (same art as the favicon; simulated curve
+shifts in a loop, reduced-motion aware), new tagline, no em dashes anywhere in
+the UI, "Active dataset:" label, Duplicate/Save swapped, badge removed. Tabs
+reordered (Data, Plots, Metrics, …) with monochrome inline icons and distinct
+boundaries in both themes. Footer: neutral privacy wording, "Source, License,
+& Citation", version without prefix, credit "Shahvaran et al., 2026" far right.
+Data tab: Sample 1/2, professional date-format labels, "Discharge unit"
+limited to 5 common units, sentinel checkbox replaced by a user-declared
+"Missing value" box (engine now takes missingValue: number|null), role
+dropdowns read Date/Observed/Simulated/Ignore and uploads start unmapped,
+capitalised summary headers, sheet terminology, full-width sheet cells,
+Simulated N columns, template header simulated_1, paste placeholder equals the
+template. Subsetting restructured: window/season/resample moved into the Plots
+tab only, with "Use this data →" materialising the selection as a new dataset
+(commitSubsetDataset); all analysis tabs now always see full records. Suite
+300 → 306.

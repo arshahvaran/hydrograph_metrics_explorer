@@ -74,6 +74,9 @@ body {
 }
 .tagline { margin: 0.15rem 0 0; color: var(--ink-soft); max-width: 62ch; font-size: 0.95rem; }
 .headerright { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 0.85rem; }
+.logo { width: 46px; height: 46px; flex: none; border-radius: 11px; box-shadow: 0 1px 4px rgba(0,0,0,0.18); }
+.dsselect { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.86rem; color: var(--ink-soft); white-space: nowrap; }
 .badge {
   display: inline-flex; align-items: center; gap: 6px;
   font-family: "DM Mono", monospace; font-size: 0.78rem;
@@ -88,15 +91,18 @@ body {
 .theme-toggle:hover { border-color: var(--accent); }
 
 /* ---------- tabs ---------- */
-.tabs { display: flex; gap: 0.25rem; padding: 0 1.4rem; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 0.3rem; padding: 0 1.4rem; border-bottom: 2px solid var(--line); }
 .tab {
-  appearance: none; border: 1px solid transparent; border-bottom: none;
+  appearance: none; border: 1px solid var(--line); border-bottom: none;
   background: transparent; color: var(--ink-soft);
   padding: 0.5rem 0.95rem; border-radius: 9px 9px 0 0; cursor: pointer;
   font: inherit; font-size: 0.95rem; font-weight: 500;
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  margin-bottom: -2px;
 }
+.tab svg { width: 15px; height: 15px; flex: none; opacity: 0.85; }
 .tab:hover:not(:disabled) { color: var(--ink); }
-.tab.active { background: var(--panel); border-color: var(--line); color: var(--ink); font-weight: 600; }
+.tab.active { background: var(--panel); border-color: var(--line); border-bottom: 2px solid var(--panel); color: var(--ink); font-weight: 600; }
 .tab:disabled { opacity: 0.45; cursor: not-allowed; }
 .tab:focus-visible, button:focus-visible, a:focus-visible, .filebtn:focus-within {
   outline: 2px solid var(--accent); outline-offset: 2px;
@@ -232,7 +238,7 @@ select { cursor: pointer; }
 .dlrow { display: flex; justify-content: flex-end; gap: 0.3rem; margin-top: 0.15rem; }
 .dlrow button { font-size: 0.72rem; padding: 0.1rem 0.5rem; color: var(--ink-soft); font-family: "DM Mono", monospace; }
 .editgrid td, .editgrid th { padding: 0 !important; }
-.editgrid input { width: 9.5em; border: none; border-radius: 0; background: transparent; font-family: "DM Mono", monospace; font-size: 0.84rem; padding: 0.25rem 0.45rem; }
+.editgrid input { display: block; width: 100%; min-width: 9.5em; box-sizing: border-box; border: none; border-radius: 0; background: transparent; font-family: "DM Mono", monospace; font-size: 0.84rem; padding: 0.3rem 0.5rem; }
 .editgrid th input { font-family: inherit; font-weight: 600; }
 .editgrid input:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
 

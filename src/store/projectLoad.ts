@@ -107,10 +107,10 @@ function loadDataset(raw: unknown, errors: string[]): Dataset | null {
 export function parseProjectFile(text: string): { project: Project; warnings: string[] } {
   let raw: unknown;
   try { raw = JSON.parse(text); }
-  catch { throw new Error('The file is not valid JSON — it may be truncated or not an HME project.'); }
+  catch { throw new Error('The file is not valid JSON; it may be truncated or not an HME project.'); }
   if (typeof raw !== 'object' || raw === null) throw new Error('Not an HME project file.');
   const p = raw as Record<string, unknown>;
-  if (p.schemaVersion !== 1) throw new Error(`Unsupported schema version ${String(p.schemaVersion)} — this build reads schemaVersion 1.`);
+  if (p.schemaVersion !== 1) throw new Error(`Unsupported schema version ${String(p.schemaVersion)}; this build reads schemaVersion 1.`);
   if (!Array.isArray(p.datasets)) throw new Error('Not an HME project file (no datasets array).');
 
   const errors: string[] = [];

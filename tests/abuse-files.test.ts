@@ -50,12 +50,12 @@ describe('delimited-text torture', () => {
   });
   it('ragged rows do not throw and short rows read as missing', () => {
     const t = parseDelimited('date,observed,m\n2001-01-01,1\n2001-01-02,2,3,EXTRA');
-    const st = stage(t, { name: 'r', unit: 'm3s', dateFormat: 'auto', sentinels: true, roles: ['date', 'observed', 'run'] });
+    const st = stage(t, { name: 'r', unit: 'm3s', dateFormat: 'auto', missingValue: null, roles: ['date', 'observed', 'run'] });
     expect(st.validation).toBeDefined(); // no throw is the contract
   });
   it('header-only and empty files stage with clear errors, not crashes', () => {
     for (const txt of ['date,observed,m', '']) {
-      const st = stage(parseDelimited(txt), { name: 'x', unit: 'm3s', dateFormat: 'auto', sentinels: true, roles: ['date', 'observed', 'run'] });
+      const st = stage(parseDelimited(txt), { name: 'x', unit: 'm3s', dateFormat: 'auto', missingValue: null, roles: ['date', 'observed', 'run'] });
       expect(st.commit).toBeNull();
       expect(st.validation.errors.length).toBeGreaterThan(0);
     }

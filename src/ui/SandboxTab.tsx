@@ -69,7 +69,7 @@ function SandboxTabInner({ ds }: { ds: Dataset }) {
   return (
     <div>
       <section className="card">
-        <h2>Perturbation sandbox <span className="muted">— break a hydrograph on purpose and watch which metrics notice (paper §6)</span></h2>
+        <h2>Perturbation sandbox <span className="muted">break a hydrograph on purpose and watch which metrics notice (paper §6)</span></h2>
         <div className="controls">
           <label>Base{' '}
             <select value={sb.mode} onChange={e => set({ mode: e.target.value as any })}>
@@ -110,7 +110,7 @@ function SandboxTabInner({ ds }: { ds: Dataset }) {
             </span>
           </div>
         </div>
-        <p className="muted">S′(t) = m + (B(t−Δt) − m)·γ·(1−δ) + β + ε — B is the base series, m its mean; noise is reproducible from the seed.</p>
+        <p className="muted">S′(t) = m + (B(t−Δt) − m)·γ·(1−δ) + β + ε, where B is the base series, m its mean; noise is reproducible from the seed.</p>
       </section>
 
       <section className="card">
@@ -148,14 +148,14 @@ function SandboxTabInner({ ds }: { ds: Dataset }) {
       </section>
 
       <section className="card">
-        <h2>Lag sweep of the perturbed series <span className="muted">— NSE collapses off-lag; W₁ stays smooth and points at the shift</span></h2>
+        <h2>Lag sweep of the perturbed series <span className="muted">NSE collapses off-lag; W₁ stays smooth and points at the shift</span></h2>
         <PlotHost
           traces={[
             { x: sweepRows.map(r => r.lag), y: sweepRows.map(r => r.nse), name: 'NSE', type: 'scatter', mode: 'lines', line: { color: '#1f77b4', width: 2.2 } },
             { x: sweepRows.map(r => r.lag), y: sweepRows.map(r => r.w1), name: 'W₁', yaxis: 'y2', type: 'scatter', mode: 'lines', line: { color: '#d95f02', width: 2, dash: 'dot' } },
           ]}
           layout={{
-            xaxis: { title: 'lag [steps] — positive = simulation late', zeroline: true, dtick: 5 },
+            xaxis: { title: 'lag [steps] (positive = simulation late)', zeroline: true, dtick: 5 },
             yaxis: { title: 'NSE' },
             yaxis2: { title: 'W₁ [steps]', overlaying: 'y', side: 'right' },
             shapes: [

@@ -54,7 +54,7 @@ function CompareTabInner({ ds }: { ds: Dataset }) {
   return (
     <div>
       <section className="card">
-        <h2>Priority metrics <span className="muted">— tick what matters for your application; weights are relative</span></h2>
+        <h2>Priority metrics <span className="muted">tick what matters for your application; weights are relative</span></h2>
         <div className="prigrid">
           {CANDIDATES.map(m => {
             const p = priorities.find(x => x.id === m.id);
@@ -89,17 +89,17 @@ function CompareTabInner({ ds }: { ds: Dataset }) {
                   <td key={p.id}>
                     {fmtNum(outputs[i]!.values[p.id], byId.get(p.id)?.digits ?? 3)}
                     {' · '}
-                    <strong>{isFinite(rows[i].perMetric[p.id]) ? rows[i].perMetric[p.id].toFixed(2) : '—'}</strong>
+                    <strong>{isFinite(rows[i].perMetric[p.id]) ? rows[i].perMetric[p.id].toFixed(2) : 'n/a'}</strong>
                   </td>
                 ))}
-                <td className={rows[i].rank === 1 ? 'best' : ''}>{isFinite(rows[i].composite) ? rows[i].composite.toFixed(3) : '—'}</td>
+                <td className={rows[i].rank === 1 ? 'best' : ''}>{isFinite(rows[i].composite) ? rows[i].composite.toFixed(3) : 'n/a'}</td>
               </tr>
             ))}
           </tbody>
         </table></div>
         <div className="callout">
           <strong>Recommended run: <span style={{ color: winnerRun.color }}>{winner.runName}</span></strong>
-          {' '}— composite {winner.composite.toFixed(3)} across {priorities.length} priority metrics
+          {' '}· composite {winner.composite.toFixed(3)} across {priorities.length} priority metrics
           {contributors.length ? <>; strongest on {contributors.join(' and ')}</> : null}.
           {priorities.some(p => byId.get(p.id)?.timing)
             ? ' Timing-aware metrics are included, so this ranking rewards getting events at the right time, not just the right average.'

@@ -30,8 +30,8 @@ beforeAll(() => {
   (globalThis as any).Worker = RacingWorker;
   const st = useApp.getState();
   st.loadProject({ schemaVersion: 1, datasets: [], activeDatasetId: null });
-  idA = st.commitDataset(stage(parseDelimited(csv(120)), { name: 'slow-A', unit: 'm3s', dateFormat: 'auto', sentinels: true, roles: ['date', 'observed', 'run'] }).commit!);
-  idB = st.commitDataset(stage(parseDelimited(csv(80)), { name: 'fast-B', unit: 'm3s', dateFormat: 'auto', sentinels: true, roles: ['date', 'observed', 'run'] }).commit!);
+  idA = st.commitDataset(stage(parseDelimited(csv(120)), { name: 'slow-A', unit: 'm3s', dateFormat: 'auto', missingValue: null, roles: ['date', 'observed', 'run'] }).commit!);
+  idB = st.commitDataset(stage(parseDelimited(csv(80)), { name: 'fast-B', unit: 'm3s', dateFormat: 'auto', missingValue: null, roles: ['date', 'observed', 'run'] }).commit!);
 });
 
 describe('worker race: stale results never cross datasets', () => {

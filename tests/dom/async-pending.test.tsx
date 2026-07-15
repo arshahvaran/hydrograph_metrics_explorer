@@ -40,7 +40,7 @@ function loadSyntheticDataset() {
     rows.push(`${d},${o.toFixed(3)},${s.toFixed(3)}`);
   }
   const staged = stage(parseDelimited(rows.join('\n')), {
-    name: 'async-ds', unit: 'm3s', dateFormat: 'auto', sentinels: true,
+    name: 'async-ds', unit: 'm3s', dateFormat: 'auto', missingValue: null,
     roles: ['date', 'observed', 'run'],
   });
   expect(staged.commit).toBeTruthy();

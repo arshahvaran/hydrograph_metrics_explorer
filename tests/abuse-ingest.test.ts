@@ -20,20 +20,22 @@ describe('QA-005 numeric cell parsing (S1: silent wrong values)', () => {
     ['  7 ', 7],
   ];
   for (const [s, v] of cases) {
-    it(`parses ${JSON.stringify(s)} as ${v}`, () => expect(parseValue(s, { sentinels: true })).toBeCloseTo(v, 10));
+    it(`parses ${JSON.stringify(s)} as ${v}`, () => expect(parseValue(s, { missingValue: null })).toBeCloseTo(v, 10));
   }
   for (const bad of ['1,23,45', 'abc', '', '--5', '1.2.3']) {
-    it(`rejects ${JSON.stringify(bad)} as NaN`, () => expect(Number.isNaN(parseValue(bad, { sentinels: true }))).toBe(true));
+    it(`rejects ${JSON.stringify(bad)} as NaN`, () => expect(Number.isNaN(parseValue(bad, { missingValue: null }))).toBe(true));
   }
-  it('keeps sentinels', () => {
-    expect(Number.isNaN(parseValue('-9999', { sentinels: true }))).toBe(true);
-    expect(parseValue('-9999', { sentinels: false })).toBe(-9999);
+  it('a user-declared missing value maps to NaN; without one, the value passes through', () => {
+    expect(Number.isNaN(parseValue('-9999', { missingValue: -9999 }))).toBe(true);
+    expect(Number.isNaN(parseValue(-999, { missingValue: -999 }))).toBe(true);
+    expect(parseValue('-9999', { missingValue: null })).toBe(-9999);
+    expect(parseValue('-9999', {})).toBe(-9999);
   });
 });
 
 describe('QA-006 dates: unsorted / duplicated input (S1: silent wrong timing)', () => {
   const mk = (rows: string[]) => stage(parseDelimited(['date,observed,m'].concat(rows).join('\n')),
-    { name: 'd', unit: 'm3s', dateFormat: 'auto', sentinels: true, roles: ['date', 'observed', 'run'] });
+    { name: 'd', unit: 'm3s', dateFormat: 'auto', missingValue: null, roles: ['date', 'observed', 'run'] });
 
   it('commit sorts rows jointly by date', () => {
     __resetComputeCachesForTests();

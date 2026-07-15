@@ -38,7 +38,7 @@ function csv(n = 90, phase = 0) {
 }
 const commit = (name = 'charter', n = 90, phase = 0) =>
   useApp.getState().commitDataset(stage(parseDelimited(csv(n, phase)), {
-    name, unit: 'm3s', dateFormat: 'auto', sentinels: true, roles: ['date', 'observed', 'run', 'run'],
+    name, unit: 'm3s', dateFormat: 'auto', missingValue: null, roles: ['date', 'observed', 'run', 'run'],
   }).commit!);
 
 describe('AGENT A charters', () => {

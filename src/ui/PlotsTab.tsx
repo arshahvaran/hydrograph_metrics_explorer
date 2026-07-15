@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useApp } from '../store/store'
 import { PlotHost } from './PlotHost'
-import { useRunOutput, frameFor } from './compute'
+import { useRunOutput, subsetFrameFor } from './compute'
+import { AnalysisBar } from './AnalysisBar'
 import { quantile } from '../metrics/support/stats'
 import { OBSERVED_COLOR } from '../types'
 import { arrMax } from '../metrics/support/stats'
@@ -65,7 +66,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
   const [threshold, setThreshold] = useState<string>('');
   const [focusIdx, setFocusIdx] = useState(0); // series selector for heatmap/spaghetti/alignment
 
-  const frame = frameFor(ds);
+  const frame = subsetFrameFor(ds);
   const dates = useMemo(() => frame.dates.map(m => new Date(m).toISOString().slice(0, 10)), [frame.key]);
   const alignRun = ds.runs.filter(r => r.visible)[Math.max(0, Math.min(focusIdx - 1, ds.runs.length - 1))] ?? ds.runs[0] ?? null;
   const alignOut = useRunOutput(ds, plot === 'alignment' ? alignRun : null);
@@ -191,7 +192,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
         { x: cx, y: cy, name: 'DTW alignment', type: 'scatter', mode: 'lines', line: { color: 'rgba(150,150,160,0.5)', width: 1 }, hoverinfo: 'skip' },
       ],
       layout: { xaxis: { rangeslider: { visible: true } }, yaxis: { title: yTitle } },
-      note: `optimal Sakoe–Chiba alignment (band ${alignOut.extras.dtw?.band} steps) — mean |warp| ${alignOut.values.dtw_warp?.toFixed(2)} steps; grey ties connect matched points`,
+      note: `optimal Sakoe–Chiba alignment (band ${alignOut.extras.dtw?.band} steps); mean |warp| ${alignOut.values.dtw_warp?.toFixed(2)} steps; grey ties connect matched points`,
     };
   }, [ds, plot, mode, logY, movAvg, threshold, focusIdx, dates, all, unit, frame.key, alignOut]);
 
@@ -199,6 +200,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
 
   return (
     <div>
+      <AnalysisBar />
       <section className="card">
         <div className="controls">
           {PLOTS.map(([id, label]) => (

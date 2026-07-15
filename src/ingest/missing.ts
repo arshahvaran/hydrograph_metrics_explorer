@@ -3,8 +3,8 @@
 const BASE_TOKENS = new Set(['', 'na', 'nan', 'null', 'n/a', '-', '--', '---', 'none', 'missing']);
 
 export interface MissingOptions {
-  /** Treat -9999 / -999 sentinels as missing (default true, spec §6.0). */
-  sentinels?: boolean;
+  /** A user-declared no-data value (e.g. -999). null = nothing is treated as missing. */
+  missingValue?: number | null;
 }
 
 /** Parse a raw cell into a number, mapping missing tokens to NaN. */
@@ -39,17 +39,17 @@ export function parseNumericCell(raw: string): number {
 }
 
 export function parseValue(raw: string | number | null | undefined, opts: MissingOptions = {}): number {
-  const sentinels = opts.sentinels ?? true;
+  const missingValue = opts.missingValue ?? null;
   if (raw === null || raw === undefined) return NaN;
   if (typeof raw === 'number') {
-    if (sentinels && (raw === -9999 || raw === -999)) return NaN;
+    if (missingValue !== null && raw === missingValue) return NaN;
     return raw;
   }
   const s = raw.trim();
   if (BASE_TOKENS.has(s.toLowerCase())) return NaN;
   const v = parseNumericCell(s);
   if (!isFinite(v)) return NaN;
-  if (sentinels && (v === -9999 || v === -999)) return NaN;
+  if (missingValue !== null && v === missingValue) return NaN;
   return v;
 }
 

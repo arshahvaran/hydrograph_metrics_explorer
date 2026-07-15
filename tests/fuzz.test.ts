@@ -11,29 +11,26 @@ const finiteDouble = fc.double({ min: -1e6, max: 1e6, noNaN: true, noDefaultInfi
 
 describe('parser properties', () => {
   it('String(x) round-trips exactly for finite doubles', () => {
-    fc.assert(fc.property(finiteDouble, x => {
-      // sentinel values are deliberately mapped to NaN — exclude them
-      fc.pre(x !== -9999 && x !== -999);
-      return parseValue(String(x), { sentinels: true }) === x;   // === so -0 and +0 compare equal
-    }), { numRuns: 200 });
+    fc.assert(fc.property(finiteDouble, x =>
+      parseValue(String(x), { missingValue: null }) === x   // === so -0 and +0 compare equal
+    ), { numRuns: 200 });
   });
   it('toFixed(k) round-trips within 10^-k', () => {
     fc.assert(fc.property(fc.double({ min: -1e5, max: 1e5, noNaN: true, noDefaultInfinity: true }), fc.integer({ min: 0, max: 8 }), (x, k) => {
-      fc.pre(Math.abs(x - (-9999)) > 1 && Math.abs(x - (-999)) > 1);
-      const v = parseValue(x.toFixed(k), { sentinels: true });
+      const v = parseValue(x.toFixed(k), { missingValue: null });
       return Math.abs(v - x) <= Math.pow(10, -k) / 2 + 1e-12;
     }), { numRuns: 200 });
   });
   it('anglophone thousands grouping parses back to the integer', () => {
     fc.assert(fc.property(fc.integer({ min: 1000, max: 999_999_999 }), n => {
       const grouped = n.toLocaleString('en-US');           // e.g. 1,234,567
-      return parseValue(grouped, { sentinels: false }) === n;
+      return parseValue(grouped, { missingValue: null }) === n;
     }), { numRuns: 200 });
   });
   it('single-comma decimals parse as decimals when the fraction is not 3 digits', () => {
     fc.assert(fc.property(fc.integer({ min: 0, max: 9999 }), fc.integer({ min: 1, max: 99 }), (a, b) => {
       const s = `${a},${String(b).padStart(2, '0')}`;      // 2-digit fraction → decimal comma
-      return Math.abs(parseValue(s, { sentinels: false }) - (a + b / 100)) < 1e-9;
+      return Math.abs(parseValue(s, { missingValue: null }) - (a + b / 100)) < 1e-9;
     }), { numRuns: 200 });
   });
 });

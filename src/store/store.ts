@@ -3,6 +3,7 @@ import type { Dataset, Project, Run, UnitId, ViewState, TimingConfig, SandboxSta
 import { defaultView, RUN_PALETTE } from '../types'
 import { detectStep } from '../units/stepDetect'
 import { convertSeries } from '../units/convert'
+import { applySubset } from '../metrics/subset'
 
 export interface CommitInput {
   name: string;
@@ -17,6 +18,9 @@ interface AppState {
   theme: 'light' | 'dark';
   toggleTheme: () => void;
   commitDataset: (input: CommitInput) => string;
+  /** Materialise the active dataset's window/season/resample selection (set in
+   *  the Plots tab) as a NEW dataset, and make it active. */
+  commitSubsetDataset: () => string | null;
   setActiveDataset: (id: string) => void;
   removeDataset: (id: string) => void;
   setActiveTab: (tab: ViewState['activeTab']) => void;
@@ -97,6 +101,39 @@ export const useApp = create<AppState>((set, get) => ({
       createdAt: Date.now(),
     };
     set(s => ({ project: { ...s.project, datasets: [...s.project.datasets, ds], activeDatasetId: id } }));
+    return id;
+  },
+
+  commitSubsetDataset: () => {
+    const st = get();
+    const src = st.project.datasets.find(d => d.id === st.project.activeDatasetId);
+    if (!src) return null;
+    const v = src.view;
+    if (!v.window && !v.season && v.resample === 'native') return null;
+    const frame = applySubset(src.dates, [src.observed.values, ...src.runs.map(r => r.values)], v, src.step);
+    if (frame.dates.length < 2) return null;
+    const step = detectStep(frame.dates);
+    const id = newId('ds');
+    const runs: Run[] = src.runs.map((r, i) => ({
+      id: newId('run'), name: r.name, values: Array.from(frame.sims[i]),
+      inputUnit: r.inputUnit, visible: r.visible, color: r.color,
+    }));
+    const view = defaultView(step.ms, frame.dates.length);
+    view.transform = v.transform; view.nanPolicy = v.nanPolicy;
+    view.priorityMetrics = v.priorityMetrics.map(p => ({ ...p }));
+    view.activeTab = 'plots';
+    const ds: Dataset = {
+      id, name: `${src.name} (${frame.caption || 'subset'})`, dates: frame.dates,
+      observed: { name: src.observed.name, values: Array.from(frame.obs), inputUnit: src.observed.inputUnit },
+      runs,
+      step: { ms: step.ms, label: step.label, irregular: step.irregular },
+      targetUnit: src.targetUnit,
+      location: src.location ? { ...src.location } : null,
+      area: src.area ? { ...src.area } : null,
+      view,
+      createdAt: Date.now(),
+    };
+    set(st2 => ({ project: { ...st2.project, datasets: [...st2.project.datasets, ds], activeDatasetId: id } }));
     return id;
   },
 

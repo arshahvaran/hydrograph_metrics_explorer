@@ -49,7 +49,7 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
 
   function exportCsv(sep: ',' | '\t') {
     const lines: string[] = [
-      `# Hydrograph Metrics Explorer v${APP_VERSION} — https://arshahvaran.github.io/hydrograph_metrics_explorer/`,
+      `# Hydrograph Metrics Explorer v${APP_VERSION} · https://arshahvaran.github.io/hydrograph_metrics_explorer/`,
       `# exported ${new Date().toISOString()}`,
       `# dataset: ${ds!.name} (${ds!.dates.length} rows, step ${ds!.step.label}, unit ${ds!.targetUnit})`,
       `# settings: nan=${ds!.view.nanPolicy}; transform=${ds!.view.transform}; benchmark=${ds!.view.benchmark}; c2m_display=${c2mOn}`,
@@ -102,7 +102,7 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
           </label>
           <label title="Display unbounded efficiencies on the bounded (−1,1] C2M scale">
             <input type="checkbox" checked={c2mOn} onChange={e => setC2mOn(e.target.checked)} /> C2M display</label>
-          <label title="Circular moving-block bootstrap on the paired series (B=500, L≈n^⅓, seeded). Timing rows are excluded — resampling blocks destroys the time axis they measure.">
+          <label title="Circular moving-block bootstrap on the paired series (B=500, L≈n^⅓, seeded). Timing rows are excluded; resampling blocks destroys the time axis they measure.">
             <input type="checkbox" checked={ciOn} onChange={e => updateView({ showBootstrapCIs: e.target.checked })} /> 95% CIs (block bootstrap)
           </label>
           {ciOn && boots.progress < 1 && <span className="muted" role="status" aria-live="polite">bootstrapping… {Math.round(boots.progress * 100)}%</span>}
@@ -112,7 +112,7 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
         <p className="muted" aria-live="polite">
           n per run (valid pairs): {runs.map((r, i) => `${r.name}: ${outputs[i]?.n ?? '…'}`).join(' · ')}.{busy ? ' Computing in a background worker…' : ''}{frame.caption ? ` Subset: ${frame.caption}.` : ''}
           {ds.view.transform !== 'none' && ' Metrics are computed on the transformed series.'}
-          {' '}Rows tinted <span className="timingchip">⏱</span> are the timing- &amp; shape-aware measures — the ones conventional suites omit.
+          {' '}Rows tinted <span className="timingchip">⏱</span> are the timing- &amp; shape-aware measures, the ones conventional suites omit.
         </p>
         {outputs.flatMap(o => o?.notes ?? []).filter((v, i, a) => a.indexOf(v) === i).map(nn => <div key={nn} className="warning">{nn}</div>)}
         <div className="mapscroll"><table className="grid metricstable" aria-label="Metric values per run">
@@ -169,7 +169,7 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
 
       <section className="card">
         <details>
-          <summary><strong>Metric reference</strong> — equations, ranges, and blind spots</summary>
+          <summary><strong>Metric reference</strong>: equations, ranges, and blind spots</summary>
           <div className="controls"><label>Search{' '}
             <input type="search" placeholder="e.g. wasserstein, bias, timing…" value={refQuery}
               onChange={e => setRefQuery(e.target.value)} aria-label="search metric reference" />

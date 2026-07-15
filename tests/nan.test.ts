@@ -21,13 +21,13 @@ describe('NaN handling', () => {
     expect(m.obs[1]).toBeCloseTo(2, 12)   // mean(1,3)
     expect(m.sim[0]).toBeCloseTo(3, 12)   // mean(2,4)
   })
-  it('missing tokens and sentinels parse to NaN; thousands separators tolerated', () => {
+  it('missing tokens and declared missing values parse to NaN; thousands separators tolerated', () => {
     expect(parseValue('')).toBeNaN()
     expect(parseValue('NA')).toBeNaN()
     expect(parseValue('---')).toBeNaN()
-    expect(parseValue('-9999')).toBeNaN()
-    expect(parseValue('-999')).toBeNaN()
-    expect(parseValue('-999', { sentinels: false })).toBe(-999)
+    expect(parseValue('-9999', { missingValue: -9999 })).toBeNaN()
+    expect(parseValue('-999', { missingValue: -999 })).toBeNaN()
+    expect(parseValue('-999', { missingValue: null })).toBe(-999)
     expect(parseValue('1,234.5')).toBe(1234.5)
   })
 })

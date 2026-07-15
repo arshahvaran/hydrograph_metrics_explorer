@@ -12,7 +12,7 @@ beforeAll(() => {
   const rows = ['date,observed,modelA,modelB'];
   for (let i = 0; i < 80; i++) rows.push(`${new Date(Date.UTC(2005, 0, 1) + i * 864e5).toISOString().slice(0, 10)},${(6 + 3 * Math.sin(i / 6)).toFixed(3)},${(6 + 3 * Math.sin((i - 2) / 6)).toFixed(3)},${(5 + 3 * Math.sin(i / 6)).toFixed(3)}`);
   useApp.getState().loadProject({ schemaVersion: 1, datasets: [], activeDatasetId: null });
-  useApp.getState().commitDataset(stage(parseDelimited(rows.join('\n')), { name: 'a11y', unit: 'm3s', dateFormat: 'auto', sentinels: true, roles: ['date', 'observed', 'run', 'run'] }).commit!);
+  useApp.getState().commitDataset(stage(parseDelimited(rows.join('\n')), { name: 'a11y', unit: 'm3s', dateFormat: 'auto', missingValue: null, roles: ['date', 'observed', 'run', 'run'] }).commit!);
 });
 
 const AXE_OPTS: axe.RunOptions = {
@@ -49,8 +49,8 @@ describe('AGENT E: keyboard semantics', () => {
     dataTab.focus();
     fireEvent.keyDown(dataTab, { key: 'ArrowRight' });
     await new Promise(r => setTimeout(r, 30));
-    expect(screen.getByRole('tab', { name: 'Metrics' })).toHaveAttribute('aria-selected', 'true');
-    fireEvent.keyDown(screen.getByRole('tab', { name: 'Metrics' }), { key: 'End' });
+    expect(screen.getByRole('tab', { name: 'Plots' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Plots' }), { key: 'End' });
     await new Promise(r => setTimeout(r, 30));
     expect(screen.getByRole('tab', { name: 'Report' })).toHaveAttribute('aria-selected', 'true');
     fireEvent.keyDown(screen.getByRole('tab', { name: 'Report' }), { key: 'Home' });

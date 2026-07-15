@@ -116,10 +116,10 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
             })}
             <tr title="Hits / misses / false alarms of threshold events">
               <td>Events hit / miss / false</td><td className="muted">n/0/0</td>
-              {outputs.map((o, i) => <td key={runs[i].id}>{o.extras.events ? `${o.extras.events.hits} / ${o.extras.events.misses} / ${o.extras.events.falseAlarms}` : '—'}</td>)}
+              {outputs.map((o, i) => <td key={runs[i].id}>{o.extras.events ? `${o.extras.events.hits} / ${o.extras.events.misses} / ${o.extras.events.falseAlarms}` : 'n/a'}</td>)}
             </tr>
             <tr title="Share of the cross-wavelet plane (inside the cone of influence) above the 95 % red-noise level">
-              <td>XWT significant fraction</td><td className="muted">—</td>
+              <td>XWT significant fraction</td><td className="muted">n/a</td>
               {outputs.map((o, i) => <td key={runs[i].id}>{fmtNum((o.extras.xwt?.fracSignificant ?? NaN) * 100, 1)} %</td>)}
             </tr>
           </tbody>
@@ -127,11 +127,11 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
       </section>
 
       <section className="card">
-        <h2>Lag sweep <span className="muted">— NSE (solid, left) and W₁ (dotted, right) as the simulation is shifted; dashed line = best-fit lag</span></h2>
+        <h2>Lag sweep <span className="muted">NSE (solid, left) and W₁ (dotted, right) as the simulation is shifted; dashed line = best-fit lag</span></h2>
         <PlotHost
           traces={sweepTraces}
           layout={{
-            xaxis: { title: `lag [steps of ${stepLabel}] — positive = simulation late`, dtick: 5, zeroline: true },
+            xaxis: { title: `lag [steps of ${stepLabel}] (positive = simulation late)`, dtick: 5, zeroline: true },
             yaxis: { title: 'NSE' },
             yaxis2: { title: 'W₁ [steps]', overlaying: 'y', side: 'right' },
             shapes: [
@@ -146,7 +146,7 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
 
       <div className="twocol">
         <section className="card">
-          <h2>Cross-wavelet lag by scale <span className="muted">— significant, in-cone regions only</span></h2>
+          <h2>Cross-wavelet lag by scale <span className="muted">significant, in-cone regions only</span></h2>
           <PlotHost
             traces={xwtTraces}
             layout={{

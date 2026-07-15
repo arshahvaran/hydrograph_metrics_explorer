@@ -14,7 +14,7 @@ beforeAll(() => {
   for (let i = 0; i < 40; i++) rows.push(`${new Date(Date.UTC(2006, 0, 1) + i * 864e5).toISOString().slice(0, 10)},${(6 + Math.sin(i / 5)).toFixed(3)},${(6 + Math.sin((i - 2) / 5)).toFixed(3)}`);
   useApp.getState().loadProject({ schemaVersion: 1, datasets: [], activeDatasetId: null });
   useApp.getState().commitDataset(stage(parseDelimited(rows.join('\n')), {
-    name: HOSTILE, unit: 'm3s', dateFormat: 'auto', sentinels: true, roles: ['date', 'observed', 'run'],
+    name: HOSTILE, unit: 'm3s', dateFormat: 'auto', missingValue: null, roles: ['date', 'observed', 'run'],
   }).commit!);
 });
 

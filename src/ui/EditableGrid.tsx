@@ -1,18 +1,18 @@
 import { useState } from 'react'
-import type { RawTable } from '../ingest/ingest'
+import type { ColumnRole, RawTable } from '../ingest/ingest'
 
 const BLANK = (r: number, c: number) => Array.from({ length: r }, () => Array.from({ length: c }, () => ''));
 
-/** Editable paste grid (spec Appendix C, AC1): fixed DATE | OBSERVED |
- *  PREDICTED 1… columns, "+ Add predicted column", header rename → run name. */
-export function EditableGrid({ onUse, seedText }: { onUse: (t: RawTable, name: string) => void; seedText?: string }) {
-  const [headers, setHeaders] = useState<string[]>(['date', 'observed', 'predicted_1']);
+/** Editable paste sheet (spec Appendix C, AC1): fixed Date | Observed |
+ *  Simulated 1… columns, "+ Add simulated column", header rename → run name. */
+export function EditableGrid({ onUse, seedText }: { onUse: (t: RawTable, name: string, roles: ColumnRole[]) => void; seedText?: string }) {
+  const [headers, setHeaders] = useState<string[]>(['Date', 'Observed', 'Simulated 1']);
   const [rows, setRows] = useState<string[][]>(BLANK(8, 3));
 
   const setCell = (r: number, c: number, v: string) =>
     setRows(rs => rs.map((row, i) => (i === r ? row.map((x, j) => (j === c ? v : x)) : row)));
   const addColumn = () => {
-    setHeaders(h => [...h, `predicted_${h.length - 1}`]);
+    setHeaders(h => [...h, `Simulated ${h.length - 1}`]);
     setRows(rs => rs.map(r => [...r, '']));
   };
   const addRows = (n: number) => setRows(rs => [...rs, ...BLANK(n, headers.length)]);
@@ -32,20 +32,21 @@ export function EditableGrid({ onUse, seedText }: { onUse: (t: RawTable, name: s
   };
   const use = () => {
     const filled = rows.filter(r => r.some(c => c.trim() !== ''));
-    onUse({ header: headers, rows: filled }, 'Grid data');
+    const roles: ColumnRole[] = headers.map((_, j) => (j === 0 ? 'date' : j === 1 ? 'observed' : 'run'));
+    onUse({ header: headers, rows: filled }, 'Sheet data', roles);
   };
   const nonEmpty = rows.some(r => r.some(c => c.trim() !== ''));
 
   return (
     <div className="gridwrap">
       <div className="mapscroll">
-        <table className="grid editgrid" aria-label="editable data grid">
+        <table className="grid editgrid" aria-label="editable data sheet">
           <thead>
             <tr>{headers.map((h, c) => (
               <th key={c}>
                 {c < 2
-                  ? h.toUpperCase()
-                  : <input aria-label={`name of predicted column ${c - 1}`} value={h}
+                  ? h
+                  : <input aria-label={`name of simulated column ${c - 1}`} value={h}
                       onChange={e => setHeaders(hs => hs.map((x, j) => (j === c ? e.target.value : x)))} />}
               </th>
             ))}</tr>
@@ -64,10 +65,10 @@ export function EditableGrid({ onUse, seedText }: { onUse: (t: RawTable, name: s
         </table>
       </div>
       <div className="controls">
-        <button onClick={addColumn}>＋ Add predicted column</button>
-        <button onClick={() => addRows(10)}>＋ 10 rows</button>
-        <button className="primary" disabled={!nonEmpty} onClick={use}>Use grid data</button>
-        <span className="muted">Tab-separated blocks pasted into any cell fill the grid from there.</span>
+        <button onClick={addColumn}>＋ Add simulated column</button>
+        <button onClick={() => addRows(10)}>＋ Add 10 rows</button>
+        <button className="primary" disabled={!nonEmpty} onClick={use}>Use sheet data</button>
+        <span className="muted">Tab-separated blocks for pasting data from Excel or filling manually.</span>
       </div>
     </div>
   );

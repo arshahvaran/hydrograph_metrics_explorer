@@ -1,5 +1,5 @@
 export const fmtNum = (v: number | undefined | null, digits = 3): string =>
-  v === undefined || v === null || !isFinite(v) ? '—' : v.toFixed(digits);
+  v === undefined || v === null || !isFinite(v) ? 'n/a' : v.toFixed(digits);
 
 export const fmtDate = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
 

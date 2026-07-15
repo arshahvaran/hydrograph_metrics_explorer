@@ -8,9 +8,12 @@ import type { DateFormat } from '../ingest/dateParse'
 import type { UnitId } from '../types'
 
 const SAMPLES = [
-  { file: 'sample_hymod_raven.csv', name: 'HYMOD vs observed (Raven, daily 1954–59)' },
-  { file: 'sample_synthetic.csv', name: 'Synthetic: shifted + biased runs (daily, 2 yr)' },
+  { file: 'sample_hymod_raven.csv', name: 'Sample 1' },
+  { file: 'sample_synthetic.csv', name: 'Sample 2' },
 ];
+
+const ROLE_LABELS: Record<ColumnRole, string> = { date: 'Date', observed: 'Observed', run: 'Simulated', ignore: 'Ignore' };
+const UNIT_CHOICES: UnitId[] = ['m3s', 'cfs', 'ls', 'mm_step', 'in_day'];
 
 const ROLE_OPTIONS: ColumnRole[] = ['date', 'observed', 'run', 'ignore'];
 
@@ -24,7 +27,7 @@ export function DataTab() {
   const [roles, setRoles] = useState<ColumnRole[]>([]);
   const [dateFormat, setDateFormat] = useState<DateFormat>('auto');
   const [unit, setUnit] = useState<UnitId>('m3s');
-  const [sentinels, setSentinels] = useState(true);
+  const [missingValue, setMissingValue] = useState('');
   const [name, setName] = useState('My dataset');
   const [pasteText, setPasteText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -32,13 +35,16 @@ export function DataTab() {
   const [convertMsg, setConvertMsg] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const mv = missingValue.trim() === '' ? null : Number(missingValue.trim().replace(',', '.'));
   const staged = table && roles.length
-    ? stage(table, { name, roles, dateFormat, unit, sentinels })
+    ? stage(table, { name, roles, dateFormat, unit, missingValue: mv !== null && isFinite(mv) ? mv : null })
     : null;
 
-  function loadTable(t: RawTable, suggestedName: string) {
+  function loadTable(t: RawTable, suggestedName: string, rolesOverride?: ColumnRole[]) {
     setTable(t);
-    setRoles(guessRoles(t.header));
+    // Uploaded / pasted data starts unmapped: the user assigns every column
+    // deliberately. Samples and the sheet arrive pre-mapped.
+    setRoles(rolesOverride ?? t.header.map(() => 'ignore' as ColumnRole));
     setName(suggestedName);
     setError(null);
     const m = t.header.map(h => /\[(.+?)\]/.exec(h)?.[1]?.replace(/\s/g, '').toLowerCase()).find(Boolean);
@@ -49,7 +55,7 @@ export function DataTab() {
 
   async function onSample(file: string, label: string) {
     setBusy(true);
-    try { loadTable(parseDelimited(await fetchSample(file)), label); }
+    try { const t = parseDelimited(await fetchSample(file)); loadTable(t, label, guessRoles(t.header)); }
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   }
@@ -72,7 +78,7 @@ export function DataTab() {
   return (
     <div>
       <section className="card">
-        <h2>Load data <span className="muted">— parsed, validated and computed entirely in this browser tab</span></h2>
+        <h2>Load data</h2>
         <div className="controls">
           {SAMPLES.map(s => (
             <button key={s.file} disabled={busy} onClick={() => onSample(s.file, s.name)}>{s.name}</button>
@@ -84,10 +90,10 @@ export function DataTab() {
           </label>
         </div>
         <details>
-          <summary>…or paste / type into an editable grid</summary>
-          <EditableGrid onUse={(t2, name) => loadTable(t2, name)} seedText={pasteText} />
-          <p className="muted">Or paste raw delimited text below (tab, comma or semicolon; first row = headers) — <a href="samples/hme_template.csv" download>download the CSV template</a>.</p>
-          <textarea rows={6} value={pasteText} placeholder={'date\tobserved\tmodelA\n2001-01-01\t5.2\t4.9\n…'}
+          <summary>…or paste / type into an editable sheet</summary>
+          <EditableGrid onUse={(t2, name, r) => loadTable(t2, name, r)} seedText={pasteText} />
+          <p className="muted">Or paste raw delimited text below (tab, comma or semicolon; first row = headers). <a href="samples/hme_template.csv" download>download the CSV template</a>.</p>
+          <textarea rows={6} value={pasteText} placeholder={'date,observed,simulated_1\n2011-01-01,12.4,10.8\n2011-01-02,11.9,10.2'}
             onChange={e => setPasteText(e.target.value)} />
           <button className="primary" disabled={!pasteText.trim()}
             onClick={() => loadTable(parseDelimited(pasteText), 'Pasted data')}>Parse pasted data</button>
@@ -103,20 +109,21 @@ export function DataTab() {
             <label>Name <input value={name} onChange={e => setName(e.target.value)} /></label>
             <label>Date format{' '}
               <select aria-label="Date format" value={dateFormat} onChange={e => setDateFormat(e.target.value as DateFormat)}>
-                <option value="auto">auto-detect</option>
-                <option value="ymd">Y-M-D</option>
-                <option value="mdy">M/D/Y</option>
-                <option value="dmy">D/M/Y</option>
+                <option value="auto">Auto detect</option>
+                <option value="ymd">YYYY-MM-DD</option>
+                <option value="mdy">MM/DD/YYYY</option>
+                <option value="dmy">DD/MM/YYYY</option>
                 <option value="julian">Julian (YYYY-DDD)</option>
               </select>
             </label>
-            <label>Unit (all value columns){' '}
-              <select aria-label="Input unit" value={unit} onChange={e => setUnit(e.target.value as UnitId)}>
-                {Object.values(UNITS).map(u => <option key={u.id} value={u.id}>{u.label}</option>)}
+            <label>Discharge unit{' '}
+              <select aria-label="Discharge unit" value={unit} onChange={e => setUnit(e.target.value as UnitId)}>
+                {UNIT_CHOICES.map(id => <option key={id} value={id}>{UNITS[id].label}</option>)}
               </select>
             </label>
-            <label title="-9999 and -999 are treated as missing">
-              <input type="checkbox" checked={sentinels} onChange={e => setSentinels(e.target.checked)} /> sentinel −9999/−999 = missing
+            <label>Missing value{' '}
+              <input aria-label="Missing value" value={missingValue} placeholder="e.g., -999" style={{ width: '6.5em' }}
+                onChange={e => setMissingValue(e.target.value)} />
             </label>
           </div>
           <div className="mapscroll">
@@ -126,7 +133,7 @@ export function DataTab() {
                   <th key={j}>
                     <div>{h || `col ${j + 1}`}</div>
                     <select aria-label={`Role for column ${table.header[j] || j + 1}`} value={roles[j]} onChange={e => setRoles(roles.map((r, k) => (k === j ? e.target.value as ColumnRole : r)))}>
-                      {ROLE_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                      {ROLE_OPTIONS.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                     </select>
                   </th>
                 ))}</tr>
@@ -146,7 +153,7 @@ export function DataTab() {
               {staged.validation.errors.map((e, i) => <div key={i} className="error">{e}</div>)}
               {staged.validation.warnings.map((w, i) => <div key={i} className="warning">{w}</div>)}
               <table className="grid">
-                <thead><tr><th>Series</th><th>missing</th><th>negatives</th><th>min</th><th>mean</th><th>max</th><th>valid pairs vs obs</th></tr></thead>
+                <thead><tr><th>Series</th><th>Missing</th><th>Negatives</th><th>Min</th><th>Mean</th><th>Max</th><th>Valid pairs vs obs</th></tr></thead>
                 <tbody>
                   {staged.validation.series.map(s => (
                     <tr key={s.name}>
@@ -175,7 +182,6 @@ export function DataTab() {
               <select aria-label="Convert units to" value={ds.targetUnit} onChange={e => setConvertMsg(convertUnits(e.target.value as UnitId))}>
                 {Object.values(UNITS).filter(u => u.kind !== 'dimensionless' || ds.targetUnit === 'dimensionless').map(u => <option key={u.id} value={u.id}>{u.label}</option>)}
               </select>
-              {' '}<span className="muted">converting a depth unit needs the catchment area (Map tab)</span>
             </td></tr>
           </tbody></table>
           {convertMsg && <div className="error">{convertMsg}</div>}

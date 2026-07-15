@@ -1,17 +1,19 @@
 import { useApp } from '../store/store'
-import { frameFor } from './compute'
+import { subsetFrameFor } from './compute'
 
 const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 const ms = (s: string) => Date.parse(s + 'T00:00:00Z');
 
-/** Global analysis subset controls: contiguous window, recurring seasonal
- *  filter (DOY span, wraps across the new year), resample (spec §6/§9). */
+/** Subset controls for the Plots tab: contiguous window, recurring seasonal
+ *  filter (DOY span, wraps across the new year), resample. "Use this data"
+ *  materialises the selection as a new dataset. */
 export function AnalysisBar() {
   const ds = useApp(s => s.project.datasets.find(d => d.id === s.project.activeDatasetId) ?? null);
   const updateView = useApp(s => s.updateView);
+  const commitSubsetDataset = useApp(s => s.commitSubsetDataset);
   if (!ds) return null;
   const v = ds.view;
-  const frame = frameFor(ds);
+  const frame = subsetFrameFor(ds);
   const [d0, d1] = [ds.dates[0], ds.dates[ds.dates.length - 1]];
 
   return (
@@ -57,9 +59,12 @@ export function AnalysisBar() {
           </select>
         </label>
         <span className="muted">
-          {frame.caption || 'full record'} · {frame.dates.length} steps in analysis
+          {frame.caption || 'full record'} · {frame.dates.length} steps shown
           {v.season && v.season.startDoy > v.season.endDoy ? ' (season wraps the new year)' : ''}
         </span>
+        <button className="primary" title="Add this subset as a new dataset"
+          disabled={!v.window && !v.season && v.resample === 'native'}
+          onClick={() => commitSubsetDataset()}>Use this data →</button>
       </div>
     </section>
   );
