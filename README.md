@@ -1,7 +1,7 @@
 # Hydrograph Metrics Explorer (HME)
 
 [![Live app](https://img.shields.io/badge/Live%20app-arshahvaran.github.io-0b6e99)](https://arshahvaran.github.io/hydrograph_metrics_explorer/)
-[![Version](https://img.shields.io/badge/version-1.5-informational)](https://github.com/arshahvaran/hydrograph_metrics_explorer/tags)
+[![Version](https://img.shields.io/badge/version-1.6-informational)](https://github.com/arshahvaran/hydrograph_metrics_explorer/tags)
 [![CC BY-NC 4.0][cc-by-nc-shield]][cc-by-nc]
 
 **A client-side web tool for timing- and shape-aware evaluation of hydrologic model simulations.**
@@ -104,7 +104,7 @@ integration tests; run it with `npm test`.
 
 Until then, please cite the software itself (see [`CITATION.cff`](CITATION.cff)):
 
-> Shahvaran, A.R. (2026). Hydrograph Metrics Explorer (HME), version 1.5 [software].
+> Shahvaran, A.R. (2026). Hydrograph Metrics Explorer (HME), version 1.6 [software].
 > https://arshahvaran.github.io/hydrograph_metrics_explorer/
 
 ## License

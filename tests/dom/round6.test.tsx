@@ -68,7 +68,7 @@ describe('Timing tab, round 6', () => {
       expect(c, 'a scatterpolar plot should have rendered').toBeTruthy();
       return c;
     });
-    const runsTrace = (polarCall![1] as any[]).find(t => t.marker?.colorscale === 'Magma');
+    const runsTrace = (polarCall![1] as any[]).find(t => t.marker?.colorbar);
     expect(runsTrace).toBeTruthy();
     const m = runsTrace.marker;
     expect(m.cmax).toBe(1);

@@ -73,7 +73,7 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
   const polarR = runs.map((_r, i) => outputs[i].extras.de?.temporalR ?? NaN);
   const polarTraces = [{
     type: 'scatterpolar', mode: 'markers+text', showlegend: false, name: 'Observed',
-    r: [0], theta: [0], text: ['Observed'], textposition: 'bottom center',
+    r: [0], theta: [0], text: ['Observed'], textposition: 'top center',
     marker: { size: 12, symbol: 'circle', color: OBSERVED_COLOR, line: { color: '#ffffff', width: 1.5 } },
   }, {
     type: 'scatterpolar', mode: 'markers+text', showlegend: false,
@@ -83,8 +83,14 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
     marker: {
       size: 15, line: { color: '#ffffff', width: 1.5 },
       color: polarR,
-      colorscale: 'Magma', reversescale: true, cmin: deColorFloor(polarR), cmax: 1,
-      colorbar: { title: { text: 'timing r' }, thickness: 12, len: 0.75, x: 1.06 },
+      // Plasma, explicitly reversed to match the paper's figure: yellow at the
+      // low end (timing mismatch), dark blue-purple at r = 1 (timing match).
+      // Written out as stops so no renderer ambiguity around reversescale.
+      colorscale: [[0, '#f0f921'], [0.25, '#f89441'], [0.5, '#cc4778'], [0.75, '#7e03a8'], [1, '#0d0887']],
+      cmin: deColorFloor(polarR), cmax: 1,
+      // Sized and centred to sit flush with the polar circle: plot area is
+      // height minus margins; the circle spans that minus the angular labels.
+      colorbar: { title: { text: 'timing r' }, thickness: 14, len: 0.88, y: 0.5, yanchor: 'middle', x: 1.06 },
     },
   }];
 
@@ -190,7 +196,7 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
             traces={polarTraces}
             layout={{
               polar: {
-                radialaxis: { rangemode: 'tozero' },
+                radialaxis: { rangemode: 'tozero', dtick: 0.2 },
                 angularaxis: { thetaunit: 'degrees', dtick: 45, rotation: 90, direction: 'counterclockwise' },
               },
               margin: { t: 36, r: 70, l: 40, b: 36 },
@@ -198,7 +204,7 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
             }}
             height={330}
           />
-          <p className="muted">Radius = DE (0 at the centre is perfect; the observed record itself sits there). The top half indicates a constant positive offset (B̄rel &gt; 0), the bottom half a constant negative offset; left vs right separates dynamic high-flow from low-flow error. Marker colour is the timing term r, on a magma scale where dark purple marks 1 (timing match) and yellow marks the low end of the colourbar; the colour range adapts to the simulations in view so nearby r values stay distinguishable.</p>
+          <p className="muted">Radius = DE (0 at the centre is perfect; the observed record itself sits there). The top half indicates a constant positive offset (B̄rel &gt; 0), the bottom half a constant negative offset; left vs right separates dynamic high-flow from low-flow error. Marker colour is the timing term r, on a plasma scale where dark blue-purple marks 1 (timing match) and yellow marks the low end of the colourbar; the colour range adapts to the simulations in view so nearby r values stay distinguishable.</p>
         </section>
       </div>
 

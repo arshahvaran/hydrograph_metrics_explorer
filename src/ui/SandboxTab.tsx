@@ -87,9 +87,9 @@ function SandboxTabInner({ ds }: { ds: Dataset }) {
           {slider('Dampen δ', 'dampen', 0, 1, 0.05, v => v.toFixed(2))}
           {slider('Noise ε amplitude', 'noiseAmp', 0, 2 * baseStats.std, baseStats.std / 25 || 0.1, v => v.toFixed(2))}
           <div className="sliderrow">
-            <span className="srtop"><span>Noise kind / seed</span><code>reproducible</code></span>
+            <span className="srtop"><span>Noise type / seed</span><code>reproducible</code></span>
             <span className="srctrl">
-              <select aria-label="Noise kind" value={sb.noiseKind} onChange={e => set({ noiseKind: e.target.value as any })}>
+              <select aria-label="Noise type" value={sb.noiseKind} onChange={e => set({ noiseKind: e.target.value as any })}>
                 <option value="uniform">uniform</option><option value="gaussian">gaussian</option>
               </select>
               <input aria-label="Noise seed" type="number" value={sb.noiseSeed} style={{ width: '6em' }} onChange={e => set({ noiseSeed: Number(e.target.value) })} />

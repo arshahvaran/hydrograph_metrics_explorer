@@ -15,6 +15,7 @@ import { useApp } from '../../src/store/store'
 import { stage, parseDelimited } from '../../src/ingest/ingest'
 import { frameFor, computeForRun, __resetComputeCachesForTests } from '../../src/ui/compute'
 import { buildReportImages, REPO_URL, REPORT_CREDIT, REPORT_CREDIT_LINK_TEXT } from '../../src/report/report'
+import { APP_VERSION } from '../../src/version'
 import App from '../../src/App'
 
 beforeEach(() => {
@@ -73,7 +74,8 @@ describe('print report content', () => {
     expect(html).not.toContain('Provenance');
     expect(html).not.toContain('All computation ran in the browser');
     expect(html).not.toContain('no data left the device');
-    expect(html).toMatch(/Hydrograph Metrics Explorer v1\.5[^.\d]/);
+    expect(APP_VERSION).toMatch(/^\d+\.\d+$/); // two-digit user-visible scheme
+    expect(html).toContain(`Hydrograph Metrics Explorer v${APP_VERSION};`);
     expect(html).not.toMatch(/v\d+\.\d+\.\d+/);
     expect(html).toContain('width:58%'); // the square R2 embed
   });

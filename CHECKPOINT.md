@@ -406,3 +406,18 @@ as the author's cartolab repository; package.json and CITATION.cff aligned
 (version "1.5", release date updated). "How to cite" carries the placeholder
 "Reference paper will be added here once published" plus the software
 citation. Suite 352 to 354 (report-round9 x2).
+
+## v1.6: DE polar restyle to the paper's figure + sandbox label
+Timing tab, Diagnostic-efficiency polar: the Observed label moved above its
+dot (it collided with the radial tick labels); radial grid now every 0.2
+instead of 0.1; the colour scale is plasma matching the manuscript figure,
+written as explicit reversed stops (yellow #f0f921 at the low end for timing
+mismatch, dark blue-purple #0d0887 at r = 1 for timing match) so there is no
+renderer ambiguity around reversescale (the live magma-reversed variant was
+in fact rendering light-at-1, opposite to the caption); the colourbar is
+thickness 14, len 0.88, vertically centred (yanchor middle at y 0.5), sized
+to sit flush with the circle given the 330px plot and its margins; caption
+wording updated from magma to plasma. Sandbox: "Noise kind / seed" is now
+"Noise type / seed" (visible label and the select's accessible name).
+Version 1.6 across footer, reports, README badge, and CITATION.cff
+(package.json 1.6.0 for npm semver). Suite 354 to 356 (round10 x2).
