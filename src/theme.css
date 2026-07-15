@@ -75,8 +75,8 @@ body {
 .tagline { margin: 0.15rem 0 0; color: var(--ink-soft); max-width: 62ch; font-size: 0.95rem; }
 .headerright { display: flex; align-items: center; gap: 0.45rem; flex-wrap: nowrap; }
 .dsselect select { max-width: 14em; overflow: hidden; text-overflow: ellipsis; }
-.brand { display: flex; align-items: center; gap: 0.85rem; }
-.logo { width: 55px; height: 55px; flex: none; border-radius: 13px; box-shadow: 0 1px 4px rgba(0,0,0,0.18); }
+.brand { display: flex; align-items: stretch; gap: 0.9rem; }
+.logo { align-self: stretch; width: auto; height: auto; aspect-ratio: 1 / 1; flex: none; border-radius: 13px; box-shadow: 0 1px 4px rgba(0,0,0,0.18); }
 .dsselect { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.86rem; color: var(--ink-soft); white-space: nowrap; }
 .badge {
   display: inline-flex; align-items: center; gap: 6px;
@@ -166,7 +166,7 @@ table.grid thead th { background: var(--panel-2); font-weight: 600; font-size: 0
 .grouprow td { background: var(--panel-2) !important; font-family: "Fraunces", Georgia, serif !important; font-weight: 600; font-size: 0.95rem !important; text-align: left !important; }
 .timingrow { background: var(--timing-bg); }
 .timingchip { background: var(--timing-bg); border: 1px solid var(--timing-line); border-radius: 5px; padding: 0 0.3rem; }
-td.best { font-weight: 700; text-decoration: underline; text-underline-offset: 3px; color: var(--accent); }
+td.best { font-weight: inherit; color: inherit; text-decoration: underline; text-underline-offset: 3px; }
 .metricstable td, .metricstable th { padding: 0.26rem 0.5rem; }
 
 /* reference table */

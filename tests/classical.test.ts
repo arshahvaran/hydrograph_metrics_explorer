@@ -169,3 +169,30 @@ describe('audit pins: polarity, sign conventions, ranges, edge cases', () => {
     expect(C.kge2021(o6, o6).bias).toBeCloseTo(0, 12)
   })
 })
+
+describe('audit pins added for the Extended catalogue (v1.3.0)', () => {
+  // wR² — Krause, Boyle & Bäse (2005): |b|·R² for b ≤ 1, R²/|b| otherwise,
+  // with b the OLS slope of simulated on observed (hydroGOF br2 semantics).
+  it('wr2 matches the Krause (2005) formula on a hand-worked vector', async () => {
+    const { wr2, pearson } = { ...(await import('../src/metrics/classical/catalogue')), ...(await import('../src/metrics/support/stats')) } as any;
+    const o = [1, 2, 3, 4, 5], s = [1.2, 1.9, 3.1, 3.9, 5.2];
+    const mo = 3, ms = s.reduce((a, b) => a + b, 0) / 5;
+    let num = 0, den = 0;
+    for (let i = 0; i < 5; i++) { num += (o[i] - mo) * (s[i] - ms); den += (o[i] - mo) ** 2; }
+    const b = num / den;
+    const r2 = pearson(o, s) ** 2;
+    const expected = Math.abs(b) <= 1 ? Math.abs(b) * r2 : r2 / Math.abs(b);
+    expect(wr2(o, s)).toBeCloseTo(expected, 12);
+  });
+  // logNSE — NSE on ln(Q + ε), ε = mean(obs)/100 (Pushpalatha et al., 2012).
+  it('logNse equals NSE of the ε-shifted logs, computed independently', async () => {
+    const { logNse } = await import('../src/metrics/classical/catalogue') as any;
+    const o = [2, 5, 9, 4, 7, 3], s = [2.4, 4.6, 8.1, 4.4, 7.9, 2.7];
+    const eps = o.reduce((a, b) => a + b, 0) / o.length * 0.01;
+    const lo = o.map(x => Math.log(x + eps)), ls = s.map(x => Math.log(x + eps));
+    const mlo = lo.reduce((a, b) => a + b, 0) / lo.length;
+    let num = 0, den = 0;
+    for (let i = 0; i < lo.length; i++) { num += (ls[i] - lo[i]) ** 2; den += (lo[i] - mlo) ** 2; }
+    expect(logNse(o, s)).toBeCloseTo(1 - num / den, 12);
+  });
+});

@@ -19,7 +19,7 @@ export function AnalysisBar() {
   return (
     <section className="card analysisbar">
       <div className="controls">
-        <label>Window{' '}
+        <label>Custom window{' '}
           <input type="date" aria-label="window start" min={iso(d0)} max={iso(d1)}
             value={v.window ? iso(v.window[0]) : ''}
             onChange={e => {
@@ -36,14 +36,14 @@ export function AnalysisBar() {
           {v.window && <button onClick={() => updateView({ window: null })} title="Clear window" aria-label="Clear analysis window">×</button>}
         </label>
         <label>Season (DOY){' '}
-          <input type="number" aria-label="season start day-of-year" min={1} max={366} style={{ width: '4.6em' }}
+          <input type="number" aria-label="season start day-of-year" min={1} max={366} style={{ width: '5.8em' }}
             value={v.season?.startDoy ?? ''} placeholder="start"
             onChange={e => {
               const n = Number(e.target.value);
               updateView({ season: e.target.value === '' ? null : { startDoy: Math.min(366, Math.max(1, n || 1)), endDoy: v.season?.endDoy ?? 366 } });
             }} />
           –
-          <input type="number" aria-label="season end day-of-year" min={1} max={366} style={{ width: '4.6em' }}
+          <input type="number" aria-label="season end day-of-year" min={1} max={366} style={{ width: '5.8em' }}
             value={v.season?.endDoy ?? ''} placeholder="end"
             onChange={e => {
               const n = Number(e.target.value);

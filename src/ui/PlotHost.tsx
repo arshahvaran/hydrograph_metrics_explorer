@@ -81,7 +81,7 @@ export function PlotHost({ traces, layout, height = 380, name = 'hme_plot', squa
     let cancelled = false;
     loadPlotly().then(P => {
       if (cancelled || !ref.current) return;
-      P.react(ref.current, traces, { ...BASE_LAYOUT, template: themeTemplate(), ...layout }, {
+      P.react(ref.current, traces, { ...BASE_LAYOUT, template: themeTemplate(), ...layout, ...(square ? { width: height, height, autosize: false } : {}) }, {
         responsive: true, displaylogo: false,
         modeBarButtonsToRemove: ['lasso2d', 'select2d'],
         toImageButtonOptions: { format: 'png', filename: 'hme_plot', scale: 2 },
@@ -95,7 +95,7 @@ export function PlotHost({ traces, layout, height = 380, name = 'hme_plot', squa
   const exportW = square ? height : 1100;
   const dl = (format: 'png' | 'svg') => {
     if (!ref.current) return;
-    loadPlotly().then(P => P.downloadImage(ref.current!, { format, filename: name, width: exportW, height, scale: format === 'png' ? 2 : 1 }));
+    loadPlotly().then(P => P.downloadImage(ref.current!, { format, filename: name, width: exportW, height, scale: format === 'png' ? 300 / 96 : 1 }));
   };
   const dlJpg = async () => {
     // JPG has no alpha: render on a white background with dark type,
@@ -105,7 +105,7 @@ export function PlotHost({ traces, layout, height = 380, name = 'hme_plot', squa
       data: traces,
       layout: { ...BASE_LAYOUT, template: exportTemplate(), ...layout, paper_bgcolor: '#ffffff', plot_bgcolor: '#ffffff', width: exportW, height },
     };
-    const url = await P.toImage(fig, { format: 'jpeg', width: exportW, height, scale: 2 });
+    const url = await P.toImage(fig, { format: 'jpeg', width: exportW, height, scale: 300 / 96 });
     const a = document.createElement('a');
     a.href = url; a.download = `${name}.jpg`; a.click();
   };
@@ -119,7 +119,7 @@ export function PlotHost({ traces, layout, height = 380, name = 'hme_plot', squa
   };
   return (
     <div>
-      <div ref={ref} style={{ width: '100%', maxWidth: square ? height : undefined, height }} className="plothost" />
+      <div ref={ref} style={{ width: square ? height : '100%', height }} className="plothost" />
       <div className="dlrow" aria-label="download this plot">
         <span className="ctrl-label">Download plot:</span>
         <button onClick={dlJpg} title="Download JPG (white background)">JPG</button>

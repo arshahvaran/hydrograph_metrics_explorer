@@ -106,10 +106,21 @@ export const REGISTRY: MetricMeta[] = [
 
 export const byId = new Map(REGISTRY.map(m => [m.id, m]));
 
+/** Essentials = exactly the metrics of the paper's Table 2 (its two blocks);
+ *  Extended adds every additional verified measure in the catalogue. */
 export const PRESETS: Record<string, string[] | 'all'> = {
-  Essentials: ['nse', 'kge2009', 'rmse', 'pbias', 'r'],
-  'Timing-aware': ['nse', 'kge2009', 'rmse', 'pbias', 'r', 'peak_lag_abs', 'event_threat', 'event_lag', 'lag_best', 'de', 'sd_time', 'dtw_warp', 'w1', 'w2sq', 'xwt_lag'],
-  Everything: 'all',
+  Essentials: [
+    'rmse', 'mae', 'rsr', 'r', 'r2', 'd', 'nse', 'kge2009', 'pbias', 've',
+    'fhv', 'flv', 'fms',
+    'sd_occ', 'sd_amp', 'sd_time',
+    'dtw_warp', 'dtw_dist',
+    'xwt_lag',
+    'w1',
+    'peak_lag_abs', 'peak_lag_signed',
+    'event_vol', 'event_lag',
+    'de',
+  ],
+  'Extended (beta)': 'all',
 };
 
 export interface ComputeContext {

@@ -11,7 +11,7 @@ import type { Dataset } from '../types'
 
 const PLOTS = [
   ['timeseries', 'Time series'], ['scatter', '1:1 scatter'], ['fdc', 'Flow duration'],
-  ['qq', 'Q–Q'], ['doy', 'DOY climatology'], ['heatmap', 'Annual heatmap'],
+  ['qq', 'Q-Q'], ['doy', 'DOY climatology'], ['heatmap', 'Annual heatmap'],
   ['spaghetti', 'Spaghetti'], ['alignment', 'DTW alignment'],
 ] as const;
 
@@ -84,7 +84,8 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
         x: dates, y: applyMode(s.y, mode, movAvg || null), name: s.name, type: 'scatter', mode: 'lines',
         line: { color: s.color, width: s.width, dash: s.dash },
       }));
-      L.xaxis = { rangeslider: { visible: true }, title: '' };
+      L.xaxis = { rangeslider: { visible: true }, title: 'Time', showline: false };
+      L.yaxis = { ...L.yaxis, zeroline: true };
       if (threshold && isFinite(thr) && mode === 'none') {
         L.shapes = [{ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: thr, y1: thr, line: { color: '#888', dash: 'dot' } }];
       }
@@ -102,7 +103,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
         marker: { color: s.color, size: 4, opacity: 0.55 },
       }));
       t.push({ x: [0, finiteMax], y: [0, finiteMax], name: '1:1', type: 'scatter', mode: 'lines', line: { color: '#555', dash: 'dash', width: 1 } } as any);
-      return { traces: t, layout: { xaxis: { title: `Observed [${unit}]` }, yaxis: { title: `Simulated [${unit}]`, scaleanchor: 'x' }, hovermode: 'closest' }, note: null };
+      return { traces: t, layout: { xaxis: { title: `Observed [${unit}]`, showline: false, zeroline: true }, yaxis: { title: `Simulated [${unit}]`, scaleanchor: 'x', showline: false, zeroline: true }, hovermode: 'closest' }, note: null };
     }
 
     if (plot === 'fdc') {
@@ -124,7 +125,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
       });
       const mx = arrMax(oq);
       t.push({ x: [0, mx], y: [0, mx], name: '1:1', type: 'scatter', mode: 'lines', line: { color: '#555', dash: 'dash', width: 1 } } as any);
-      return { traces: t, layout: { xaxis: { title: `Observed quantiles [${unit}]` }, yaxis: { title: `Simulated quantiles [${unit}]` }, hovermode: 'closest' }, note: null };
+      return { traces: t, layout: { xaxis: { title: `Observed quantiles [${unit}]`, showline: false, zeroline: true }, yaxis: { title: `Simulated quantiles [${unit}]`, scaleanchor: 'x', showline: false, zeroline: true }, hovermode: 'closest' }, note: null };
     }
 
     if (plot === 'doy') {
@@ -147,7 +148,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
         }
         t.push({ x: doys, y: med, name: `${s.name} (median)`, type: 'scatter', mode: 'lines', line: { color: s.color, width: s.width, dash: s.dash } });
       });
-      return { traces: t, layout: { xaxis: { title: 'Day of year' }, yaxis: { title: yTitle, type: logY ? 'log' : 'linear' } }, note: 'Medians by day of year; shaded band = observed interquartile range (IQR)' };
+      return { traces: t, layout: { xaxis: { title: 'Day of year', showline: false }, yaxis: { title: yTitle, type: logY ? 'log' : 'linear', zeroline: true } }, note: 'Medians by day of year; shaded band = observed interquartile range (IQR)' };
     }
 
     if (plot === 'heatmap' || plot === 'spaghetti') {
@@ -162,7 +163,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
       const years = [...byYear.keys()].sort((a, b) => a - b);
       if (plot === 'heatmap') {
         return {
-          traces: [{ z: years.map(y => byYear.get(y)!), x: Array.from({ length: 366 }, (_, i) => i + 1), y: years, type: 'heatmap', colorscale: 'Viridis', colorbar: { title: { text: unit, side: 'right' }, len: 1, lenmode: 'fraction', y: 0.5, yanchor: 'middle', thickness: 14, outlinewidth: 0 } }],
+          traces: [{ z: years.map(y => byYear.get(y)!), x: Array.from({ length: 366 }, (_, i) => i + 1), y: years, type: 'heatmap', colorscale: 'Rainbow', colorbar: { title: { text: unit, side: 'right' }, lenmode: 'pixels', len: 358, y: 0.5, yanchor: 'middle', thickness: 14, outlinewidth: 0 } }],
           layout: { xaxis: { title: 'Day of year' }, yaxis: { title: 'Year', dtick: 1 }, hovermode: 'closest' },
           note: `Annual regime of ${s.name}`,
         };
@@ -171,7 +172,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
         x: Array.from({ length: 366 }, (_, k) => k + 1), y: byYear.get(y)!, name: String(y), type: 'scatter', mode: 'lines',
         line: { color: i === years.length - 1 ? s.color : 'rgba(120,130,140,0.45)', width: i === years.length - 1 ? 2 : 1 },
       }));
-      return { traces: t, layout: { xaxis: { title: 'Day of year' }, yaxis: { title: yTitle, type: logY ? 'log' : 'linear' }, hovermode: 'closest' }, note: `One line per year of ${s.name}; latest year highlighted in color` };
+      return { traces: t, layout: { xaxis: { title: 'Day of year', showline: false }, yaxis: { title: yTitle, type: logY ? 'log' : 'linear', zeroline: true }, hovermode: 'closest' }, note: `One line per year of ${s.name}; latest year highlighted in color` };
     }
 
     // alignment
@@ -192,7 +193,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
         { x: dates, y: paired.s, name: run.name, type: 'scatter', mode: 'lines', line: { color: run.color, width: 1.7 } },
         { x: cx, y: cy, name: 'DTW alignment', type: 'scatter', mode: 'lines', line: { color: 'rgba(150,150,160,0.5)', width: 1 }, hoverinfo: 'skip' },
       ],
-      layout: { xaxis: { rangeslider: { visible: true } }, yaxis: { title: yTitle } },
+      layout: { xaxis: { rangeslider: { visible: true }, title: 'Time', showline: false }, yaxis: { title: yTitle, zeroline: true } },
       note: `Optimal Sakoe-Chiba alignment (band ${alignOut.extras.dtw?.band} steps); mean |warp| ${alignOut.values.dtw_warp?.toFixed(2)} steps; grey ties connect matched points`,
     };
   }, [ds, plot, mode, logY, movAvg, threshold, focusIdx, dates, all, unit, frame.key, alignOut]);
@@ -238,7 +239,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
           )}
         </div>
         {note && <p className="muted">{note}</p>}
-        <PlotHost traces={traces} layout={layout} height={440} square={plot === 'scatter' || plot === 'fdc' || plot === 'qq'} name={`hme_${plot}`} />
+        <PlotHost traces={traces} layout={layout} height={440} square={plot === 'scatter' || plot === 'fdc' || plot === 'qq'} name={`${ds.name.replace(/[^\w-]+/g, '_')}_${plot}`} />
       </section>
     </div>
   );

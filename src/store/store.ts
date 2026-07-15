@@ -137,7 +137,14 @@ export const useApp = create<AppState>((set, get) => ({
     return id;
   },
 
-  setActiveDataset: (id) => set(s => ({ project: { ...s.project, activeDatasetId: id } })),
+  setActiveDataset: (id) => set(s => {
+    // Stay wherever the user is: the current tab travels with the switch.
+    const cur = s.project.datasets.find(d => d.id === s.project.activeDatasetId)?.view.activeTab;
+    const datasets = cur
+      ? s.project.datasets.map(d => (d.id === id && d.view.activeTab !== cur ? { ...d, view: { ...d.view, activeTab: cur } } : d))
+      : s.project.datasets;
+    return { project: { ...s.project, datasets, activeDatasetId: id } };
+  }),
 
   removeDataset: (id) => set(s => {
     const datasets = s.project.datasets.filter(d => d.id !== id);

@@ -233,3 +233,20 @@ standoff unified through the Plotly template across Plots/Timing/Sandbox and
 the report renderer, real unit labels (m³/s not m3s) in every axis/caption,
 capitalised and corrected plot captions, Log(y) checkbox label, heatmap
 colorbar sized to the plot. Header right no longer wraps internally.
+
+## v1.3.0 — Metrics governance + plots round 3
+Presets reduced to two: Essentials (exactly the paper's Table 2, both blocks,
+25 metrics) and Extended (beta) = full catalogue; default Essentials. Audit of
+all 37 Extended-only metrics: 35 already pinned against reference libraries or
+hand-worked sources; wr2 (Krause 2005) and logNSE (Pushpalatha 2012 epsilon)
+received new authority pins; zero removals. C2M display checkbox and TSV
+export removed; "Valid pairs per run (n)"; complements wording + underline
+note; Optimum header; "Calculate 95% CIs"; best-cell styling underline-only in
+the run's own colour weight. Plots: Time axis titles on time series & DTW
+(rangeslider intact), bottom frame line removed on six plots (y=0 zeroline
+carries the axis), left frame removed on scatter/Q-Q (x=0 zeroline), Q-Q label,
+Rainbow heatmap with pixel-exact colorbar, 300-dpi raster exports, dataset-
+prefixed professional filenames everywhere, hard-locked 1:1 for scatter/FDC/
+Q-Q (fixed layout dims). Logo stretches to exactly the title-to-tagline block
+height (1:1 kept). Switching the active dataset now stays on the current tab
+(and plot type persists). Custom window label; wider DOY inputs.

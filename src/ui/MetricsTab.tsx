@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useApp } from '../store/store'
-import { REGISTRY, PRESETS, C2M_APPLICABLE, toC2M, GROUPS } from '../metrics/registry'
+import { REGISTRY, PRESETS, GROUPS } from '../metrics/registry'
 import { benchmarkSeries, nse as nseFn, kge2009 as kgeFn, skill } from '../metrics/classical/catalogue'
 import { applyNanPolicy } from '../ingest/missing'
 import { useRunOutputs, bestIndex, frameFor, useBootstrapCIsAll } from './compute'
@@ -18,8 +18,7 @@ export function MetricsTab() {
 
 function MetricsTabInner({ ds }: { ds: Dataset }) {
   const updateView = useApp(s => s.updateView);
-  const [preset, setPreset] = useState<string>('Timing-aware');
-  const [c2mOn, setC2mOn] = useState(false);
+  const [preset, setPreset] = useState<string>('Essentials');
   const [refQuery, setRefQuery] = useState('');
 
   const runs = ds.runs.filter(r => r.visible);
@@ -45,14 +44,14 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
   }, [frame.key, runs.map(r => r.id).join(), ds.view.benchmark, ds.view.nanPolicy, ds.view.transform, JSON.stringify(ds.view.timingConfig), outputs]);
 
   const display = (id: string, v: number) =>
-    c2mOn && C2M_APPLICABLE.has(id) ? toC2M(v) : v;
+    v;
 
   function exportCsv(sep: ',' | '\t') {
     const lines: string[] = [
       `# Hydrograph Metrics Explorer v${APP_VERSION} · https://arshahvaran.github.io/hydrograph_metrics_explorer/`,
       `# exported ${new Date().toISOString()}`,
       `# dataset: ${ds!.name} (${ds!.dates.length} rows, step ${ds!.step.label}, unit ${ds!.targetUnit})`,
-      `# settings: nan=${ds!.view.nanPolicy}; transform=${ds!.view.transform}; benchmark=${ds!.view.benchmark}; c2m_display=${c2mOn}`,
+      `# settings: nan=${ds!.view.nanPolicy}; transform=${ds!.view.transform}; benchmark=${ds!.view.benchmark}`,
       `# timing config: ${JSON.stringify(ds!.view.timingConfig)}`,
       csvLine(['metric', 'group', 'optimum', ...runs.flatMap(r => ciOn ? [r.name, `${r.name} ci95_lo`, `${r.name} ci95_hi`] : [r.name])], sep),
     ];
@@ -100,24 +99,21 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
               <option value="persistence">persistence</option>
             </select>
           </label>
-          <label title="Display unbounded efficiencies on the bounded (−1,1] C2M scale">
-            <input type="checkbox" checked={c2mOn} onChange={e => setC2mOn(e.target.checked)} /> C2M display</label>
           <label title="Circular moving-block bootstrap on the paired series (B=500, L≈n^⅓, seeded). Timing rows are excluded; resampling blocks destroys the time axis they measure.">
-            <input type="checkbox" checked={ciOn} onChange={e => updateView({ showBootstrapCIs: e.target.checked })} /> 95% CIs (block bootstrap)
+            <input type="checkbox" checked={ciOn} onChange={e => updateView({ showBootstrapCIs: e.target.checked })} /> Calculate 95% CIs (block bootstrap)
           </label>
           {ciOn && boots.progress < 1 && <span className="muted" role="status" aria-live="polite">bootstrapping… {Math.round(boots.progress * 100)}%</span>}
           <button className="primary" onClick={() => exportCsv(',')}>Export CSV</button>
-          <button onClick={() => exportCsv('\t')}>TSV</button>
         </div>
         <p className="muted" aria-live="polite">
-          n per run (valid pairs): {runs.map((r, i) => `${r.name}: ${outputs[i]?.n ?? '…'}`).join(' · ')}.{busy ? ' Computing in a background worker…' : ''}{frame.caption ? ` Subset: ${frame.caption}.` : ''}
+          Valid pairs per run (n): {runs.map((r, i) => `${r.name}: ${outputs[i]?.n ?? '…'}`).join(' · ')}.{busy ? ' Computing in a background worker…' : ''}{frame.caption ? ` Subset: ${frame.caption}.` : ''}
           {ds.view.transform !== 'none' && ' Metrics are computed on the transformed series.'}
-          {' '}Rows tinted <span className="timingchip">⏱</span> are the timing- &amp; shape-aware measures, the ones conventional suites omit.
+          {' '}Rows tinted <span className="timingchip">⏱</span> are the timing- &amp; shape-aware measures, recommended as complements to conventional metrics. For datasets with multiple simulations, the better value in each row is underlined.
         </p>
         {outputs.flatMap(o => o?.notes ?? []).filter((v, i, a) => a.indexOf(v) === i).map(nn => <div key={nn} className="warning">{nn}</div>)}
         <div className="mapscroll"><table className="grid metricstable" aria-label="Metric values per run">
           <thead>
-            <tr><th>Metric</th><th>optimum</th>{runs.map(r => <th key={r.id} style={{ color: r.color }}>{r.name}</th>)}</tr>
+            <tr><th>Metric</th><th>Optimum</th>{runs.map(r => <th key={r.id} style={{ color: r.color }}>{r.name}</th>)}</tr>
           </thead>
           <tbody>
             {GROUPS.map(g => {
@@ -178,7 +174,7 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
             Notation: <Eq tex={'O_i'} /> observed, <Eq tex={'S_i'} /> simulated, <Eq tex={'n'} /> valid pairs after the NaN policy,{' '}
             <Eq tex={'\\bar{O},\\ \\sigma'} /> mean and population standard deviation, <Eq tex={'\\tilde{O}'} /> median,{' '}
             <Eq tex={'F'} /> cumulative mass over time (Wasserstein) or FDC quantile. Lags are in steps of the record ({''}
-            positive = simulation late). Every equation below is the form the engine actually computes, verified in <code>tests/</code>.
+            positive = simulation late).
           </p>
           <div className="mapscroll">
             <table className="grid reftable" aria-label="Metric reference: equations, ranges and blind spots">
