@@ -1,6 +1,6 @@
 /** QA accessibility. axe-core structural scan across every populated
  *  tab, plus keyboard semantics for the tab strip. Color-contrast rules need
- *  real layout (measured analytically in ACCESSIBILITY.md instead). */
+ *  real layout (contrast is verified analytically instead). */
 import { describe, it, expect, beforeAll } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import axe from 'axe-core'

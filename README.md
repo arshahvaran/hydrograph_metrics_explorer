@@ -22,8 +22,7 @@ your browser. **No data ever leaves the page**; there is no server, no database,
 - [Key features](#key-features)
 - [Getting started](#getting-started)
 - [Input data](#input-data)
-- [Correctness and testing](#correctness-and-testing)
-- [Documentation](#documentation)
+- [Technical validation](#technical-validation)
 - [How to cite](#how-to-cite)
 - [License](#license)
 
@@ -80,7 +79,7 @@ TXT, or XLSX (or pasted directly). Column roles are assigned explicitly at impor
 values are declared in the "Missing value" box rather than assumed. Supported units include
 m³/s, ft³/s, L/s, m³/day, ac-ft/day, and depth per step (mm, in) with a catchment area.
 
-## Correctness and testing
+## Technical validation
 
 Metric implementations are written in TypeScript **from the published equations**; no code
 is taken from existing libraries. They are verified value-for-value against *executed*
@@ -91,25 +90,11 @@ including exact NaN-handling semantics and the PBIAS sign convention (positive =
 underestimation). The suite spans unit, property-based, accessibility, privacy, and DOM
 integration tests; run it with `npm test`.
 
-## Documentation
-
-- [`ACCEPTANCE.md`](ACCEPTANCE.md): criterion-by-criterion acceptance audit.
-- [`ACCESSIBILITY.md`](ACCESSIBILITY.md): accessibility statement and audit notes.
-- [`PAPER_CHANGES.md`](PAPER_CHANGES.md): manuscript-consistency notes.
-- In-app metric reference: every metric links to its formula and source.
-
 ## How to cite
 
 *Reference paper will be added here once published.*
 
-Until then, please cite the software itself (see [`CITATION.cff`](CITATION.cff)):
-
-> Shahvaran, A.R. (2026). Hydrograph Metrics Explorer (HME), version 1.7 [software].
-> https://arshahvaran.github.io/hydrograph_metrics_explorer/
-
 ## License
-
-Shield: [![CC BY-NC 4.0][cc-by-nc-shield]][cc-by-nc]
 
 This work is licensed under a
 [Creative Commons Attribution-NonCommercial 4.0 International License][cc-by-nc].

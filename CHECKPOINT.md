@@ -430,3 +430,13 @@ minus 36+36 margins) minus about 16px per side for the angular tick labels,
 still vertically centred with yanchor middle at y 0.5. Pixel mode removes the
 ambiguity in what Plotly's length fraction references on polar subplots.
 Round10 pin updated. Suite stays at 356.
+
+## README round (no app change, no version bump)
+License section: shield line removed (the top badge and the CC image with
+link remain; the shield link definition stays because the header badge uses
+it). How to cite: reduced to the placeholder sentence only. Documentation
+section removed and ACCEPTANCE.md, ACCESSIBILITY.md, PAPER_CHANGES.md deleted
+from the repository (nothing in code or tests read them; one stale comment in
+tests/dom/a11y.test.tsx reworded). "Correctness and testing" retitled to
+"Technical validation"; contents list updated to match. App untouched, so no
+APP_VERSION bump, no gh-pages deploy, and no tag for this round.
