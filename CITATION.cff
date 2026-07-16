@@ -4,7 +4,7 @@ title: "Hydrograph Metrics Explorer (HME)"
 authors:
   - family-names: "Shahvaran"
     given-names: "Ali Reza"
-version: "1.6"
+version: "1.7"
 date-released: 2026-07-15
 repository-code: "https://github.com/arshahvaran/hydrograph_metrics_explorer"
 url: "https://arshahvaran.github.io/hydrograph_metrics_explorer/"

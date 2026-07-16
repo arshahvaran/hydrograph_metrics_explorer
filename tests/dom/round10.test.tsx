@@ -57,7 +57,7 @@ describe('DE polar style, round 10', () => {
     expect(m.colorscale[m.colorscale.length - 1]).toEqual([1, '#0d0887']); // dark = r 1
     expect(m.reversescale).toBeUndefined();
     expect(m.cmax).toBe(1);
-    expect(m.colorbar).toMatchObject({ len: 0.88, y: 0.5, yanchor: 'middle', thickness: 14 });
+    expect(m.colorbar).toMatchObject({ lenmode: 'pixels', len: 226, y: 0.5, yanchor: 'middle', thickness: 14 });
     const layout = call[2] as any;
     expect(layout.polar.radialaxis.dtick).toBe(0.2);
   });

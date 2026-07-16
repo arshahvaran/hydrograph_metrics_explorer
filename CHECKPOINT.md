@@ -421,3 +421,12 @@ wording updated from magma to plasma. Sandbox: "Noise kind / seed" is now
 "Noise type / seed" (visible label and the select's accessible name).
 Version 1.6 across footer, reports, README badge, and CITATION.cff
 (package.json 1.6.0 for npm semver). Suite 354 to 356 (round10 x2).
+
+## v1.7: DE polar colourbar sized in pixels to the circle
+The colourbar length moved from a plot-area fraction (0.88, which rendered
+visibly shorter than the circle in the author's screenshot) to explicit pixel
+sizing: lenmode pixels, len 226, computed as the 258px plot area (330 height
+minus 36+36 margins) minus about 16px per side for the angular tick labels,
+still vertically centred with yanchor middle at y 0.5. Pixel mode removes the
+ambiguity in what Plotly's length fraction references on polar subplots.
+Round10 pin updated. Suite stays at 356.

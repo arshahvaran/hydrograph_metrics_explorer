@@ -88,9 +88,11 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
       // Written out as stops so no renderer ambiguity around reversescale.
       colorscale: [[0, '#f0f921'], [0.25, '#f89441'], [0.5, '#cc4778'], [0.75, '#7e03a8'], [1, '#0d0887']],
       cmin: deColorFloor(polarR), cmax: 1,
-      // Sized and centred to sit flush with the polar circle: plot area is
-      // height minus margins; the circle spans that minus the angular labels.
-      colorbar: { title: { text: 'timing r' }, thickness: 14, len: 0.88, y: 0.5, yanchor: 'middle', x: 1.06 },
+      // Sized and centred to sit flush with the polar circle, in PIXELS so no
+      // fraction-reference ambiguity: plot area = 330 height - (36+36) margins
+      // = 258px; the circle inside it loses ~16px per side to the angular tick
+      // labels, giving a 226px diameter. Vertically centred on the same middle.
+      colorbar: { title: { text: 'timing r' }, thickness: 14, lenmode: 'pixels', len: 226, y: 0.5, yanchor: 'middle', x: 1.06 },
     },
   }];
 
