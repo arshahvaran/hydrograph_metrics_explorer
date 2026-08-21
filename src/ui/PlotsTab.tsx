@@ -3,7 +3,8 @@ import { useApp } from '../store/store'
 import { PlotHost } from './PlotHost'
 import { useSubsetRunOutput, subsetFrameFor } from './compute'
 import { dtwTies } from './alignment'
-import { fmtNum } from './format'
+import { fmtNum, fmtStamp } from './format'
+import { binByDoy, binByYear } from './plotBins'
 import { AnalysisBar } from './AnalysisBar'
 import { quantile } from '../metrics/support/stats'
 import { OBSERVED_COLOR } from '../types'
@@ -50,11 +51,6 @@ function applyMode(y: (number | null)[], mode: Mode, movAvg: number | null): (nu
   return out;
 }
 
-const doyOf = (ms: number) => {
-  const d = new Date(ms);
-  return Math.floor((ms - Date.UTC(d.getUTCFullYear(), 0, 1)) / 86400_000) + 1;
-};
-
 export function PlotsTab() {
   const ds = useApp(s => s.project.datasets.find(d => d.id === s.project.activeDatasetId) ?? null);
   if (!ds) return null;
@@ -70,7 +66,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
   const [focusIdx, setFocusIdx] = useState(0); // series selector for heatmap/spaghetti/alignment
 
   const frame = subsetFrameFor(ds);
-  const dates = useMemo(() => frame.dates.map(m => new Date(m).toISOString().slice(0, 10)), [frame.key]);
+  const dates = useMemo(() => frame.dates.map(m => fmtStamp(m, frame.step.ms)), [frame.key]);
   const alignRun = ds.runs.filter(r => r.visible)[Math.max(0, Math.min(focusIdx - 1, ds.runs.length - 1))] ?? ds.runs[0] ?? null;
   // Computed on the SAME subset frame the plot displays, so the ties always
   // join the series that were actually aligned (analysis tabs stay full-frame).
@@ -90,12 +86,16 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
       }));
       L.xaxis = { rangeslider: { visible: true }, title: 'Time', showline: false };
       L.yaxis = { ...L.yaxis, zeroline: true };
-      if (threshold && isFinite(thr) && mode === 'none') {
-        L.shapes = [{ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: thr, y1: thr, line: { color: '#888', dash: 'dot' } }];
+      // Plotly shape coordinates on a type:'log' axis are log10 units, so the
+      // threshold must be passed as log10(thr) there (and a non-positive
+      // threshold has no place on a log axis at all).
+      if (threshold && isFinite(thr) && mode === 'none' && !(logY && thr <= 0)) {
+        const yThr = logY ? Math.log10(thr) : thr;
+        L.shapes = [{ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: yThr, y1: yThr, line: { color: '#888', dash: 'dot' } }];
       }
       const noteBits = [];
       if (mode !== 'none') noteBits.push(mode === 'fromMean' ? 'departure from mean' : mode);
-      if (movAvg > 1) noteBits.push(`${movAvg}-step moving average`);
+      if (movAvg > 1) noteBits.push(`${movAvg}-step moving average (trailing)`);
       return { traces: t, layout: L, note: noteBits.join(' + ') || null };
     }
 
@@ -135,13 +135,9 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
     if (plot === 'doy') {
       const t: any[] = [];
       all.forEach((s, si) => {
-        const byDoy = new Map<number, number[]>();
-        s.y.forEach((v, i) => {
-          if (v === null) return;
-          const doy = doyOf(ds.dates[i]);
-          if (!byDoy.has(doy)) byDoy.set(doy, []);
-          byDoy.get(doy)!.push(v);
-        });
+        // Bin on the subset frame's own dates: s.y indexes the displayed
+        // frame, never the full record (v1.11 regression).
+        const byDoy = binByDoy(frame.dates, s.y);
         const doys = [...byDoy.keys()].sort((a, b) => a - b);
         const med = doys.map(dd => quantile(byDoy.get(dd)!, 0.5));
         if (si === 0) {
@@ -157,13 +153,8 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
 
     if (plot === 'heatmap' || plot === 'spaghetti') {
       const s = all[Math.min(focusIdx, all.length - 1)];
-      const byYear = new Map<number, (number | null)[]>();
-      s.y.forEach((v, i) => {
-        const d = new Date(ds.dates[i]);
-        const y = d.getUTCFullYear();
-        if (!byYear.has(y)) byYear.set(y, Array(366).fill(null));
-        byYear.get(y)![doyOf(ds.dates[i]) - 1] = v;
-      });
+      // Same subset-frame rule as the DOY climatology (v1.11 regression).
+      const byYear = binByYear(frame.dates, s.y);
       const years = [...byYear.keys()].sort((a, b) => a - b);
       if (plot === 'heatmap') {
         return {

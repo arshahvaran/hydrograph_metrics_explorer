@@ -2,7 +2,7 @@ import { useDeferredValue, useMemo, useRef, useState } from 'react'
 import { useApp } from '../store/store'
 import { PlotHost } from './PlotHost'
 import { useRunOutput, useSeriesOutput, perturb } from './compute'
-import { fmtNum } from './format'
+import { fmtNum, fmtStamp } from './format'
 import { mean, stdPop } from '../metrics/support/stats'
 import { OBSERVED_COLOR } from '../types'
 import type { Dataset, SandboxState } from '../types'
@@ -52,7 +52,7 @@ function SandboxTabInner({ ds }: { ds: Dataset }) {
     </label>
   );
 
-  const dates = useMemo(() => ds.dates.map(m => new Date(m).toISOString().slice(0, 10)), [ds.dates]);
+  const dates = useMemo(() => ds.dates.map(m => fmtStamp(m, ds.step.ms)), [ds.dates, ds.step.ms]);
   if (!out || !baseline) {
     return <div className="card"><h2>Perturbation sandbox</h2><p className="muted">Computing metric panel in a background worker…</p></div>;
   }

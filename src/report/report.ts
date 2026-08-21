@@ -10,7 +10,7 @@ import {
 } from 'docx'
 import { REGISTRY, GROUPS, type ComputeOutput } from '../metrics/registry'
 import { rankRuns, DEFAULT_PRIORITIES, type RankRow } from '../metrics/rank'
-import { fmtNum } from '../ui/format'
+import { fmtNum, fmtStamp } from '../ui/format'
 import { UNITS } from '../units/registry'
 import { exportTemplate } from '../ui/PlotHost'
 import { APP_VERSION } from '../version'
@@ -83,7 +83,7 @@ async function plotPng(traces: unknown[], layout: Record<string, unknown>, opts:
 }
 
 export async function buildReportImages(ds: Dataset, frame: Frame, runs: Run[], outputs: ComputeOutput[]): Promise<ReportImage[]> {
-  const dates = frame.dates.map(m => new Date(m).toISOString().slice(0, 10));
+  const dates = frame.dates.map(m => fmtStamp(m, frame.step.ms));
   const clean = (v: ArrayLike<number>) => Array.from(v, x => (isFinite(x as number) ? (x as number) : null));
   const images: ReportImage[] = [];
   // One misbehaving canvas must not abort the whole report: each figure is
