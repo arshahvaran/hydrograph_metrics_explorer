@@ -118,7 +118,7 @@ export function PlotHost({ traces, layout, height = 380, name = 'hme_plot', squa
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   };
   return (
-    <div>
+    <div className="plotwrap">
       <div ref={ref} style={{ width: square ? height : '100%', height }} className="plothost" />
       <div className="dlrow" aria-label="download this plot">
         <span className="ctrl-label">Download plot:</span>

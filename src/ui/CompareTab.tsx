@@ -78,7 +78,8 @@ function CompareTabInner({ ds }: { ds: Dataset }) {
             })}
           </div>
           <div>
-            <table className="grid" aria-label="Selected priority metrics and weights">
+            <div className="tblscroll">
+              <table className="grid" aria-label="Selected priority metrics and weights">
                 <thead><tr><th>Metric</th><th>Weight</th><th><span className="vh">Remove</span></th></tr></thead>
                 <tbody>
                   {priorities.map(p => (
@@ -92,7 +93,8 @@ function CompareTabInner({ ds }: { ds: Dataset }) {
                     </tr>
                   ))}
                 </tbody>
-            </table>
+              </table>
+            </div>
           </div>
         </div>
         <p className="muted">How scoring works: for each selected metric, every simulation gets a score between 0 and 1 relative to the others in this comparison. The simulation closest to that metric's ideal value scores 1, the furthest scores 0, and the rest fall in between. Whether the ideal is high (NSE, KGE, R²), zero (RMSE, W₁, lags), or a balance point (PBIAS at 0) is handled automatically. The composite is the weighted average of these scores, so higher is always better. Unbounded efficiencies pass through the bounded C2M form first so no single score dominates. Subset: {frame.caption || 'full record'}.</p>

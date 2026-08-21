@@ -96,7 +96,7 @@ export default function App() {
         </div>
       </header>
 
-      <nav className="tabs" aria-label="Main sections"
+      <nav className="tabs tabs-scroll" aria-label="Main sections"
         onKeyDown={e => {
           if (!ds) return;
           const ids = TABS.map(([id]) => id);

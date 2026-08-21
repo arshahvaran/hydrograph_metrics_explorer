@@ -159,6 +159,10 @@ table.kv th { text-align: left; padding: 0.2rem 1rem 0.2rem 0; color: var(--ink-
 table.kv td { padding: 0.2rem 0; }
 
 .mapscroll { overflow-x: auto; }
+/* Scroll box for wide tables on narrow screens. It is not a box at all on a
+   desktop window, so the table keeps whatever layout role it had before
+   (a grid item that stretches to its row, for instance). */
+.tblscroll { display: contents; }
 table.grid { border-collapse: collapse; width: 100%; margin: 0.6rem 0; }
 table.grid th, table.grid td { border: 1px solid var(--line); padding: 0.32rem 0.55rem; text-align: right; }
 table.grid td { font-family: "DM Mono", monospace; font-size: 0.84rem; }
@@ -225,10 +229,59 @@ select { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* ---------- narrow viewports ----------
+   Phone and small-tablet affordances. Every rule in this section lives inside
+   a max-width query, so a desktop window renders exactly as before. */
+@media (max-width: 900px) {
+  /* Eight tabs cannot fit a phone or a small tablet. The strip scrolls
+     sideways (with momentum on touch) instead of widening the page; the
+     tabs keep their natural size rather than being squeezed. */
+  .tabs-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    /* absorbs the active tab's -2px bottom margin so the scroll box,
+       which cannot leave overflow-y visible, does not clip it */
+    padding-bottom: 2px;
+    margin-bottom: -2px;
+  }
+  .tabs-scroll .tab { flex: 0 0 auto; }
+  /* Wide tables scroll inside their card instead of stretching the page. */
+  .tblscroll { display: block; }
+  .tblscroll, .mapscroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* Square figures are a fixed 440 by 440 by design (see PlotHost); on a
+     narrow screen they pan inside their card rather than overflow it. */
+  .plotwrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+}
+
 @media (max-width: 768px) {
   .header { flex-direction: column; }
   .main { padding: 0.8rem; }
-  .tabs { overflow-x: auto; }
+  /* header controls wrap onto further lines instead of running off screen */
+  .headerright { flex-wrap: wrap; }
+  .dsselect { min-width: 0; max-width: 100%; }
+  .dsselect select { min-width: 0; max-width: 100%; }
+  /* a control label holding two date or number fields wraps internally */
+  .controls label { flex-wrap: wrap; }
+}
+
+/* ---------- touch pointers ----------
+   Sized for fingers only where the primary pointer is coarse (phones and
+   tablets). A mouse-driven window keeps the compact desktop controls. */
+@media (pointer: coarse) {
+  button, .filebtn, select, textarea,
+  input[type="text"], input[type="number"], input[type="date"], input:not([type]) {
+    min-height: 40px;
+  }
+  button, .filebtn { min-width: 40px; }
+  .theme-toggle { width: 40px; height: 40px; }
+  .tab { min-height: 44px; }
+  .controls label, .prirow, .cfgdefault, .dsselect { min-height: 40px; }
+  input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
+  /* the Timing default switch keeps its own overlay geometry */
+  .switch input { width: 100%; height: 100%; }
 }
 
 /* ---- compare tab ---- */

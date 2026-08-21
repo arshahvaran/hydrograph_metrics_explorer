@@ -158,18 +158,20 @@ export function DataTab() {
               {staged.guidance && <div className="info" role="status">{staged.guidance}</div>}
               {staged.validation.errors.map((e, i) => <div key={i} className="error">{e}</div>)}
               {staged.validation.warnings.map((w, i) => <div key={i} className="warning">{w}</div>)}
-              <table className="grid">
-                <thead><tr><th>Series</th><th>Missing</th><th>Negatives</th><th>Min</th><th>Mean</th><th>Max</th><th>Valid pairs vs obs</th></tr></thead>
-                <tbody>
-                  {staged.validation.series.map(s => (
-                    <tr key={s.name}>
-                      <td>{s.name}</td><td>{s.missing}</td><td>{s.negatives}</td>
-                      <td>{fmtNum(s.min)}</td><td>{fmtNum(s.mean)}</td><td>{fmtNum(s.max)}</td>
-                      <td>{s.overlapWithObserved.toLocaleString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="tblscroll">
+                <table className="grid">
+                  <thead><tr><th>Series</th><th>Missing</th><th>Negatives</th><th>Min</th><th>Mean</th><th>Max</th><th>Valid pairs vs obs</th></tr></thead>
+                  <tbody>
+                    {staged.validation.series.map(s => (
+                      <tr key={s.name}>
+                        <td>{s.name}</td><td>{s.missing}</td><td>{s.negatives}</td>
+                        <td>{fmtNum(s.min)}</td><td>{fmtNum(s.mean)}</td><td>{fmtNum(s.max)}</td>
+                        <td>{s.overlapWithObserved.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
               <button className="primary" disabled={!staged.commit} onClick={commit}>Use this data →</button>
             </>
           )}

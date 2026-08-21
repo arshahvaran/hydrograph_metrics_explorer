@@ -115,22 +115,26 @@ function SandboxTabInner({ ds }: { ds: Dataset }) {
       <section className="card">
         <h2>Metrics comparison <span className="muted">performance of perturbed and original simulations against observed data</span></h2>
         <div className="twocol">
-          <table className="grid">
-            <thead><tr><th>Classical</th><th>Perturbed series</th><th>Original series</th></tr></thead>
-            <tbody>
-              {CLASSICAL.map(([id, label, dg]) => (
-                <tr key={id}><td>{label}</td><td>{fmtNum(out.values[id], dg)}</td><td className="muted">{fmtNum(baseline.values[id], dg)}</td></tr>
-              ))}
-            </tbody>
-          </table>
-          <table className="grid">
-            <thead><tr><th>⏱ Timing &amp; shape</th><th>Perturbed series</th><th>Original series</th></tr></thead>
-            <tbody>
-              {TIMING.map(([id, label, dg]) => (
-                <tr key={id} className="timingrow"><td>{label}</td><td>{fmtNum(out.values[id], dg)}</td><td className="muted">{fmtNum(baseline.values[id], dg)}</td></tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="tblscroll">
+            <table className="grid">
+              <thead><tr><th>Classical</th><th>Perturbed series</th><th>Original series</th></tr></thead>
+              <tbody>
+                {CLASSICAL.map(([id, label, dg]) => (
+                  <tr key={id}><td>{label}</td><td>{fmtNum(out.values[id], dg)}</td><td className="muted">{fmtNum(baseline.values[id], dg)}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="tblscroll">
+            <table className="grid">
+              <thead><tr><th>⏱ Timing &amp; shape</th><th>Perturbed series</th><th>Original series</th></tr></thead>
+              <tbody>
+                {TIMING.map(([id, label, dg]) => (
+                  <tr key={id} className="timingrow"><td>{label}</td><td>{fmtNum(out.values[id], dg)}</td><td className="muted">{fmtNum(baseline.values[id], dg)}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
