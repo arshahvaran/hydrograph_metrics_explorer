@@ -1,7 +1,7 @@
 # Hydrograph Metrics Explorer (HME)
 
 [![Live app](https://img.shields.io/badge/Live%20app-arshahvaran.github.io-0b6e99)](https://arshahvaran.github.io/hydrograph_metrics_explorer/)
-[![Version](https://img.shields.io/badge/version-1.9-informational)](https://github.com/arshahvaran/hydrograph_metrics_explorer/tags)
+[![Version](https://img.shields.io/badge/version-1.10-informational)](https://github.com/arshahvaran/hydrograph_metrics_explorer/tags)
 [![CC BY-NC 4.0][cc-by-nc-shield]][cc-by-nc]
 
 **A client-side web tool for timing- and shape-aware evaluation of hydrologic model simulations.**
@@ -34,7 +34,7 @@ detection, user-declared missing values, and a unit engine covering volumetric f
 area/step-aware depth-to-volume conversion (with automatic rescaling of absolute event
 thresholds).
 
-**Metrics.** A 62-metric panel: the classical families (error norms, correlation and
+**Metrics.** A 63-metric panel: the classical families (error norms, correlation and
 agreement, efficiencies including KGE variants and bounded C2M forms, flow-duration-curve
 signatures, transforms, benchmark skill scores) plus the timing- and shape-aware core (peak
 timing after Gauch et al., 2021; event peak, volume, and lag errors; Series Distance;

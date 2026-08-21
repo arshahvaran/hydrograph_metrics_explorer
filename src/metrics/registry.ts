@@ -136,13 +136,18 @@ export interface ComputeOutput {
   values: Record<string, number>;
   n: number;
   notes: string[];
+  /** Original-row index of each compacted pair (Paired.index): lets consumers
+   *  (the DTW alignment plot) map metric-space indices back to true rows. */
+  pairedIndex?: number[];
   extras: {
     kge2009: C.KgeResult; kge2012: C.KgeResult; kge2021: C.KgeResult; kgenp: C.KgeResult;
     de?: ReturnType<typeof diagnosticEfficiency>;
     peaks?: ReturnType<typeof peakTiming>;
     events?: ReturnType<typeof eventErrors>;
     sd?: ReturnType<typeof seriesDistance>;
-    dtw?: ReturnType<typeof dtw>;
+    /** decim: the path indices are in decimated space (long records);
+     *  multiply by decim to recover compacted-pair indices. */
+    dtw?: ReturnType<typeof dtw> & { decim: number };
     xwt?: ReturnType<typeof xwtLag>;
     sweep?: ReturnType<typeof lagSweep>;
   };
@@ -245,11 +250,11 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
     if (de.nonPerennial) notes.push('DE: observed record is not strictly positive; diagnostic efficiency assumptions violated');
     if (events.events.length === 0) notes.push('No events at the current threshold; raise/lower it on the Timing tab');
 
-    Object.assign(extras, { de, peaks, events, sd, dtw: dtwRes, xwt: xw, sweep });
+    Object.assign(extras, { de, peaks, events, sd, dtw: { ...dtwRes, decim: dtwDecim }, xwt: xw, sweep });
   }
 
   enforceFinite(values);
-  return { values, n: paired.n, notes, extras };
+  return { values, n: paired.n, notes, extras, pairedIndex: paired.index };
 }
 
 /** Bounded C2M display transform for unbounded-below efficiencies (§11.4). */

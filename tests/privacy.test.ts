@@ -17,11 +17,12 @@ describe('privacy manifest', () => {
       if (!/\.(ts|tsx)$/.test(f)) continue;
       const t = readFileSync(f, 'utf8');
       for (const [i, line] of t.split('\n').entries()) {
-        if (/\bfetch\s*\(/.test(line)) hits.push(`${f}:${i + 1}`);
+        // normalise the separator so the manifest reads the same on any OS
+        if (/\bfetch\s*\(/.test(line)) hits.push(`${f.split('\\').join('/')}:${i + 1}`);
       }
     }
     expect(hits.sort()).toEqual([
-      'src/ingest/ingest.ts:107',   // same-origin sample loader (BASE_URL/samples/…)
+      'src/ingest/ingest.ts:130',   // same-origin sample loader (BASE_URL/samples/…)
       'src/report/report.ts:177',   // data: URLs only (plot images into the DOCX)
     ]);
   });

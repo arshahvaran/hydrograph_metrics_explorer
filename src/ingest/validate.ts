@@ -41,20 +41,22 @@ function summarise(name: string, v: ArrayLike<number>, obs?: ArrayLike<number>):
 /**
  * Validate an aligned dataset before it is committed ("Use this data", §6.0).
  * `dates` must already be parsed to UTC ms (NaN = unparseable row).
+ * Unassigned column roles are NOT errors here: the staging layer reports them
+ * as a single guidance message (uploads deliberately start fully unmapped).
+ * `dateMapped: false` therefore suppresses the date-parse error, because the
+ * all-NaN date column is just the placeholder for a role not assigned yet.
  */
 export function validateDataset(
   dates: number[],
   observed: { name: string; values: ArrayLike<number> } | null,
   runs: { name: string; values: ArrayLike<number> }[],
+  dateMapped = true,
 ): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  if (!observed) errors.push('No column is mapped as Observed; map one to continue.');
-  if (runs.length === 0) errors.push('No column is mapped as Predicted; map at least one simulation.');
-
   const badDates = dates.filter(d => !isFinite(d)).length;
-  if (badDates > 0) {
+  if (dateMapped && badDates > 0) {
     errors.push(`${badDates} date value${badDates === 1 ? '' : 's'} could not be parsed; check the date format selector.`);
   }
 

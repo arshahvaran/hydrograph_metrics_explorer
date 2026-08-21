@@ -33,4 +33,29 @@ describe('date parsing (§6.0)', () => {
     expect(parseDates(['01/02/2023'], 'mdy').ms[0]).toBe(Date.UTC(2023, 0, 2))
     expect(parseDates(['2023-13-01']).failures).toBe(1)
   })
+  it('two-digit years follow the POSIX pivot: 00-68 read as 2000s, 69-99 as 1900s', () => {
+    expect(parseDates(['12/31/68']).ms[0]).toBe(Date.UTC(2068, 11, 31))   // mdy inferred (31 > 12)
+    expect(parseDates(['31/12/69']).ms[0]).toBe(Date.UTC(1969, 11, 31))   // dmy inferred
+    expect(parseDates(['05/03/99'], 'dmy').ms[0]).toBe(Date.UTC(1999, 2, 5))
+    expect(parseDates(['05/03/00'], 'mdy').ms[0]).toBe(Date.UTC(2000, 4, 3))
+    expect(parseDates(['99-01-05'], 'ymd').ms[0]).toBe(Date.UTC(1999, 0, 5))
+  })
+  it('month-name dates parse unambiguously in auto mode', () => {
+    const p = parseDates(['01-Jan-2020', 'Jan 2, 2020', '3 February 2020', 'sep 4 1999'])
+    expect(p.used).toBe('month-name')
+    expect(p.ambiguous).toBe(false)
+    expect(p.failures).toBe(0)
+    expect(p.ms[0]).toBe(Date.UTC(2020, 0, 1))
+    expect(p.ms[1]).toBe(Date.UTC(2020, 0, 2))
+    expect(p.ms[2]).toBe(Date.UTC(2020, 1, 3))
+    expect(p.ms[3]).toBe(Date.UTC(1999, 8, 4))
+  })
+  it('month-name edge cases: two-digit year, time part, unknown month, ISO mixture', () => {
+    expect(parseDates(['01-Jan-20']).ms[0]).toBe(Date.UTC(2020, 0, 1))
+    expect(parseDates(['02-Mar-2020 06:30']).ms[0]).toBe(Date.UTC(2020, 2, 2, 6, 30))
+    expect(parseDates(['01-Foo-2020']).failures).toBe(1)
+    expect(parseDates(['2020-01-02', 'Jan 3, 2020']).used).toBe('mixed')
+    expect(parseDates(['30-Feb-2020']).failures).toBe(1)  // rollover still rejected
+    expect(parseDates(['May-2020']).failures).toBe(1)     // month-year label is not a date
+  })
 })

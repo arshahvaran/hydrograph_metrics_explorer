@@ -94,7 +94,7 @@ export function DataTab() {
         <details>
           <summary>…or paste / type into an editable sheet</summary>
           <EditableGrid onUse={(t2, name, r) => loadTable(t2, name, r)} seedText={pasteText} />
-          <p className="muted">Or paste raw delimited text below (tab, comma or semicolon; first row = headers). <a href="samples/hme_template.csv" download>download the CSV template</a>.</p>
+          <p className="muted">Or paste raw delimited text below (tab, comma, semicolon or pipe; first row = headers). <a href="samples/hme_template.csv" download>download the CSV template</a>.</p>
           <textarea rows={6} value={pasteText} placeholder={'date,observed,simulated_1\n2011-01-01,12.4,10.8\n2011-01-02,11.9,10.2'}
             onChange={e => setPasteText(e.target.value)} />
           <button className="primary" disabled={!pasteText.trim()}
@@ -149,11 +149,13 @@ export function DataTab() {
               </tbody>
             </table>
           </div>
-          <p className="muted">{table.rows.length.toLocaleString()} data rows · date parser: {staged?.dateInfo.used}
-            {staged?.dateInfo.failures ? ` · ${staged.dateInfo.failures} unparseable dates` : ''}</p>
+          <p className="muted">{table.rows.length.toLocaleString()} data rows
+            {roles.includes('date') ? ` · date parser: ${staged?.dateInfo.used}` : ''}
+            {roles.includes('date') && staged?.dateInfo.failures ? ` · ${staged.dateInfo.failures} unparseable dates` : ''}</p>
 
           {staged && (
             <>
+              {staged.guidance && <div className="info" role="status">{staged.guidance}</div>}
               {staged.validation.errors.map((e, i) => <div key={i} className="error">{e}</div>)}
               {staged.validation.warnings.map((w, i) => <div key={i} className="warning">{w}</div>)}
               <table className="grid">

@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useApp } from '../store/store'
 import { PlotHost } from './PlotHost'
-import { useRunOutput, subsetFrameFor } from './compute'
+import { useSubsetRunOutput, subsetFrameFor } from './compute'
+import { dtwTies } from './alignment'
+import { fmtNum } from './format'
 import { AnalysisBar } from './AnalysisBar'
 import { quantile } from '../metrics/support/stats'
 import { OBSERVED_COLOR } from '../types'
@@ -70,7 +72,9 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
   const frame = subsetFrameFor(ds);
   const dates = useMemo(() => frame.dates.map(m => new Date(m).toISOString().slice(0, 10)), [frame.key]);
   const alignRun = ds.runs.filter(r => r.visible)[Math.max(0, Math.min(focusIdx - 1, ds.runs.length - 1))] ?? ds.runs[0] ?? null;
-  const alignOut = useRunOutput(ds, plot === 'alignment' ? alignRun : null);
+  // Computed on the SAME subset frame the plot displays, so the ties always
+  // join the series that were actually aligned (analysis tabs stay full-frame).
+  const alignOut = useSubsetRunOutput(ds, plot === 'alignment' ? alignRun : null);
   const all = useMemo(() => seriesOf(ds, frame), [ds, frame.key]);
   const unit = UNITS[ds.targetUnit].label;
 
@@ -178,23 +182,23 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
     // alignment
     const run = alignRun!;
     if (!alignOut) return { traces: [], layout: {}, note: 'computing DTW alignment in a background worker…' };
-    const path = alignOut.extras.dtw?.path ?? [];
     const paired = { o: all[0].y, s: all.find(a => a.name === run.name)?.y ?? all[1]?.y };
-    const step = Math.max(1, Math.floor(path.length / 160));
-    const cx: (string | null)[] = [], cy: (number | null)[] = [];
-    for (let k = 0; k < path.length; k += step) {
-      const [i, j] = path[k];
-      cx.push(dates[i], dates[j], null);
-      cy.push(paired.o[i] ?? null, paired.s?.[j] ?? null, null);
-    }
+    // dtwTies maps every path node back through decimation and the pairwise
+    // NaN compaction, so ties land on the true dates and values.
+    const tie = dtwTies(alignOut, dates, paired.o, paired.s ?? [], 160);
+    const decim = alignOut.extras.dtw?.decim ?? 1;
+    const band = (alignOut.extras.dtw?.band ?? 0) * decim;
+    const transform = ds.view.transform;
     return {
       traces: [
         { x: dates, y: paired.o, name: 'Observed', type: 'scatter', mode: 'lines', line: { color: OBSERVED_COLOR, width: 2.2 } },
         { x: dates, y: paired.s, name: run.name, type: 'scatter', mode: 'lines', line: { color: run.color, width: 1.7 } },
-        { x: cx, y: cy, name: 'DTW alignment', type: 'scatter', mode: 'lines', line: { color: 'rgba(150,150,160,0.5)', width: 1 }, hoverinfo: 'skip' },
+        { x: tie.x, y: tie.y, name: 'DTW alignment', type: 'scatter', mode: 'lines', line: { color: 'rgba(150,150,160,0.5)', width: 1 }, hoverinfo: 'skip' },
       ],
       layout: { xaxis: { rangeslider: { visible: true }, title: 'Time', showline: false }, yaxis: { title: yTitle, zeroline: true } },
-      note: `Optimal Sakoe-Chiba alignment (band ${alignOut.extras.dtw?.band} steps); mean |warp| ${alignOut.values.dtw_warp?.toFixed(2)} steps; grey ties connect matched points`,
+      note: `Optimal Sakoe-Chiba alignment (band ${band} steps); mean |warp| ${fmtNum(alignOut.values.dtw_warp, 2)} steps; grey ties connect matched points`
+        + (decim > 1 ? `; path computed on a 1/${decim} decimation of the record` : '')
+        + (transform !== 'none' ? `; alignment computed on ${transform}-transformed flows` : ''),
     };
   }, [ds, plot, mode, logY, movAvg, threshold, focusIdx, dates, all, unit, frame.key, alignOut]);
 

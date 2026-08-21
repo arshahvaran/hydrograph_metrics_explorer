@@ -100,6 +100,19 @@ function SandboxTabInner({ ds }: { ds: Dataset }) {
       </section>
 
       <section className="card">
+        <h2>Hydrograph of the perturbed series <span className="muted">observed, original, and perturbed series update live as the controls change</span></h2>
+        <PlotHost
+          traces={[
+            { x: dates, y: clean(ds.observed.values), name: 'Observed', type: 'scatter', mode: 'lines', line: { color: OBSERVED_COLOR, width: 2.2 } },
+            ...(sb.mode === 'perturb' ? [{ x: dates, y: clean(target.values), name: `${target.name} (original)`, type: 'scatter', mode: 'lines', line: { color: target.color, width: 1, dash: 'dot' }, opacity: 0.4 }] : []),
+            { x: dates, y: clean(perturbed), name: 'Perturbed S′', type: 'scatter', mode: 'lines', line: { color: '#d95f02', width: 1.9 } },
+          ]}
+          layout={{ xaxis: { rangeslider: { visible: true }, title: 'Time', showline: false }, yaxis: { title: `Q [${UNITS[ds.targetUnit].label}]`, zeroline: true } }}
+          height={380}
+        />
+      </section>
+
+      <section className="card">
         <h2>Metrics comparison <span className="muted">performance of perturbed and original simulations against observed data</span></h2>
         <div className="twocol">
           <table className="grid">
@@ -119,19 +132,6 @@ function SandboxTabInner({ ds }: { ds: Dataset }) {
             </tbody>
           </table>
         </div>
-      </section>
-
-      <section className="card">
-        <h2>Hydrograph of the perturbed series <span className="muted">observed, original, and perturbed series update live as the controls change</span></h2>
-        <PlotHost
-          traces={[
-            { x: dates, y: clean(ds.observed.values), name: 'Observed', type: 'scatter', mode: 'lines', line: { color: OBSERVED_COLOR, width: 2.2 } },
-            ...(sb.mode === 'perturb' ? [{ x: dates, y: clean(target.values), name: `${target.name} (original)`, type: 'scatter', mode: 'lines', line: { color: target.color, width: 1, dash: 'dot' }, opacity: 0.4 }] : []),
-            { x: dates, y: clean(perturbed), name: 'Perturbed S′', type: 'scatter', mode: 'lines', line: { color: '#d95f02', width: 1.9 } },
-          ]}
-          layout={{ xaxis: { rangeslider: { visible: true }, title: 'Time', showline: false }, yaxis: { title: `Q [${UNITS[ds.targetUnit].label}]`, zeroline: true } }}
-          height={380}
-        />
       </section>
 
       <section className="card">

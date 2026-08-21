@@ -7,7 +7,8 @@ import type { CommitInput } from '../store/store'
 
 export interface RawTable { header: string[]; rows: string[][]; note?: string }
 
-/** Parse CSV/TSV/semicolon text with Papa's delimiter sniffing. First row = header. */
+/** Parse delimited text (comma, tab, semicolon or pipe) with Papa's delimiter
+ *  sniffing. First row = header. */
 export function parseDelimited(text: string): RawTable {
   const res = Papa.parse<string[]>(text.trim(), { skipEmptyLines: true });
   const rows = (res.data as string[][]).filter(r => r.length > 1 || (r[0] ?? '').trim() !== '');
@@ -17,7 +18,14 @@ export function parseDelimited(text: string): RawTable {
 
 /** Read the first sheet of an XLSX/XLS file into strings (dates → ISO). */
 export async function parseWorkbook(buf: ArrayBuffer): Promise<RawTable> {
-  const XLSX = await import('xlsx');
+  let XLSX;
+  try {
+    // The spreadsheet reader is a lazily loaded chunk; if the deployed site
+    // was updated while this page stayed open, the old chunk URL 404s.
+    XLSX = await import('xlsx');
+  } catch {
+    throw new Error('The spreadsheet reader could not be loaded; this page is likely running a stale copy of the tool. Reload the page and upload the file again.');
+  }
   const wb = XLSX.read(buf, { type: 'array', cellDates: true });
   const toStr = (c: any) => c instanceof Date
     ? new Date(Date.UTC(c.getFullYear(), c.getMonth(), c.getDate(), c.getHours(), c.getMinutes())).toISOString().slice(0, 16).replace('T', ' ')
@@ -51,6 +59,9 @@ export interface Staged {
   commit: CommitInput | null;
   validation: ValidationResult;
   dateInfo: { used: string; ambiguous: boolean; failures: number };
+  /** Single next-step message while column roles are still unassigned
+   *  (uploads start all-Ignore by design); null once all roles are mapped. */
+  guidance: string | null;
 }
 
 /** Guess sensible default roles: first column date, second observed, rest runs. */
@@ -83,13 +94,24 @@ export function stage(table: RawTable, opt: StageOptions): Staged {
   const observed = obsCol >= 0 ? { name: label(obsCol), values: col(obsCol) } : null;
   const runs = runCols.map(j => ({ name: label(j), values: col(j) }));
 
-  const validation = validateDataset(dates.ms, observed, runs);
-  if (dateCol < 0) validation.errors.unshift('No column is mapped as Date.');
+  const validation = validateDataset(dates.ms, observed, runs, dateCol >= 0);
   if (dates.ambiguous && opt.dateFormat === 'auto') {
     validation.errors.push('Day/month order is ambiguous in this file; pick MDY or DMY explicitly in the date-format selector.');
   }
 
-  const ok = validation.errors.length === 0 && observed;
+  // Unassigned roles are a to-do, not a failure: one guidance message instead
+  // of a wall of blocking errors right after an upload (roles start all-Ignore
+  // by design). Genuine data problems stay in validation.errors.
+  const needed: string[] = [];
+  if (dateCol < 0) needed.push('one Date column');
+  if (obsCol < 0) needed.push('one Observed column');
+  if (runCols.length === 0) needed.push('at least one Simulated column');
+  const guidance = needed.length
+    ? `Data loaded. To continue, use the role selectors in the table header to assign ${
+      needed.length === 1 ? needed[0] : `${needed.slice(0, -1).join(', ')} and ${needed[needed.length - 1]}`}.`
+    : null;
+
+  const ok = validation.errors.length === 0 && needed.length === 0 && observed;
   return {
     commit: ok ? {
       name: opt.name,
@@ -99,6 +121,7 @@ export function stage(table: RawTable, opt: StageOptions): Staged {
     } : null,
     validation: { ...validation, ok: !!ok },
     dateInfo: { used: dates.used, ambiguous: dates.ambiguous, failures: dates.failures },
+    guidance,
   };
 }
 

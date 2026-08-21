@@ -238,6 +238,18 @@ export function useRunOutput(ds: Dataset, run: Run | null): ComputeOutput | null
   return request(key, () => computeAsync(frame.obs, frame.apply(run.values), ctxFor(ds, frame)));
 }
 
+/** Metric panel computed on the Plots-tab subset frame (window / season /
+ *  resample), for the DTW alignment plot: the alignment must be computed on
+ *  exactly the series being displayed, or the ties join the wrong rows.
+ *  Analysis tabs keep using the full-record frame (useRunOutput). */
+export function useSubsetRunOutput(ds: Dataset, run: Run | null): ComputeOutput | null {
+  useRecompute();
+  if (!run) return null;
+  const frame = subsetFrameFor(ds);
+  const key = `${settingsKey(ds, frame)}|run:${run.id}`;
+  return request(key, () => computeAsync(frame.obs, frame.apply(run.values), ctxFor(ds, frame)));
+}
+
 /** Metric panels for all visible runs; null entries are still computing. */
 export function useRunOutputs(ds: Dataset, runs: Run[]): (ComputeOutput | null)[] {
   useRecompute();
