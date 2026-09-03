@@ -86,3 +86,34 @@ describe('wide reports: run-column chunking', () => {
     expect(chunkIndices(13, 6).map(c => c.length)).toEqual([6, 6, 1]);
   });
 });
+
+
+describe('workbook used range: a declared range inflated by formatting is not a refusal', () => {
+  const wsBuffer = (ws: any, name = 'Data') => {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, name);
+    return XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+  };
+  it('a 10 x 3 sheet whose declared range reaches row 1,048,576 loads from its populated cells', async () => {
+    const aoa = [['date', 'observed', 'm1'], ...Array.from({ length: 10 }, (_, i) => [`2001-01-${String(i + 1).padStart(2, '0')}`, i + 1, i + 1.5])];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!ref'] = 'A1:C1048576';
+    const t = await parseWorkbook(wsBuffer(ws));
+    expect(t.header).toEqual(['date', 'observed', 'm1']);
+    expect(t.rows.length).toBe(10);
+    expect(t.rows[9]).toEqual(['2001-01-10', '10', '10.5']);
+  }, 30000);
+  it('a declared range of 104 columns with data in 3 loads', async () => {
+    const ws = XLSX.utils.aoa_to_sheet([['date', 'observed', 'm1'], ['2001-01-01', 1, 2], ['2001-01-02', 2, 3]]);
+    ws['!ref'] = 'A1:CZ3';
+    const t = await parseWorkbook(wsBuffer(ws));
+    expect(t.header).toEqual(['date', 'observed', 'm1']);
+    expect(t.rows).toEqual([['2001-01-01', '1', '2'], ['2001-01-02', '2', '3']]);
+  }, 30000);
+  it('a sheet with a populated cell on row 1,000,002 is still refused by the row cap', async () => {
+    const ws = XLSX.utils.aoa_to_sheet([['date', 'observed', 'sim'], ['2001-01-01', 1, 2]]);
+    ws['A1000002'] = { t: 'n', v: 1 };
+    ws['!ref'] = 'A1:C1000002';
+    await expect(parseWorkbook(wsBuffer(ws))).rejects.toThrow(/^Sheet .Data. has 1,000,001 data rows; the tool accepts up to 1,000,000\./);
+  }, 30000);
+});

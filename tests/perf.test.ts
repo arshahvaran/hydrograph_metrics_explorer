@@ -5,6 +5,10 @@ import { computeAll, classicalValues } from '../src/metrics/registry'
 import { bootstrapCIs } from '../src/metrics/bootstrap'
 import { lagSweep } from '../src/metrics/timing/events'
 import { defaultView } from '../src/types'
+import { parseDelimited, stage, type ColumnRole } from '../src/ingest/ingest'
+import { alignByDate } from '../src/store/store'
+import { LIMITS, inspectDelimited, tableShapeMessage, largeTableNotice } from '../src/ingest/limits'
+import { decimateMinMax } from '../src/ui/decimate'
 
 const mk = (n: number, lag = 0) =>
   Float64Array.from({ length: n }, (_, i) => 3 + 2 * Math.sin(i / 9) + 1.5 * Math.sin(i / 137) + (i % 97 === 0 ? 4 : 0) + (lag ? 0.2 * Math.sin((i - lag) / 9) : 0));
@@ -65,4 +69,76 @@ describe('QA performance numbers', () => {
     console.log(`[mem] heapUsed before=${(before / 1e6).toFixed(0)}MB after=${(after / 1e6).toFixed(0)}MB peak=${(peak / 1e6).toFixed(0)}MB over 30 cycles`);
     expect(after - before).toBeLessThan(400e6);
   }, 120_000);
+
+  // Ingest path (the upload flow before any metric runs): PapaParse text ->
+  // RawTable -> stage (dates, values, validation) -> alignByDate (commit).
+  // Prints wall time per step; stage() is also what the Data tab re-runs on
+  // every render, so its time is the per-keystroke cost of that tab.
+  const csvOf = (rows: number, cols: number): string => {
+    const lines: string[] = new Array(rows + 1);
+    lines[0] = ['date', 'observed', ...Array.from({ length: cols }, (_, k) => `sim_${k + 1}`)].join(',');
+    const t0 = Date.UTC(1900, 0, 1);
+    for (let i = 0; i < rows; i++) {
+      let s = new Date(t0 + i * 86_400_000).toISOString().slice(0, 10) + ',' + (4 + 2 * Math.sin(i / 9)).toFixed(3);
+      for (let k = 0; k < cols; k++) s += ',' + (4 + 2 * Math.sin((i - k - 1) / 9) + 0.05 * k).toFixed(3);
+      lines[i + 1] = s;
+    }
+    return lines.join('\n');
+  };
+
+  it.each([[100_000, 25], [500_000, 5]])('ingest path at %i rows x %i simulations: parse, stage, commit', (rows, cols) => {
+    const text = csvOf(rows, cols);
+    const bytes = text.length;
+    let table!: ReturnType<typeof parseDelimited>;
+    const tParse = time(() => { table = parseDelimited(text); });
+    const roles: ColumnRole[] = ['date', 'observed', ...Array.from({ length: cols }, () => 'run' as ColumnRole)];
+    const opt = { name: 'perf', roles, dateFormat: 'auto' as const, unit: 'm3s' as const, missingValue: null };
+    let staged!: ReturnType<typeof stage>;
+    const tStage = time(() => { staged = stage(table, opt); });
+    expect(staged.commit).not.toBeNull();
+    const tCommit = time(() => { alignByDate(staged.commit!); });
+    console.log(`[ingest] ${rows}x${cols} (${(bytes / 1e6).toFixed(1)} MB text): parse ${tParse.toFixed(0)} ms, stage ${tStage.toFixed(0)} ms, commit ${tCommit.toFixed(0)} ms`);
+    expect(table.rows.length).toBe(rows);
+    expect(tParse).toBeLessThan(20_000);
+    expect(tStage).toBeLessThan(20_000);
+  }, 120_000);
+
+  // The largest table the tool accepts (LIMITS.rows), end to end: the cheap
+  // shape pass, the caps, the parser, staging, commit, one heavy metric panel
+  // on the committed record and the display decimation of its time series.
+  // Everything above must finish in bounded time; a table one row larger is
+  // refused by the cheap pass alone.
+  it(`largest allowed record (${LIMITS.rows.toLocaleString('en-US')} rows x 5 simulations) completes in bounded time`, () => {
+    const rows = LIMITS.rows, cols = 5;
+    const text = csvOf(rows, cols);
+    let shape!: ReturnType<typeof inspectDelimited>;
+    const tInspect = time(() => { shape = inspectDelimited(text); });
+    expect(shape).toEqual({ rows, columns: cols + 2 });
+    expect(tableShapeMessage(shape)).toBeNull();
+    expect(largeTableNotice(shape, text.length)).toMatch(/1,000,000 rows/);
+    expect(tableShapeMessage({ rows: rows + 1, columns: cols + 2 })).toMatch(/1,000,001 data rows/);
+    let table!: ReturnType<typeof parseDelimited>;
+    const tParse = time(() => { table = parseDelimited(text); });
+    const roles: ColumnRole[] = ['date', 'observed', ...Array.from({ length: cols }, () => 'run' as ColumnRole)];
+    let staged!: ReturnType<typeof stage>;
+    const tStage = time(() => { staged = stage(table, { name: 'max', roles, dateFormat: 'auto', unit: 'm3s', missingValue: null }); });
+    expect(staged.commit).not.toBeNull();
+    let aligned!: ReturnType<typeof alignByDate>;
+    const tCommit = time(() => { aligned = alignByDate(staged.commit!); });
+    expect(aligned.dates.length).toBe(rows);
+    const obs = Float64Array.from(aligned.observed.values), sim = Float64Array.from(aligned.runs[0].values);
+    let out!: ReturnType<typeof computeAll>;
+    const tPanel = time(() => { out = computeAll(obs, sim, ctxFor(rows)); });
+    expect(out.n).toBe(rows);
+    expect(Number.isFinite(out.values.nse)).toBe(true);
+    const y = Array.from(obs, v => (Number.isFinite(v) ? v : null));
+    let dec!: ReturnType<typeof decimateMinMax<number>>;
+    const tDecim = time(() => { dec = decimateMinMax(aligned.dates, y); });
+    expect(dec.y.length).toBeLessThanOrEqual(LIMITS.plotPoints + 2);
+    console.log(`[max] ${rows}x${cols} (${(text.length / 1e6).toFixed(1)} MB): inspect ${tInspect.toFixed(0)} ms, parse ${tParse.toFixed(0)} ms, stage ${tStage.toFixed(0)} ms, commit ${tCommit.toFixed(0)} ms, heavy panel ${tPanel.toFixed(0)} ms, decimate ${tDecim.toFixed(0)} ms`);
+    expect(tInspect).toBeLessThan(5_000);
+    expect(tParse + tStage + tCommit).toBeLessThan(60_000);
+    expect(tPanel).toBeLessThan(90_000);
+    expect(tDecim).toBeLessThan(2_000);
+  }, 300_000);
 });
