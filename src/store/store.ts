@@ -1,7 +1,7 @@
 import { UNITS } from '../units/registry'
 import { create } from 'zustand'
 import type { Dataset, Project, Run, UnitId, ViewState, TimingConfig, SandboxState, AreaUnitId } from '../types'
-import { defaultView, RUN_PALETTE } from '../types'
+import { defaultView, RUN_PALETTE, clampTimingConfig } from '../types'
 import { detectStep } from '../units/stepDetect'
 import { convertSeries } from '../units/convert'
 import { applySubset } from '../metrics/subset'
@@ -163,11 +163,18 @@ export const useApp = create<AppState>((set, get) => ({
   duplicateDataset: () => set(s => {
     const src = s.project.datasets.find(d => d.id === s.project.activeDatasetId);
     if (!src) return s;
-    const id = `ds_${Date.now().toString(36)}`;
-    const copy = JSON.parse(JSON.stringify({ ...src, id, name: `${src.name} (copy)`, createdAt: Date.now() }));
+    // structuredClone keeps NaN (a JSON round trip turned every missing value
+    // into null, which the engine then read as a zero flow) and typed arrays,
+    // and the id comes from the shared counter so two copies within one
+    // millisecond never collide.
+    const id = newId('ds');
+    const copy: Dataset = { ...structuredClone(src), id, name: `${src.name} (copy)`, createdAt: Date.now() };
     return { project: { ...s.project, datasets: [...s.project.datasets, copy], activeDatasetId: id } };
   }),
-  updateTiming: (patch) => set(s => mutateActive(s, d => ({ ...d, view: { ...d.view, timingConfig: { ...d.view.timingConfig, ...patch } } }))),
+  updateTiming: (patch) => set(s => mutateActive(s, d => ({
+    ...d,
+    view: { ...d.view, timingConfig: clampTimingConfig({ ...d.view.timingConfig, ...patch }, d.view.timingConfig).config },
+  }))),
   updateSandbox: (patch) => set(s => mutateActive(s, d => ({ ...d, view: { ...d.view, sandbox: { ...d.view.sandbox, ...patch } } }))),
   setLocation: (lat, lon) => set(s => mutateActive(s, d => ({ ...d, location: { lat, lon } }))),
   setArea: (value, unit) => set(s => mutateActive(s, d => ({ ...d, area: { value, unit } }))),

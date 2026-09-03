@@ -116,6 +116,72 @@ export function defaultTimingConfig(stepMs: number, n: number): TimingConfig {
   };
 }
 
+/** Accepted ranges for the timing settings; the Timing tab clamps at the
+ *  control and the project loader and store clamp again. The DTW band is a
+ *  fraction of n, the percentile a value in [0, 100]. */
+export const TIMING_RANGES = {
+  eventPercentile: [0, 100],
+  eventMinDistance: [1, 100_000],
+  eventWarmup: [0, 10_000_000],
+  peakMatchTolerance: [1, 10_000],
+  dtwBandFraction: [0.01, 1],
+  peakProminence: [0, Number.MAX_VALUE],
+} as const;
+
+const finiteNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+/**
+ * Coerce an untrusted timing configuration (a hand-edited project file, a
+ * cleared number box) into a valid one. Unknown or non-finite fields fall
+ * back to `base`; out-of-range numbers are clamped. `changed` reports
+ * whether anything that WAS supplied had to be corrected (missing fields are
+ * forward-compatibility, not corruption). A NaN band fraction once sent the
+ * DTW backtrack into an unbounded loop and a null threshold crashed the
+ * Timing tab, so every field is checked here.
+ */
+export function clampTimingConfig(raw: unknown, base: TimingConfig): { config: TimingConfig; changed: boolean } {
+  const o = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
+  let changed = false;
+  const take = (v: unknown, range: readonly [number, number], d: number, integer = false): number => {
+    if (!finiteNum(v)) { if (v !== undefined) changed = true; return d; }
+    const x = integer ? Math.round(v) : v;
+    const c = Math.min(range[1], Math.max(range[0], x));
+    if (c !== v) changed = true;
+    return c;
+  };
+  let eventThreshold = { ...base.eventThreshold };
+  if (o.eventThreshold !== undefined) {
+    const et = o.eventThreshold as Record<string, unknown> | null;
+    const kind = et && (et.kind === 'percentile' || et.kind === 'absolute') ? et.kind : null;
+    if (!et || typeof et !== 'object' || !kind || !finiteNum(et.value)) changed = true;
+    const k = kind ?? base.eventThreshold.kind;
+    const v = et && finiteNum(et.value) ? et.value : base.eventThreshold.value;
+    const value = k === 'percentile' ? take(v, TIMING_RANGES.eventPercentile, base.eventThreshold.value) : v;
+    eventThreshold = { kind: k, value };
+  }
+  let waveletScales: TimingConfig['waveletScales'] = base.waveletScales;
+  if (o.waveletScales !== undefined) {
+    if (o.waveletScales === 'auto') waveletScales = 'auto';
+    else if (Array.isArray(o.waveletScales) && o.waveletScales.length > 0 && o.waveletScales.every(x => finiteNum(x) && x > 0)) waveletScales = o.waveletScales.slice() as number[];
+    else changed = true;
+  }
+  let peakProminence: TimingConfig['peakProminence'] = base.peakProminence;
+  if (o.peakProminence !== undefined) {
+    if (o.peakProminence === 'auto') peakProminence = 'auto';
+    else peakProminence = take(o.peakProminence, TIMING_RANGES.peakProminence, typeof base.peakProminence === 'number' ? base.peakProminence : 0);
+  }
+  const config: TimingConfig = {
+    dtwBandFraction: take(o.dtwBandFraction, TIMING_RANGES.dtwBandFraction, base.dtwBandFraction),
+    waveletScales,
+    eventThreshold,
+    eventMinDistance: take(o.eventMinDistance, TIMING_RANGES.eventMinDistance, base.eventMinDistance, true),
+    eventWarmup: take(o.eventWarmup, TIMING_RANGES.eventWarmup, base.eventWarmup, true),
+    peakMatchTolerance: take(o.peakMatchTolerance, TIMING_RANGES.peakMatchTolerance, base.peakMatchTolerance, true),
+    peakProminence,
+  };
+  return { config, changed };
+}
+
 export function defaultView(stepMs: number, n: number): ViewState {
   return {
     activeTab: 'data',
