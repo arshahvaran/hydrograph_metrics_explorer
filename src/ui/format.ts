@@ -1,5 +1,8 @@
 export const fmtNum = (v: number | undefined | null, digits = 3): string => {
   if (v === undefined || v === null || !isFinite(v)) return 'n/a';
+  // toFixed switches to exponent notation at 1e21 ("-7.7e+27"); a magnitude
+  // that large is summation garbage on degenerate data, not a metric value.
+  if (Math.abs(v) >= 1e21) return 'n/a';
   const s = v.toFixed(digits);
   // toFixed keeps the sign of a negative value that rounds to zero ("-0.00");
   // anything within half of the last displayed digit of zero shows unsigned.

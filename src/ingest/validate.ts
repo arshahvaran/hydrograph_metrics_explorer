@@ -75,12 +75,16 @@ export function validateDataset(
     const missShare = so.missing / Math.max(1, dates.length);
     if (missShare > 0.5) warnings.push(`Observed is ${(missShare * 100).toFixed(0)}% missing; results may not be meaningful.`);
     if (so.negatives > 0) warnings.push(`Observed contains ${so.negatives} negative value${so.negatives === 1 ? '' : 's'}; allowed, but check the data if streamflow is expected.`);
+    // A constant record has no variance to explain: r, NSE, KGE and their
+    // relatives are undefined for it and the metric tables will say n/a.
+    if (isFinite(so.min) && so.min === so.max) warnings.push('Observed is constant; correlation and efficiency metrics are undefined for it.');
   }
 
   for (const r of runs) {
     const sr = summarise(r.name, r.values, observed?.values);
     series.push(sr);
     if (sr.negatives > 0) warnings.push(`${r.name} contains ${sr.negatives} negative value${sr.negatives === 1 ? '' : 's'}.`);
+    if (isFinite(sr.min) && sr.min === sr.max) warnings.push(`${r.name} is constant; correlation-based metrics are undefined for it.`);
     if (observed) {
       const share = sr.overlapWithObserved / Math.max(1, r.values.length);
       if (sr.overlapWithObserved < 2) {

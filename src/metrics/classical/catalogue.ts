@@ -90,7 +90,7 @@ export const nrmseMean  = (o: Vec, s: Vec) => over(rmse(o, s), mean(o));
 export const nrmseRange = (o: Vec, s: Vec) => { const so = sortedAsc(o); return over(rmse(o, s), so[so.length - 1] - so[0]); };
 export const nrmseIqr   = (o: Vec, s: Vec) => over(rmse(o, s), quantile(o, 0.75) - quantile(o, 0.25));
 /** RSR (Moriasi et al., 2007): RMSE / std(obs). */
-export const rsr = (o: Vec, s: Vec) => over(rmse(o, s), stdPop(o));
+export const rsr = (o: Vec, s: Vec) => over(rmse(o, s), sigmaObs(o));
 /** MASE (Hyndman & Koehler, 2006), non-seasonal denominator. */
 export const mase = (o: Vec, s: Vec) => {
   if (o.length < 2) return NaN;
@@ -153,11 +153,27 @@ export const dr = (o: Vec, s: Vec) => {
   for (let i = 0; i < o.length; i++) { a += Math.abs(s[i] - o[i]); b += Math.abs(o[i] - mo); }
   return a <= 2 * b ? 1 - a / (2 * b) : 2 * b / a - 1;
 };
+/** Numerically-constant observed series (QA-012 mirror): when the spread of
+ *  O around its mean is at the level of one-ulp summation noise, the variance
+ *  denominator is not "small", it is zero, and an efficiency built on it is
+ *  undefined (it once rendered as -7.7e27). `spread` is the RMS or mean
+ *  absolute deviation from the mean, `scale` the mean itself. */
+const constantObs = (spread: number, scale: number) => spread <= Math.abs(scale) * 1e-12;
+/** Population std of the observed series, read as exactly zero when the
+ *  series is numerically constant, so every ratio over it answers n/a
+ *  instead of a fifteen-digit number (RSR once read 8.5e14 on a constant
+ *  0.1 record whose mean is not representable). */
+const sigmaObs = (o: Vec, mo = mean(o)): number => {
+  const so = stdPop(o, mo);
+  return constantObs(so, mo) ? 0 : so;
+};
+
 /** Legates–McCabe index (= NSE with j = 1). */
 export const lmIndex = (o: Vec, s: Vec) => {
   const mo = mean(o);
   let num = 0, den = 0;
   for (let i = 0; i < o.length; i++) { num += Math.abs(s[i] - o[i]); den += Math.abs(o[i] - mo); }
+  if (constantObs(den / o.length, mo)) return NaN;
   const q = over(num, den);
   return Number.isNaN(q) ? NaN : 1 - q;
 };
@@ -167,7 +183,8 @@ export const nse = (o: Vec, s: Vec) => {
   const mo = mean(o);
   let num = 0, den = 0;
   for (let i = 0; i < o.length; i++) { num += (s[i] - o[i]) ** 2; den += (o[i] - mo) ** 2; }
-  return den === 0 ? NaN : 1 - num / den;
+  if (den === 0 || constantObs(Math.sqrt(den / o.length), mo)) return NaN;
+  return 1 - num / den;
 };
 export const nseMod = lmIndex; // j = 1 modified NSE
 export const nseRel = (o: Vec, s: Vec) => {
@@ -178,6 +195,7 @@ export const nseRel = (o: Vec, s: Vec) => {
     if (o[i] === 0) return NaN;                      // relative form undefined at zero flow
     num += ((s[i] - o[i]) / o[i]) ** 2; den += ((o[i] - mo) / mo) ** 2;
   }
+  if (constantObs(Math.sqrt(den / o.length), 1)) return NaN;
   const q = over(num, den);
   return Number.isNaN(q) ? NaN : 1 - q;
 };
@@ -197,7 +215,7 @@ export interface KgeResult {
 export const kge2009 = (o: Vec, s: Vec): KgeResult => {
   const rr = pearson(o, s);
   const mo = mean(o), ms = mean(s);
-  const alpha = stdPop(s, ms) / stdPop(o, mo);
+  const alpha = stdPop(s, ms) / sigmaObs(o, mo);
   const beta = ms / mo;
   { const _v = 1 - Math.sqrt((rr - 1) ** 2 + (alpha - 1) ** 2 + (beta - 1) ** 2); return { value: isFinite(_v) ? _v : NaN, r: rr, variability: alpha, bias: beta }; }
 };
@@ -205,7 +223,7 @@ export const kge2009 = (o: Vec, s: Vec): KgeResult => {
 export const kge2012 = (o: Vec, s: Vec): KgeResult => {
   const rr = pearson(o, s);
   const mo = mean(o), ms = mean(s);
-  const gamma = (stdPop(s, ms) / ms) / (stdPop(o, mo) / mo);
+  const gamma = (stdPop(s, ms) / ms) / (sigmaObs(o, mo) / mo);
   const beta = ms / mo;
   { const _v = 1 - Math.sqrt((rr - 1) ** 2 + (gamma - 1) ** 2 + (beta - 1) ** 2); return { value: isFinite(_v) ? _v : NaN, r: rr, variability: gamma, bias: beta }; }
 };
@@ -213,7 +231,7 @@ export const kge2012 = (o: Vec, s: Vec): KgeResult => {
 export const kge2021 = (o: Vec, s: Vec): KgeResult => {
   const rr = pearson(o, s);
   const mo = mean(o), ms = mean(s);
-  const so = stdPop(o, mo);
+  const so = sigmaObs(o, mo);
   const alpha = stdPop(s, ms) / so;
   const betaPP = (ms - mo) / so;
   { const _v = 1 - Math.sqrt((rr - 1) ** 2 + (alpha - 1) ** 2 + betaPP ** 2); return { value: isFinite(_v) ? _v : NaN, r: rr, variability: alpha, bias: betaPP }; }
@@ -245,9 +263,9 @@ export const pbias = (o: Vec, s: Vec) => {
   return over(100 * num, den);
 };
 /** β-NSE bias term (μs − μo)/σo, optimum 0. */
-export const betaNse = (o: Vec, s: Vec) => over(mean(s) - mean(o), stdPop(o));
+export const betaNse = (o: Vec, s: Vec) => over(mean(s) - mean(o), sigmaObs(o));
 /** Variability ratio α = σs/σo, optimum 1. */
-export const alphaRatio = (o: Vec, s: Vec) => over(stdPop(s), stdPop(o));
+export const alphaRatio = (o: Vec, s: Vec) => over(stdPop(s), sigmaObs(o));
 /** Bounded C2M form of an efficiency (Mathevet et al., 2006). */
 export const c2m = (e: number) => e / (2 - e);
 
