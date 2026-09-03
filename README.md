@@ -1,7 +1,7 @@
 # Hydrograph Metrics Explorer (HME)
 
 [![Live app](https://img.shields.io/badge/Live%20app-arshahvaran.github.io-0b6e99)](https://arshahvaran.github.io/hydrograph_metrics_explorer/)
-[![Version](https://img.shields.io/badge/version-1.12-informational)](https://github.com/arshahvaran/hydrograph_metrics_explorer/tags)
+[![Version](https://img.shields.io/badge/version-1.13-informational)](https://github.com/arshahvaran/hydrograph_metrics_explorer/tags)
 [![CC BY-NC 4.0][cc-by-nc-shield]][cc-by-nc]
 
 **A client-side web tool for timing- and shape-aware evaluation of hydrologic model simulations.**
@@ -78,6 +78,12 @@ One date column plus one observed and any number of simulated discharge columns,
 TXT, or XLSX (or pasted directly). Column roles are assigned explicitly at import; missing
 values are declared in the "Missing value" box rather than assumed. Supported units include
 m³/s, ft³/s, L/s, m³/day, ac-ft/day, and depth per step (mm, in) with a catchment area.
+Everything runs inside one browser tab, so inputs are bounded: delimited files up to
+200 MB, workbooks up to 25 MB, project files up to 100 MB, tables up to 1,000,000 rows,
+100 columns and 30 million cells, and up to 60 simulated columns per dataset. Tables above
+250,000 rows ask for confirmation before loading and are plotted at reduced resolution
+(every point still counts in the metrics); bootstrap intervals need between 30 and
+100,000 valid pairs.
 
 ## Technical validation
 
