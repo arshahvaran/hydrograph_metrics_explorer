@@ -153,6 +153,22 @@ textarea { width: 100%; font-family: "DM Mono", monospace; font-size: 0.84rem; l
 .warning { background: var(--warn-bg); border: 1px solid var(--warn-line); }
 .info { background: var(--accent-soft); border: 1px solid var(--accent); }
 
+/* ---------- modal dialog (soft-limit confirmations and notices) ---------- */
+.dlg-backdrop {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; align-items: center; justify-content: center; padding: 1rem;
+  background: rgba(15, 20, 30, 0.45);
+}
+html[data-theme="dark"] .dlg-backdrop { background: rgba(0, 0, 0, 0.6); }
+.dlg {
+  background: var(--panel); color: var(--ink); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  width: 100%; max-width: 34rem; padding: 1rem 1.2rem;
+}
+.dlg h2 { margin: 0 0 0.5rem; font-family: "Fraunces", Georgia, serif; font-weight: 600; font-size: 1.13rem; letter-spacing: -0.01em; }
+.dlg-body { font-size: 0.92rem; white-space: pre-line; }
+.dlg-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.9rem; }
+
 /* ---------- tables ---------- */
 table.kv { border-collapse: collapse; margin: 0.6rem 0; }
 table.kv th { text-align: left; padding: 0.2rem 1rem 0.2rem 0; color: var(--ink-soft); font-weight: 500; }
