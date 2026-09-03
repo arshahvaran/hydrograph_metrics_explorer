@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
 import { useApp } from '../store/store'
 import { PlotHost } from './PlotHost'
-import { useSubsetRunOutput, subsetFrameFor } from './compute'
+import { NumField } from './NumField'
+import { useSubsetRunOutput, useComputeError, subsetFrameFor } from './compute'
 import { dtwTies } from './alignment'
+import { decimateMinMax, decimationNote } from './decimate'
 import { fmtNum, fmtStamp } from './format'
 import { binByDoy, binByYear } from './plotBins'
 import { AnalysisBar } from './AnalysisBar'
@@ -28,10 +30,13 @@ function seriesOf(ds: Dataset, frame: { obs: Float64Array; apply: (v: ArrayLike<
   ];
 }
 
+/** Largest moving-average window; the loop is O(n x w) on every render. */
+export const MOVING_AVG_MAX = 90;
+
 function applyMode(y: (number | null)[], mode: Mode, movAvg: number | null): (number | null)[] {
   let out = y.slice();
   if (movAvg && movAvg > 1) {
-    const w = Math.floor(movAvg);
+    const w = Math.min(Math.floor(movAvg), MOVING_AVG_MAX, y.length);
     out = out.map((_, i) => {
       let s = 0, c = 0;
       for (let k = Math.max(0, i - w + 1); k <= i; k++) { const v = out[k]; if (v !== null) { s += v; c++; } }
@@ -62,6 +67,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
   const [mode, setMode] = useState<Mode>('none');
   const [logY, setLogY] = useState(false);
   const [movAvg, setMovAvg] = useState<number>(0);
+  const [movNote, setMovNote] = useState<string | null>(null);
   const [threshold, setThreshold] = useState<string>('');
   const [focusIdx, setFocusIdx] = useState(0); // series selector for heatmap/spaghetti/alignment
 
@@ -71,6 +77,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
   // Computed on the SAME subset frame the plot displays, so the ties always
   // join the series that were actually aligned (analysis tabs stay full-frame).
   const alignOut = useSubsetRunOutput(ds, plot === 'alignment' ? alignRun : null);
+  const computeError = useComputeError(ds, frame);
   const all = useMemo(() => seriesOf(ds, frame), [ds, frame.key]);
   const unit = UNITS[ds.targetUnit].label;
 
@@ -80,10 +87,17 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
     const thr = Number(threshold);
 
     if (plot === 'timeseries') {
-      const t = all.map(s => ({
-        x: dates, y: applyMode(s.y, mode, movAvg || null), name: s.name, type: 'scatter', mode: 'lines',
-        line: { color: s.color, width: s.width, dash: s.dash },
-      }));
+      // Long records are drawn at reduced resolution (min and max per bucket);
+      // the derived modes run on the full series first so their values are exact.
+      let factor = 1;
+      const t = all.map(s => {
+        const d = decimateMinMax(dates, applyMode(s.y, mode, movAvg || null));
+        factor = Math.max(factor, d.factor);
+        return {
+          x: d.x, y: d.y, name: s.name, type: 'scatter', mode: 'lines',
+          line: { color: s.color, width: s.width, dash: s.dash },
+        };
+      });
       L.xaxis = { rangeslider: { visible: true }, title: 'Time', showline: false };
       L.yaxis = { ...L.yaxis, zeroline: true };
       // Plotly shape coordinates on a type:'log' axis are log10 units, so the
@@ -96,6 +110,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
       const noteBits = [];
       if (mode !== 'none') noteBits.push(mode === 'fromMean' ? 'departure from mean' : mode);
       if (movAvg > 1) noteBits.push(`${movAvg}-step moving average (trailing)`);
+      if (factor > 1) noteBits.push(decimationNote(factor));
       return { traces: t, layout: L, note: noteBits.join(' + ') || null };
     }
 
@@ -180,20 +195,26 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
     const decim = alignOut.extras.dtw?.decim ?? 1;
     const band = (alignOut.extras.dtw?.band ?? 0) * decim;
     const transform = ds.view.transform;
+    // the two series are display-decimated like the time series; the ties
+    // index the full frame and are drawn as they are (at most 160 of them)
+    const dO = decimateMinMax(dates, paired.o), dS = decimateMinMax(dates, paired.s ?? []);
+    const factor = Math.max(dO.factor, dS.factor);
     return {
       traces: [
-        { x: dates, y: paired.o, name: 'Observed', type: 'scatter', mode: 'lines', line: { color: OBSERVED_COLOR, width: 2.2 } },
-        { x: dates, y: paired.s, name: run.name, type: 'scatter', mode: 'lines', line: { color: run.color, width: 1.7 } },
+        { x: dO.x, y: dO.y, name: 'Observed', type: 'scatter', mode: 'lines', line: { color: OBSERVED_COLOR, width: 2.2 } },
+        { x: dS.x, y: dS.y, name: run.name, type: 'scatter', mode: 'lines', line: { color: run.color, width: 1.7 } },
         { x: tie.x, y: tie.y, name: 'DTW alignment', type: 'scatter', mode: 'lines', line: { color: 'rgba(150,150,160,0.5)', width: 1 }, hoverinfo: 'skip' },
       ],
       layout: { xaxis: { rangeslider: { visible: true }, title: 'Time', showline: false }, yaxis: { title: yTitle, zeroline: true } },
       note: `Optimal Sakoe-Chiba alignment (band ${band} steps); mean |warp| ${fmtNum(alignOut.values.dtw_warp, 2)} steps; grey ties connect matched points`
         + (decim > 1 ? `; path computed on a 1/${decim} decimation of the record` : '')
-        + (transform !== 'none' ? `; alignment computed on ${transform}-transformed flows` : ''),
+        + (transform !== 'none' ? `; alignment computed on ${transform}-transformed flows` : '')
+        + (factor > 1 ? `; ${decimationNote(factor)}` : ''),
     };
   }, [ds, plot, mode, logY, movAvg, threshold, focusIdx, dates, all, unit, frame.key, alignOut]);
 
   const needsFocus = plot === 'heatmap' || plot === 'spaghetti' || plot === 'alignment';
+  const alignError = plot === 'alignment' && !alignOut ? computeError : null;
 
   return (
     <div>
@@ -216,7 +237,10 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
                   <option value="fromMean">departure from mean</option>
                 </select>
               </label>
-              <label>Moving avg <input type="number" min={0} max={90} value={movAvg} style={{ width: '4em' }} onChange={e => setMovAvg(Number(e.target.value))} /> steps</label>
+              <label>Moving avg <NumField value={movAvg} min={0} max={MOVING_AVG_MAX} integer unit="steps" style={{ width: '4em' }}
+                label="Moving average window" onCommit={setMovAvg}
+                onClamp={(note, kind) => setMovNote(note === null ? null : kind === 'rounded' ? note : `Moving average window is limited to ${MOVING_AVG_MAX} steps.`)} /> steps</label>
+              {movNote && <span className="muted" role="status">{movNote}</span>}
               <label>Threshold <input type="number" value={threshold} style={{ width: '6em' }} onChange={e => setThreshold(e.target.value)} /></label>
             </>
           )}
@@ -234,6 +258,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
           )}
         </div>
         {note && <p className="muted">{note}</p>}
+        {alignError && <div className="error" role="alert">{alignError}</div>}
         <PlotHost traces={traces} layout={layout} height={440} square={plot === 'scatter' || plot === 'fdc' || plot === 'qq'} name={`${ds.name.replace(/[^\w-]+/g, '_')}_${plot}`} />
       </section>
     </div>

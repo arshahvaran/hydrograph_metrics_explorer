@@ -1,6 +1,6 @@
 import { useApp } from '../store/store'
 import type { Dataset } from '../types'
-import { useRunOutputs, frameFor } from './compute'
+import { useRunOutputs, frameFor, useComputeError } from './compute'
 import { rankRuns, DEFAULT_PRIORITIES } from '../metrics/rank'
 import { REGISTRY, byId } from '../metrics/registry'
 import { fmtNum } from './format'
@@ -22,6 +22,7 @@ function CompareTabInner({ ds }: { ds: Dataset }) {
   const updateView = useApp(s => s.updateView);
   const runs = ds.runs.filter(r => r.visible);
   const outputs = useRunOutputs(ds, runs);
+  const computeError = useComputeError(ds);
   const frame = frameFor(ds);
 
   if (runs.length < 2) {
@@ -29,7 +30,11 @@ function CompareTabInner({ ds }: { ds: Dataset }) {
       <p className="muted">Add at least two visible model simulations to rank them. The ranking uses your priority metrics, with efficiencies normalised through the bounded C2M form so no single unbounded score dominates.</p></section>;
   }
   if (outputs.some(o => o === null)) {
-    return <section className="card"><h2>Compare simulations</h2><p className="muted">Computing metric panels in a background worker…</p></section>;
+    return <section className="card"><h2>Compare simulations</h2>
+      {computeError
+        ? <div className="error" role="alert">{computeError}</div>
+        : <p className="muted">Computing metric panels in a background worker…</p>}
+    </section>;
   }
 
   const priorities = ds.view.priorityMetrics.length ? ds.view.priorityMetrics : DEFAULT_PRIORITIES;

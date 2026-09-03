@@ -3,7 +3,7 @@ import { useApp } from '../store/store'
 import { REGISTRY, PRESETS, GROUPS } from '../metrics/registry'
 import { benchmarkSeries, nse as nseFn, kge2009 as kgeFn, skill } from '../metrics/classical/catalogue'
 import { applyNanPolicy } from '../ingest/missing'
-import { useRunOutputs, bestIndex, frameFor, useBootstrapCIsAll } from './compute'
+import { useRunOutputs, bestIndex, frameFor, useBootstrapCIsAll, useComputeError } from './compute'
 import { csvLine, fmtNum, download } from './format'
 import { Eq } from './Eq'
 import { APP_VERSION } from '../version'
@@ -27,6 +27,7 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
   const busy = outputs.some(o => o === null);
   const ciOn = ds.view.showBootstrapCIs;
   const boots = useBootstrapCIsAll(ds, runs, ciOn);
+  const computeError = useComputeError(ds);
 
   const selected = PRESETS[preset] === 'all' ? REGISTRY.map(m => m.id) : (PRESETS[preset] as string[]);
   const metricRows = REGISTRY.filter(m => selected.includes(m.id));
@@ -106,11 +107,13 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
           <button className="primary" onClick={() => exportCsv(',')}>Export CSV</button>
         </div>
         <p className="muted" aria-live="polite">
-          Valid pairs per simulation (n): {runs.map((r, i) => `${r.name}: ${outputs[i]?.n ?? '…'}`).join(' · ')}.{busy ? ' Computing in a background worker…' : ''}{frame.caption ? ` Subset: ${frame.caption}.` : ''}
+          Valid pairs per simulation (n): {runs.map((r, i) => `${r.name}: ${outputs[i]?.n ?? '…'}`).join(' · ')}.{busy && !computeError ? ' Computing in a background worker…' : ''}{frame.caption ? ` Subset: ${frame.caption}.` : ''}
           {ds.view.transform !== 'none' && ' Metrics are computed on the transformed series.'}
           {' '}Rows tinted <span className="timingchip">⏱</span> are the timing- &amp; shape-aware measures, recommended as complements to conventional metrics. For datasets with multiple simulations, the better value in each row is underlined.
         </p>
+        {computeError && <div className="error" role="alert">{computeError}</div>}
         {outputs.flatMap(o => o?.notes ?? []).filter((v, i, a) => a.indexOf(v) === i).map(nn => <div key={nn} className="warning">{nn}</div>)}
+        {ciOn && boots.results.map((b, i) => (b?.reason ? <div key={runs[i].id} className="warning">CIs for {runs[i].name}: {b.reason}</div> : null))}
         <div className="mapscroll"><table className="grid metricstable" aria-label="Metric values per simulation">
           <thead>
             <tr><th>Metric</th><th>Optimum</th>{runs.map(r => <th key={r.id} style={{ color: r.color }}>{r.name}</th>)}</tr>
@@ -129,7 +132,8 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
                         <td>{m.timing ? '⏱ ' : ''}{m.label}</td>
                         <td className="muted">{m.optimum}</td>
                         {vals.map((v, i) => {
-                          const ci = ciOn ? boots.results[i]?.cis[m.id] : undefined;
+                          const res = ciOn ? boots.results[i] : null;
+                          const ci = res?.cis[m.id];
                           return (
                             <td key={runs[i].id} className={i === best ? 'best' : ''}>
                               {fmtNum(v, m.digits)}
@@ -137,7 +141,9 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
                                 ? <span className="ci" title="Block resampling destroys the time axis that timing metrics measure, so a bootstrap CI would be meaningless here.">CI n/a</span>
                                 : ci && isFinite(ci[0])
                                   ? <span className="ci">[{fmtNum(ci[0], m.digits)}, {fmtNum(ci[1], m.digits)}]</span>
-                                  : <span className="ci">…</span>)}
+                                  : res
+                                    ? <span className="ci" title={res.reason ?? 'The bootstrap distribution of this metric was not stable enough for an interval.'}>CI n/a</span>
+                                    : <span className="ci">…</span>)}
                             </td>
                           );
                         })}

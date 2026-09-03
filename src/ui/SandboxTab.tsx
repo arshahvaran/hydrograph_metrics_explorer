@@ -1,7 +1,9 @@
 import { useDeferredValue, useMemo, useRef, useState } from 'react'
 import { useApp } from '../store/store'
 import { PlotHost } from './PlotHost'
-import { useRunOutput, useSeriesOutput, perturb } from './compute'
+import { NumField } from './NumField'
+import { useRunOutput, useSeriesOutput, useComputeError, perturb } from './compute'
+import { decimateMinMax, decimationNote } from './decimate'
 import { fmtNum, fmtStamp } from './format'
 import { mean, stdPop } from '../metrics/support/stats'
 import { OBSERVED_COLOR } from '../types'
@@ -34,14 +36,21 @@ function SandboxTabInner({ ds }: { ds: Dataset }) {
     () => perturb(baseSeries, JSON.parse(deferred) as SandboxState),
     [deferred, baseSeries],
   );
-  const outLive = useSeriesOutput(ds, `sandbox|${sb.mode}|${target?.id ?? 'obs'}|${deferred}`, perturbed);
+  // Slider positions share one coalesce tag: while the worker is busy with an
+  // older position, every queued position but the newest is dropped, so the
+  // readout follows the hand instead of trailing minutes behind it.
+  const outLive = useSeriesOutput(ds, `sandbox|${sb.mode}|${target?.id ?? 'obs'}|${deferred}`, perturbed, `sandbox|${ds.id}`);
   const baselineSeries = useSeriesOutput(ds, 'sandbox-baseline-obs', sb.mode === 'synthetic' ? ds.observed.values : null);
   const baselineRun = useRunOutput(ds, sb.mode === 'synthetic' ? null : target);
-  // retain the last completed panel so slider drags never blank the readout
+  const computeError = useComputeError(ds);
+  // retain the last completed panel (and baseline) so slider drags never blank the readout
   const lastOut = useRef<ReturnType<typeof Object> | null>(null) as React.MutableRefObject<any>;
   if (outLive) lastOut.current = outLive;
   const out = outLive ?? lastOut.current;
-  const baseline = sb.mode === 'synthetic' ? baselineSeries : baselineRun;
+  const baselineLive = sb.mode === 'synthetic' ? baselineSeries : baselineRun;
+  const lastBase = useRef<any>(null);
+  if (baselineLive) lastBase.current = baselineLive;
+  const baseline = baselineLive ?? lastBase.current;
 
   const set = (patch: Partial<SandboxState>) => updateSandbox(patch);
   const slider = (label: string, key: keyof SandboxState, min: number, max: number, step: number, fmt: (v: number) => string) => (
@@ -54,11 +63,22 @@ function SandboxTabInner({ ds }: { ds: Dataset }) {
 
   const dates = useMemo(() => ds.dates.map(m => fmtStamp(m, ds.step.ms)), [ds.dates, ds.step.ms]);
   if (!out || !baseline) {
-    return <div className="card"><h2>Perturbation sandbox</h2><p className="muted">Computing metric panel in a background worker…</p></div>;
+    return (
+      <div className="card"><h2>Perturbation sandbox</h2>
+        {computeError
+          ? <div className="error" role="alert">{computeError}</div>
+          : <p className="muted">Computing metric panel in a background worker…</p>}
+      </div>
+    );
   }
   const clean = (v: ArrayLike<number>) => Array.from(v, x => (isFinite(x as number) ? (x as number) : null));
+  const dObs = decimateMinMax(dates, clean(ds.observed.values));
+  const dOrig = sb.mode === 'perturb' ? decimateMinMax(dates, clean(target.values)) : null;
+  const dPert = decimateMinMax(dates, clean(perturbed));
+  const factor = Math.max(dObs.factor, dPert.factor, dOrig?.factor ?? 1);
 
   const sweepRows: { lag: number; nse: number; w1: number }[] = out.extras.sweep?.rows ?? [];
+  const bestLag: number = out.extras.sweep?.bestLag ?? NaN;
 
   return (
     <div>
@@ -92,7 +112,8 @@ function SandboxTabInner({ ds }: { ds: Dataset }) {
               <select aria-label="Noise type" value={sb.noiseKind} onChange={e => set({ noiseKind: e.target.value as any })}>
                 <option value="uniform">uniform</option><option value="gaussian">gaussian</option>
               </select>
-              <input aria-label="Noise seed" type="number" value={sb.noiseSeed} style={{ width: '6em' }} onChange={e => set({ noiseSeed: Number(e.target.value) })} />
+              <NumField aria-label="Noise seed" value={sb.noiseSeed} min={0} max={2_147_483_647} integer style={{ width: '6em' }}
+                label="Noise seed" onCommit={v => set({ noiseSeed: v })} />
             </span>
           </div>
         </div>
@@ -101,11 +122,12 @@ function SandboxTabInner({ ds }: { ds: Dataset }) {
 
       <section className="card">
         <h2>Hydrograph of the perturbed series <span className="muted">observed, original, and perturbed series update live as the controls change</span></h2>
+        {factor > 1 && <p className="muted">{decimationNote(factor)}</p>}
         <PlotHost
           traces={[
-            { x: dates, y: clean(ds.observed.values), name: 'Observed', type: 'scatter', mode: 'lines', line: { color: OBSERVED_COLOR, width: 2.2 } },
-            ...(sb.mode === 'perturb' ? [{ x: dates, y: clean(target.values), name: `${target.name} (original)`, type: 'scatter', mode: 'lines', line: { color: target.color, width: 1, dash: 'dot' }, opacity: 0.4 }] : []),
-            { x: dates, y: clean(perturbed), name: 'Perturbed S′', type: 'scatter', mode: 'lines', line: { color: '#d95f02', width: 1.9 } },
+            { x: dObs.x, y: dObs.y, name: 'Observed', type: 'scatter', mode: 'lines', line: { color: OBSERVED_COLOR, width: 2.2 } },
+            ...(dOrig ? [{ x: dOrig.x, y: dOrig.y, name: `${target.name} (original)`, type: 'scatter', mode: 'lines', line: { color: target.color, width: 1, dash: 'dot' }, opacity: 0.4 }] : []),
+            { x: dPert.x, y: dPert.y, name: 'Perturbed S′', type: 'scatter', mode: 'lines', line: { color: '#d95f02', width: 1.9 } },
           ]}
           layout={{ xaxis: { rangeslider: { visible: true }, title: 'Time', showline: false }, yaxis: { title: `Q [${UNITS[ds.targetUnit].label}]`, zeroline: true } }}
           height={380}
@@ -150,13 +172,13 @@ function SandboxTabInner({ ds }: { ds: Dataset }) {
             yaxis: { title: 'NSE' },
             yaxis2: { title: 'W₁ [steps]', overlaying: 'y', side: 'right' },
             shapes: [
-              { type: 'line', x0: out.extras.sweep?.bestLag, x1: out.extras.sweep?.bestLag, yref: 'paper', y0: 0, y1: 1, line: { color: '#1f77b4', dash: 'dash', width: 1 } },
+              ...(Number.isFinite(bestLag) ? [{ type: 'line', x0: bestLag, x1: bestLag, yref: 'paper', y0: 0, y1: 1, line: { color: '#1f77b4', dash: 'dash', width: 1 } }] : []),
               { type: 'line', x0: sb.shiftSteps, x1: sb.shiftSteps, yref: 'paper', y0: 0, y1: 1, line: { color: '#999', dash: 'dot', width: 1 } },
             ],
           }}
           height={330}
         />
-        <p className="muted">Grey dotted line = the shift you injected; blue dashed = the lag the sweep recovers (best-fit lag {out.values.lag_best}).</p>
+        <p className="muted">Grey dotted line = the shift you injected; blue dashed = the lag the sweep recovers (best-fit lag {fmtNum(out.values.lag_best, 0)}).</p>
       </section>
     </div>
   );

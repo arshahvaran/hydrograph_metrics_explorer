@@ -1,15 +1,18 @@
 import { useMemo, useState } from 'react'
 import type { Dataset } from '../types'
 import { UNITS } from '../units/registry'
-import { OBSERVED_COLOR, defaultTimingConfig } from '../types'
+import { OBSERVED_COLOR, defaultTimingConfig, TIMING_RANGES } from '../types'
 import { useApp } from '../store/store'
 import { PlotHost } from './PlotHost'
-import { useRunOutputs, frameFor } from './compute'
+import { NumField } from './NumField'
+import { useRunOutputs, useComputeError, frameFor } from './compute'
 import { csvLine, download, fmtDate, fmtNum } from './format'
 import { byId } from '../metrics/registry'
 
 /** Exactly the timing block of the Metrics tab's essentials preset (13). */
 const SUMMARY_IDS = ['sd_occ', 'sd_amp', 'sd_time', 'dtw_warp', 'dtw_dist', 'xwt_lag', 'w1', 'peak_lag_abs', 'peak_lag_signed', 'event_peak', 'event_vol', 'event_lag', 'de'];
+
+export const NO_VISIBLE_RUNS_MESSAGE = 'No simulation is visible for this dataset. Make at least one simulation visible to see timing metrics.';
 
 /** Lower bound of the DE-polar colour axis. The reference tool (diag-eff) fixes the
  *  axis to [0, 1], but real runs cluster near r = 1, where a full-range magma ramp
@@ -31,15 +34,20 @@ export function TimingTab() {
   return <TimingTabInner ds={ds} />;
 }
 
+/** Signed lag cell text; a flat simulation has no peak and reads n/a. */
+const lagText = (lag: number): string => (Number.isFinite(lag) ? `${lag > 0 ? '+' : ''}${lag}` : 'n/a');
+
 function TimingTabInner({ ds }: { ds: Dataset }) {
   const updateTiming = useApp(s => s.updateTiming);
   const [eventRunIdx, setEventRunIdx] = useState(0);
+  const [clampNote, setClampNote] = useState<string | null>(null);
 
   const t = ds.view.timingConfig;
   const [useDefaults, setUseDefaults] = useState(
     () => JSON.stringify(t) === JSON.stringify(defaultTimingConfig(ds.step.ms, ds.dates.length)));
   const runs = ds.runs.filter(r => r.visible);
   const rawOutputs = useRunOutputs(ds, runs);
+  const computeError = useComputeError(ds);
   const frame = frameFor(ds);
   const outputs = rawOutputs.map(o => o!);  // guarded below; memos tolerate nulls
   const pending = rawOutputs.some(o => o === null);
@@ -56,14 +64,24 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
     return tr;
   }, [ds, pending, runs.map(r => r.id).join(), JSON.stringify(t), ds.view.nanPolicy, ds.view.transform]);
 
+  if (!runs.length) {
+    return <div className="card"><h2>Timing &amp; shape</h2><p className="warning" role="status">{NO_VISIBLE_RUNS_MESSAGE}</p></div>;
+  }
   if (pending) {
-    return <div className="card"><h2>Timing &amp; shape</h2><p className="muted">Computing timing metrics in a background worker…</p></div>;
+    return (
+      <div className="card"><h2>Timing &amp; shape</h2>
+        {computeError
+          ? <div className="error" role="alert">{computeError}</div>
+          : <p className="muted">Computing timing metrics in a background worker…</p>}
+      </div>
+    );
   }
 
-  const sweepShapes = runs.map((r, i) => ({
-    type: 'line', x0: outputs[i].extras.sweep?.bestLag, x1: outputs[i].extras.sweep?.bestLag,
-    yref: 'paper', y0: 0, y1: 1, line: { color: r.color, width: 1, dash: 'dash' },
-  }));
+  const sweepShapes = runs.flatMap((r, i) => {
+    const best = outputs[i].extras.sweep?.bestLag;
+    if (!Number.isFinite(best)) return [];
+    return [{ type: 'line', x0: best, x1: best, yref: 'paper', y0: 0, y1: 1, line: { color: r.color, width: 1, dash: 'dash' } }];
+  });
 
   const xwtTraces = runs.map((r, i) => {
     const rows = outputs[i].extras.xwt?.byScale ?? [];
@@ -98,6 +116,13 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
 
   const evOut = outputs[Math.min(eventRunIdx, outputs.length - 1)];
   const evRun = runs[Math.min(eventRunIdx, runs.length - 1)];
+  // Event indices live in the NaN-compacted paired arrays; pairedIndex maps
+  // them back to dataset rows (a gap before an event once shifted every date
+  // in this table by the number of missing values ahead of it).
+  const rowOf = (i: number) => evOut.pairedIndex?.[i] ?? i;
+  const dayAt = (i: number) => { const ms = ds.dates[rowOf(i)]; return Number.isFinite(ms) ? fmtDate(ms) : 'n/a'; };
+  const n = ds.dates.length;
+  const events = evOut.extras.events?.events ?? [];
 
   return (
     <div>
@@ -106,7 +131,7 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
         <label className="cfgdefault"><span className="switch"><input type="checkbox" checked={useDefaults} onChange={e => {
           const on = e.target.checked;
           setUseDefaults(on);
-          if (on) updateTiming(defaultTimingConfig(ds.step.ms, ds.dates.length));
+          if (on) { updateTiming(defaultTimingConfig(ds.step.ms, ds.dates.length)); setClampNote(null); }
         }} /><span className="knob" aria-hidden="true" /></span> Default settings (switch off to customise)</label>
         <fieldset className="cfgfields" disabled={useDefaults}>
         <div className="controls">
@@ -115,32 +140,36 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
               <option value="percentile">percentile of obs</option>
               <option value="absolute">absolute</option>
             </select>{' '}
-            <input type="number" value={t.eventThreshold.value} style={{ width: '5.5em' }}
-              onChange={e => updateTiming({ eventThreshold: { ...t.eventThreshold, value: Number(e.target.value) } })} />
+            <NumField value={t.eventThreshold.value} style={{ width: '5.5em' }} label="Event threshold" onClamp={setClampNote}
+              min={t.eventThreshold.kind === 'percentile' ? TIMING_RANGES.eventPercentile[0] : -Number.MAX_VALUE}
+              max={t.eventThreshold.kind === 'percentile' ? TIMING_RANGES.eventPercentile[1] : Number.MAX_VALUE}
+              onCommit={v => updateTiming({ eventThreshold: { ...t.eventThreshold, value: v } })} />
           </label>
-          <label>Min event gap <input type="number" min={1} value={t.eventMinDistance} style={{ width: '4em' }}
-            onChange={e => updateTiming({ eventMinDistance: Number(e.target.value) })} /> steps</label>
-          <label>Warm-up <input type="number" min={0} value={t.eventWarmup} style={{ width: '4.5em' }}
-            onChange={e => updateTiming({ eventWarmup: Number(e.target.value) })} /> steps</label>
-          <label>Peak window ± <input type="number" min={1} value={t.peakMatchTolerance} style={{ width: '4em' }}
-            onChange={e => updateTiming({ peakMatchTolerance: Number(e.target.value) })} /> steps</label>
+          <label>Min event gap <NumField value={t.eventMinDistance} min={TIMING_RANGES.eventMinDistance[0]} max={TIMING_RANGES.eventMinDistance[1]} integer unit="steps" style={{ width: '4em' }}
+            label="Min event gap" onClamp={setClampNote} onCommit={v => updateTiming({ eventMinDistance: v })} /> steps</label>
+          <label>Warm-up <NumField value={t.eventWarmup} min={0} max={Math.max(0, n - 2)} integer unit="steps" style={{ width: '4.5em' }}
+            label="Warm-up" onClamp={setClampNote} onCommit={v => updateTiming({ eventWarmup: v })} /> steps</label>
+          <label>Peak window ± <NumField value={t.peakMatchTolerance} min={TIMING_RANGES.peakMatchTolerance[0]} max={TIMING_RANGES.peakMatchTolerance[1]} integer unit="steps" style={{ width: '4em' }}
+            label="Peak window" onClamp={setClampNote} onCommit={v => updateTiming({ peakMatchTolerance: v })} /> steps</label>
           <label title="Peaks must rise this far above surroundings; auto = σ of observed">Prominence{' '}
             <select value={t.peakProminence === 'auto' ? 'auto' : 'custom'}
               onChange={e => updateTiming({ peakProminence: e.target.value === 'auto' ? 'auto' : 0 })}>
               <option value="auto">auto (σ obs)</option><option value="custom">custom</option>
             </select>
             {t.peakProminence !== 'auto' &&
-              <input type="number" value={t.peakProminence} style={{ width: '5em' }}
-                onChange={e => updateTiming({ peakProminence: Number(e.target.value) })} />}
+              <NumField value={t.peakProminence} min={0} max={Number.MAX_VALUE} style={{ width: '5em' }}
+                label="Prominence" onClamp={setClampNote} onCommit={v => updateTiming({ peakProminence: v })} />}
           </label>
-          <label>DTW band <input type="number" min={1} max={50} value={Math.round(t.dtwBandFraction * 100)} style={{ width: '4em' }}
-            onChange={e => updateTiming({ dtwBandFraction: Number(e.target.value) / 100 })} /> % of n</label>
+          <label>DTW band <NumField value={Math.round(t.dtwBandFraction * 100)} min={1} max={50} integer style={{ width: '4em' }}
+            label="DTW band" onClamp={setClampNote} onCommit={v => updateTiming({ dtwBandFraction: v / 100 })} /> % of n</label>
         </div>
         </fieldset>
+        {clampNote && !useDefaults && <p className="warning" role="status">{clampNote}</p>}
       </section>
 
       <section className="card">
         <h2>Timing summary <span className="muted">(lags in steps of {stepLabel})</span></h2>
+        {outputs.flatMap(o => o.notes).filter((v, i, a) => a.indexOf(v) === i && /transform|flat|resolvable/.test(v)).map(nn => <div key={nn} className="warning">{nn}</div>)}
         <div className="mapscroll"><table className="grid" aria-label="Timing summary per simulation">
           <thead><tr><th>Measure</th><th>Optimum</th>{runs.map(r => <th key={r.id} style={{ color: r.color }}>{r.name}</th>)}</tr></thead>
           <tbody>
@@ -217,31 +246,30 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
           </select>{' '}
           <span className="muted">threshold {fmtNum(evOut.extras.events?.threshold, 2)} {UNITS[ds.targetUnit].label} · tolerance ±{t.peakMatchTolerance} steps</span>{' '}
           <button onClick={() => {
-            const evs = evOut.extras.events?.events ?? [];
             const rows = [csvLine(['event', 'window_start', 'window_end', `obs_peak_${ds.targetUnit}`, 'peak_lag_steps', 'peak_mag_err_pct', 'volume_err_pct'])];
-            evs.forEach((e, i) => rows.push(csvLine([i + 1,
-              new Date(ds.dates[e.obs.start]).toISOString().slice(0, 10),
-              new Date(ds.dates[e.obs.end]).toISOString().slice(0, 10),
-              e.obs.peakQ, e.peakLag, e.peakMagErrPct, e.volumeErrPct])));
+            events.forEach((e, i) => rows.push(csvLine([i + 1,
+              dayAt(e.obs.start), dayAt(e.obs.end),
+              e.obs.peakQ, Number.isFinite(e.peakLag) ? e.peakLag : 'n/a', e.peakMagErrPct, e.volumeErrPct])));
             download(`${ds.name.replace(/[^\w-]+/g, '_')}_events_${evRun.name.replace(/[^\w-]+/g, '_')}.csv`, rows.join('\n'), 'text/csv');
           }}>Export CSV</button>
         </h2>
         <div className="mapscroll"><table className="grid" aria-label="Detected events and per-event errors">
           <thead><tr><th>#</th><th>window</th><th>obs peak [{UNITS[ds.targetUnit].label}]</th><th>peak lag</th><th>peak mag err %</th><th>volume err %</th></tr></thead>
           <tbody>
-            {(evOut.extras.events?.events ?? []).slice(0, 40).map((e, i) => (
+            {events.slice(0, 40).map((e, i) => (
               <tr key={i}>
                 <td>{i + 1}</td>
-                <td>{fmtDate(ds.dates[e.obs.start])} → {fmtDate(ds.dates[e.obs.end])}</td>
+                <td>{dayAt(e.obs.start)} → {dayAt(e.obs.end)}</td>
                 <td>{fmtNum(e.obs.peakQ, 2)}</td>
-                <td>{e.peakLag > 0 ? '+' : ''}{e.peakLag}</td>
+                <td>{lagText(e.peakLag)}</td>
                 <td>{fmtNum(e.peakMagErrPct, 1)}</td>
                 <td>{fmtNum(e.volumeErrPct, 1)}</td>
               </tr>
             ))}
           </tbody>
         </table></div>
-        {(evOut.extras.events?.events.length ?? 0) === 0 && <p className="warning">No events above the current threshold for {evRun?.name}. Lower the percentile above.</p>}
+        {events.length > 40 && <p className="muted">Showing the first 40 of {events.length.toLocaleString('en-US')} events; Export CSV writes all of them.</p>}
+        {events.length === 0 && <p className="warning">No events above the current threshold for {evRun?.name}. Lower the percentile above.</p>}
       </section>
     </div>
   );
