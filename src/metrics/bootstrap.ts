@@ -32,7 +32,16 @@ export interface BootstrapResult {
   blockLen: number;
   n: number;
   seed: number;
+  /** Set when no interval was computed: why, in user-facing words. */
+  reason?: string;
 }
+
+/** Below this many valid pairs a block bootstrap cannot form enough distinct
+ *  blocks and the intervals collapse to zero width (n = 2 once yielded exact
+ *  CIs); above the upper cap the 500 replicates take minutes per simulation
+ *  in the worker and cannot be interrupted. */
+export const BOOTSTRAP_MIN_N = 30;
+export const BOOTSTRAP_MAX_N = 100_000;
 
 export function defaultBlockLen(n: number): number {
   return Math.max(3, Math.round(Math.cbrt(n)));
@@ -50,6 +59,13 @@ export function bootstrapCIs(
   const L = opts.blockLen ?? defaultBlockLen(n);
   const alpha = opts.alpha ?? 0.05;
   const seed = opts.seed ?? 12345;
+  const num = (v: number) => v.toLocaleString('en-US');
+  if (n < BOOTSTRAP_MIN_N) {
+    return { cis: {}, B: 0, blockLen: L, n, seed, reason: `Bootstrap CIs need at least ${BOOTSTRAP_MIN_N} valid pairs; this simulation has ${num(n)}.` };
+  }
+  if (n > BOOTSTRAP_MAX_N) {
+    return { cis: {}, B: 0, blockLen: L, n, seed, reason: `Bootstrap CIs are available for records with up to ${num(BOOTSTRAP_MAX_N)} valid pairs; this record has ${num(n)}. Use an analysis window or resample to daily or monthly means first.` };
+  }
   const rng = mulberry32(seed);
 
   const samples = new Map<string, number[]>();

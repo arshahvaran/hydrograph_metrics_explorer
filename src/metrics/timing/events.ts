@@ -44,7 +44,9 @@ export function detectEvents(x: Vec, opt: EventOptions): { events: EventSpan[]; 
 
 export interface EventError {
   obs: EventSpan;
-  peakLag: number;          // steps, positive = simulated peak late
+  /** steps, positive = simulated peak late; NaN when the simulation is flat
+   *  inside the search window (no peak to match). */
+  peakLag: number;
   peakMagErrPct: number;    // 100·(simPeak − obsPeak)/obsPeak
   volumeErrPct: number;     // 100·(Σsim − Σobs)/Σobs over the obs event window
 }
@@ -58,22 +60,29 @@ export interface EventReport {
   meanVolumeErrPct: number;
   /** Mean signed peak-height error % across matched events (Table 2 per-event row). */
   meanPeakErrPct: number;
+  /** Observed events whose simulation was flat inside the search window. */
+  flat?: number;
 }
 
 export function eventErrors(obs: Vec, sim: Vec, opt: EventOptions, matchTolerance: number): EventReport {
   const { events: obsEvents, threshold } = detectEvents(obs, opt);
   const simEvents = detectEvents(sim, { ...opt, thresholdKind: 'absolute', thresholdValue: threshold }).events;
 
+  let flat = 0;
   const errors: EventError[] = obsEvents.map(e => {
     const lo = Math.max(0, e.start - matchTolerance);
     const hi = Math.min(sim.length - 1, e.end + matchTolerance);
-    let pk = lo;
-    for (let j = lo; j <= hi; j++) if (sim[j] > sim[pk]) pk = j;
+    let pk = lo, mn = lo;
+    for (let j = lo; j <= hi; j++) { if (sim[j] > sim[pk]) pk = j; if (sim[j] < sim[mn]) mn = j; }
+    // A plateau has no peak: the argmax would be the window edge, and a lag
+    // read from it is an artefact of the window, not a timing error.
+    const isFlat = sim[pk] === sim[mn];
+    if (isFlat) flat++;
     let vo = 0, vs = 0;
     for (let j = e.start; j <= e.end; j++) { vo += obs[j]; vs += sim[j]; }
     return {
       obs: e,
-      peakLag: pk - e.peakIdx,
+      peakLag: isFlat ? NaN : pk - e.peakIdx,
       peakMagErrPct: 100 * (sim[pk] - e.peakQ) / e.peakQ,
       volumeErrPct: 100 * (vs - vo) / vo,
     };
@@ -90,7 +99,7 @@ export function eventErrors(obs: Vec, sim: Vec, opt: EventOptions, matchToleranc
   }
   const misses = obsEvents.length - hits;
   const falseAlarms = simEvents.length - hitSim.size;
-  const lags = errors.map(e => e.peakLag);
+  const lags = errors.map(e => e.peakLag).filter(Number.isFinite);
   return {
     threshold, events: errors, hits, misses, falseAlarms,
     threat: hits + misses + falseAlarms > 0 ? hits / (hits + misses + falseAlarms) : NaN,
@@ -98,6 +107,7 @@ export function eventErrors(obs: Vec, sim: Vec, opt: EventOptions, matchToleranc
     medianPeakLag: lags.length ? median(lags) : NaN,
     meanVolumeErrPct: errors.length ? mean(errors.map(e => e.volumeErrPct)) : NaN,
     meanPeakErrPct: errors.length ? mean(errors.map(e => e.peakMagErrPct)) : NaN,
+    flat,
   };
 }
 
@@ -106,6 +116,8 @@ export interface PeakMatch { tObs: number; tSim: number; lag: number; obsQ: numb
 export interface PeakTimingResult {
   /** Obs peaks whose best sim match clamped at the window edge (excluded). */
   unresolved: number;
+  /** Obs peaks whose simulation was flat inside the window (excluded). */
+  flat?: number;
   meanAbsLag: number;       // paper headline
   meanSignedLag: number;    // "timing bias" (secondary)
   peaks: PeakMatch[];
@@ -159,11 +171,15 @@ export function peakTiming(
   // old code reported the clamped boundary lag as truth: a confidently wrong
   // number. Such pairs are UNRESOLVED: excluded from the means and counted.
   const peaks: PeakMatch[] = [];
-  let unresolved = 0;
+  let unresolved = 0, flat = 0;
   for (const t of keep) {
     const lo = Math.max(0, t - opts.window), hi = Math.min(n - 1, t + opts.window);
-    let m = lo;
-    for (let j = lo; j <= hi; j++) if (sim[j] > sim[m]) m = j;
+    let m = lo, mn = lo;
+    for (let j = lo; j <= hi; j++) { if (sim[j] > sim[m]) m = j; if (sim[j] < sim[mn]) mn = j; }
+    // A flat simulation inside the window (a damped or scaled-to-zero series)
+    // has no peak; the argmax would land on the window edge and report the
+    // window itself as a lag. Such peaks are counted, not matched.
+    if (sim[m] === sim[mn]) { flat++; continue; }
     const clampedLo = m === lo && lo > 0 && sim[lo - 1] > sim[lo];
     const clampedHi = m === hi && hi < n - 1 && sim[hi + 1] > sim[hi];
     if (clampedLo || clampedHi) { unresolved++; continue; }
@@ -175,6 +191,7 @@ export function peakTiming(
     meanSignedLag: peaks.length ? mean(peaks.map(p => p.lag)) : NaN,
     peaks,
     unresolved,
+    flat,
     prominenceUsed: promThr,
     window: opts.window,
   };
@@ -183,7 +200,13 @@ export function peakTiming(
 // ---------------- lag sweep (§11.9) ----------------
 export interface LagSweepRow { lag: number; nse: number; kge: number; r: number; w1: number }
 
-/** Positive lag = simulation late: obs[t] is paired with sim[t + lag]. */
+/** Minimum overlap for a lag to be scored; shorter overlaps give NSE values
+ *  that are noise, and a sweep of noise has no meaningful argmax. */
+export const LAG_SWEEP_MIN_PAIRS = 10;
+
+/** Positive lag = simulation late: obs[t] is paired with sim[t + lag].
+ *  bestLag is NaN when no lag has a finite NSE (short or constant records)
+ *  rather than the first lag of the sweep. */
 export function lagSweep(obs: Vec, sim: Vec, lo = -30, hi = 30): { rows: LagSweepRow[]; bestLag: number } {
   const rows: LagSweepRow[] = [];
   for (let L = lo; L <= hi; L++) {
@@ -192,6 +215,7 @@ export function lagSweep(obs: Vec, sim: Vec, lo = -30, hi = 30): { rows: LagSwee
       const j = t + L;
       if (j >= 0 && j < sim.length) { o.push(obs[t]); s.push(sim[j]); }
     }
+    if (o.length < LAG_SWEEP_MIN_PAIRS) { rows.push({ lag: L, nse: NaN, kge: NaN, r: NaN, w1: NaN }); continue; }
     rows.push({
       lag: L,
       nse: nse(o, s),
@@ -200,7 +224,7 @@ export function lagSweep(obs: Vec, sim: Vec, lo = -30, hi = 30): { rows: LagSwee
       w1: wasserstein1(o, s),
     });
   }
-  let best = rows[0];
-  for (const row of rows) if (row.nse > best.nse) best = row;
-  return { rows, bestLag: best.lag };
+  let best: LagSweepRow | null = null;
+  for (const row of rows) if (Number.isFinite(row.nse) && (!best || row.nse > best.nse)) best = row;
+  return { rows, bestLag: best ? best.lag : NaN };
 }

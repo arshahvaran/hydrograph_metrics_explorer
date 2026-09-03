@@ -72,7 +72,11 @@ export interface DtwResult {
  */
 export function dtw(obs: Vec, sim: Vec, bandFraction = 0.1): DtwResult {
   const n = obs.length, m = sim.length;
+  // A non-finite or negative band (a hand-edited project file) would visit
+  // no DP cell and send the backtrack below into an unbounded loop.
+  if (!Number.isFinite(bandFraction) || bandFraction < 0) bandFraction = 0.1;
   const band = Math.max(1, Math.ceil(bandFraction * Math.max(n, m)), Math.abs(n - m));
+  if (n < 2 || m < 2) return { distance: NaN, normalized: NaN, meanAbsWarp: NaN, path: [], band };
   const INF = Infinity;
 
   // Rolling DP with full move matrix for backtracking (Uint8: 1=diag,2=up,3=left).
@@ -99,10 +103,12 @@ export function dtw(obs: Vec, sim: Vec, bandFraction = 0.1): DtwResult {
   }
   const distance = prev[m - 1];
 
-  // backtrack
+  // backtrack; a monotone path visits at most n + m - 1 cells, so a longer
+  // walk means the move table was never filled and the record cannot be aligned
   const path: [number, number][] = [];
   let i = n - 1, j = m - 1;
-  while (true) {
+  const limit = n + m;
+  while (path.length <= limit && i >= 0 && j >= 0) {
     path.push([i, j]);
     if (i === 0 && j === 0) break;
     const mv = move[i * m + j];
@@ -110,6 +116,8 @@ export function dtw(obs: Vec, sim: Vec, bandFraction = 0.1): DtwResult {
     else if (mv === 2) { i--; }
     else { j--; }
   }
+  const last = path[path.length - 1];
+  if (!last || last[0] !== 0 || last[1] !== 0) throw new Error('DTW alignment failed on this record');
   path.reverse();
 
   let warp = 0;

@@ -193,10 +193,37 @@ export function classicalValues(o: Float64Array, s: Float64Array): {
 }
 
 export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>, ctx: ComputeContext): ComputeOutput {
-  const paired = applyNanPolicy(obsRaw, simRaw, ctx.nanPolicy);
-  const { o, s, note } = C.applyTransform(paired.obs, paired.sim, ctx.transform);
-  const notes: string[] = note ? [note] : [];
+  const paired0 = applyNanPolicy(obsRaw, simRaw, ctx.nanPolicy);
+  const tr = C.applyTransform(paired0.obs, paired0.sim, ctx.transform);
+  const notes: string[] = tr.note ? [tr.note] : [];
   const heavy = ctx.heavy !== false;
+
+  // A transform can turn a finite pair into NaN (sqrt of a negative flow, log
+  // of a value below -eps, inverse at exactly -eps). Pairing happened before
+  // the transform, so those pairs are dropped again here, from the raw and
+  // the transformed arrays alike, and the note says how many; one such pair
+  // once turned 48 of 63 metrics n/a with n still reporting the full count.
+  let o = tr.o, s = tr.s;
+  let raw = paired0;
+  if (ctx.transform !== 'none') {
+    let bad = 0;
+    for (let i = 0; i < o.length; i++) if (!isFinite(o[i]) || !isFinite(s[i])) bad++;
+    if (bad > 0) {
+      const keep = o.length - bad;
+      const o2 = new Float64Array(keep), s2 = new Float64Array(keep);
+      const ro = new Float64Array(keep), rs = new Float64Array(keep);
+      const idx: number[] = new Array(keep);
+      for (let i = 0, k = 0; i < o.length; i++) {
+        if (!isFinite(o[i]) || !isFinite(s[i])) continue;
+        o2[k] = o[i]; s2[k] = s[i]; ro[k] = paired0.obs[i]; rs[k] = paired0.sim[i]; idx[k] = paired0.index[i]; k++;
+      }
+      o = o2; s = s2;
+      raw = { obs: ro, sim: rs, index: idx, n: keep };
+      notes.push(keep === 0
+        ? `The ${ctx.transform} transform needs positive flows; this record has non-positive values. Set the transform to none.`
+        : `${bad} pair${bad === 1 ? ' was' : 's were'} excluded because ${bad === 1 ? 'it is' : 'they are'} not positive under the ${ctx.transform} transform.`);
+    }
+  }
 
   const { values, kge } = classicalValues(o, s);
   const extras: ComputeOutput['extras'] = { ...kge };
@@ -209,11 +236,19 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
     };
     const daily = true;
     const de = diagnosticEfficiency(o, s);
+    // Events, peak timing and Series Distance are threshold-based, physical
+    // measures (an absolute threshold of 30 m3/s, a peak height): they run on
+    // the untransformed flows of the same surviving pairs. Under a transform
+    // the threshold once met log flows near 3 and every event vanished; the
+    // shape measures below (DTW, Wasserstein, XWT, DE, sweep) keep the
+    // transform, which is a legitimate weighting choice for them.
+    const ro = raw.obs, rs = raw.sim;
     // QA-011: peak separation must follow the configured event spacing, not a
     // hardcoded 100 steps (which silently suppressed real peaks in daily data).
-    const peaks = peakTiming(o, s, { prominence: t.peakProminence, minDistance: t.eventMinDistance, window: t.peakMatchTolerance });
-    const events = eventErrors(o, s, evOpt, t.peakMatchTolerance);
-    const sd = seriesDistance(o, s, evOpt, t.peakMatchTolerance);
+    const peaks = peakTiming(ro, rs, { prominence: t.peakProminence, minDistance: t.eventMinDistance, window: t.peakMatchTolerance });
+    const events = eventErrors(ro, rs, evOpt, t.peakMatchTolerance);
+    const sd = seriesDistance(ro, rs, evOpt, t.peakMatchTolerance);
+    if (ctx.transform !== 'none') notes.push(`Event, peak-timing and Series Distance metrics are computed on untransformed flows; the ${ctx.transform} transform applies to the other metrics.`);
     // DTW guard for very long series: decimate to keep the DP tractable
     let dtwRes; let dtwDecim = 1;
     if (o.length > 6000) {
@@ -231,6 +266,10 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
 
     if (peaks.unresolved > 0) {
       notes.push(`${peaks.unresolved} observed peak(s) had no resolvable simulated peak within ±${t.peakMatchTolerance} steps; those pairs are excluded from the peak-timing means. Widen the peak-match tolerance if lags may exceed it.`);
+    }
+    const flat = Math.max(peaks.flat ?? 0, events.flat ?? 0);
+    if (flat > 0) {
+      notes.push(`${flat} observed peak(s) faced a flat simulation inside the search window and were not matched; a flat line has no peak timing.`);
     }
     values.peak_lag_abs = peaks.meanAbsLag;
     values.peak_lag_signed = peaks.meanSignedLag;
@@ -254,7 +293,7 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
   }
 
   enforceFinite(values);
-  return { values, n: paired.n, notes, extras, pairedIndex: paired.index };
+  return { values, n: raw.n, notes, extras, pairedIndex: raw.index };
 }
 
 /** Bounded C2M display transform for unbounded-below efficiencies (§11.4). */
