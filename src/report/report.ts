@@ -11,6 +11,7 @@ import {
 import { REGISTRY, GROUPS, type ComputeOutput } from '../metrics/registry'
 import { rankRuns, DEFAULT_PRIORITIES, type RankRow } from '../metrics/rank'
 import { fmtNum, fmtStamp } from '../ui/format'
+import { decimateMinMax } from '../ui/decimate'
 import { UNITS } from '../units/registry'
 import { exportTemplate } from '../ui/PlotHost'
 import { APP_VERSION } from '../version'
@@ -45,12 +46,16 @@ export function isoDay(ms: number | undefined): string {
  *  indexed with undefined and Date.toISOString threw as soon as a single event
  *  existed. This helper reads the real shape (e.obs.start, e.obs.peakQ,
  *  peakMagErrPct, volumeErrPct) and is pinned by tests/report-events.test.ts. */
-export function eventTableRows(ev: EventReport, frame: Frame, ds: Dataset, limit = 12): string[][] {
+export function eventTableRows(ev: EventReport, frame: Frame, ds: Dataset, limit = 12, pairedIndex?: number[]): string[][] {
+  // Event indices are positions in the NaN-compacted paired arrays; the
+  // panel's pairedIndex maps them back to frame rows (without it, a gap
+  // ahead of an event shifted its date by the number of missing values).
+  const row = (i: number) => pairedIndex?.[i] ?? i;
   return ev.events.slice(0, limit).map((e: EventError, k: number) => {
     const simPeak = e.obs.peakQ * (1 + e.peakMagErrPct / 100);
     return [
       String(k + 1),
-      isoDay(frame.dates[e.obs.start] ?? ds.dates[e.obs.start]),
+      isoDay(frame.dates[row(e.obs.start)] ?? ds.dates[row(e.obs.start)]),
       fmtNum(e.obs.peakQ, 2),
       fmtNum(simPeak, 2),
       fmtNum(e.peakLag, 1),
@@ -93,10 +98,13 @@ export async function buildReportImages(ds: Dataset, frame: Frame, runs: Run[], 
     catch (e) { console.error(`Report figure skipped (${caption}):`, e); }
   };
 
+  // long records are drawn at display resolution (min and max per bucket)
+  const line = (y: (number | null)[]) => decimateMinMax(dates, y);
+  const dObs = line(clean(frame.obs));
   await tryFigure(`Fig. R1. Observed vs simulated hydrographs${frame.caption ? ` (${frame.caption})` : ''}.`, () => plotPng(
     [
-      { x: dates, y: clean(frame.obs), name: ds.observed.name || 'Observed', type: 'scatter', mode: 'lines', line: { color: '#1f77b4', width: 2.2 } },
-      ...runs.map(r => ({ x: dates, y: clean(frame.apply(r.values)), name: r.name, type: 'scatter', mode: 'lines', line: { color: r.color, width: 1.6 } })),
+      { x: dObs.x, y: dObs.y, name: ds.observed.name || 'Observed', type: 'scatter', mode: 'lines', line: { color: '#1f77b4', width: 2.2 } },
+      ...runs.map(r => { const d = line(clean(frame.apply(r.values))); return { x: d.x, y: d.y, name: r.name, type: 'scatter', mode: 'lines', line: { color: r.color, width: 1.6 } }; }),
     ],
     { yaxis: { title: `Q [${UNITS[ds.targetUnit].label}]` }, xaxis: { title: '' } },
   ));
@@ -252,7 +260,7 @@ export async function buildDocx(p: ReportPayload): Promise<Blob> {
       const w = Math.floor(CONTENT / 6);
       kids.push(tableOf(
         ['#', 'Start', 'Obs peak', 'Sim peak', 'Peak lag [steps]', 'Volume bias %'],
-        eventTableRows(ev, frame, ds).map(cells => ({ cells })),
+        eventTableRows(ev, frame, ds, 12, outputs[i].pairedIndex).map(cells => ({ cells })),
         [w, w, w, w, w, CONTENT - 5 * w],
       ));
       if (ev.events.length > 12) Ptext(`… ${ev.events.length - 12} more events omitted; export the full table from the Timing tab.`, { italic: true });
@@ -338,7 +346,7 @@ export function openPrintReport(p: ReportPayload): void {
       if (!ev || !ev.events.length) { body += '<p><em>n/a; no events at this threshold.</em></p>'; return; }
       body += `<p>Hits ${ev.hits} · misses ${ev.misses} · false alarms ${ev.falseAlarms} · threat ${fmtNum(ev.threat, 2)}.</p>`;
       body += `<table><thead>${rowsHtml(['#', 'Start', 'Obs peak', 'Sim peak', 'Peak lag', 'Vol bias %'], 'th')}</thead><tbody>` +
-        eventTableRows(ev, frame, ds).map(cells => rowsHtml(cells)).join('') + '</tbody></table>';
+        eventTableRows(ev, frame, ds, 12, outputs[i].pairedIndex).map(cells => rowsHtml(cells)).join('') + '</tbody></table>';
     });
   }
   if (sections.ranking && runs.length >= 2) {
@@ -355,7 +363,7 @@ export function openPrintReport(p: ReportPayload): void {
   body += `<p class="meta">${esc(REPORT_CREDIT)}<br/><a href="${REPO_URL}">${esc(REPORT_CREDIT_LINK_TEXT)}</a></p>`;
 
   const w = window.open('', '_blank');
-  if (!w) { alert('Pop-up blocked; allow pop-ups to print the PDF report.'); return; }
+  if (!w) throw new Error('the browser blocked the pop-up window; allow pop-ups for this site to print the PDF report.');
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${reportFilename(ds, 'pdf').replace(/\.pdf$/, '')}</title><style>
     body{font-family:"Times New Roman",Georgia,serif;color:#101113;margin:26mm 20mm;line-height:1.45;font-size:11pt}
     h1{font-size:17pt;margin:0 0 4pt} h2{font-size:13pt;margin:14pt 0 4pt} h3{font-size:11.5pt;margin:10pt 0 2pt}

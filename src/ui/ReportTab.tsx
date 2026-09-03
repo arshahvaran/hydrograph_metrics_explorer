@@ -10,12 +10,14 @@ export function ReportTab() {
   const [sections, setSections] = useState<ReportSections>({ summary: true, metrics: true, plots: true, events: true, ranking: true });
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   if (!ds) return null;
   const runs = ds.runs.filter(r => r.visible);
   const toggle = (k: keyof ReportSections) => setSections(s => ({ ...s, [k]: !s[k] }));
 
   async function generate(kind: 'docx' | 'pdf') {
     if (!ds || !runs.length) return;
+    setError(null);
     try {
       setBusy('computing metric panels…');
       const outputs = await Promise.all(runs.map(r => computeForRunAsync(ds, r)));
@@ -33,7 +35,7 @@ export function ReportTab() {
       }
     } catch (err) {
       console.error(err);
-      alert(`Report generation failed: ${(err as Error).message}`);
+      setError(`Report generation failed: ${(err as Error).message}`);
     } finally {
       setBusy(null);
     }
@@ -61,6 +63,7 @@ export function ReportTab() {
           <button disabled={!!busy || !runs.length} onClick={() => generate('pdf')}>Print / save PDF</button>
           {busy && <span className="muted" role="status">{busy}</span>}
         </div>
+        {error && <div className="error" role="alert">{error}</div>}
         <p className="muted">
           The report embeds the current analysis subset, all settings (a provenance appendix lets anyone regenerate it),
           the full metrics table with the timing-aware rows shaded, the hydrograph/scatter/lag-sweep figures, per-event
