@@ -7,10 +7,11 @@
  * projects saved by older versions).
  */
 import type { Project, Dataset, ViewState, UnitId, AreaUnitId } from '../types'
-import { defaultView, RUN_PALETTE } from '../types'
+import { defaultView, RUN_PALETTE, clampTimingConfig } from '../types'
 import { UNITS } from '../units/registry'
 import { alignByDate } from './store'
 import { detectStep } from '../units/stepDetect'
+import { LIMITS } from '../ingest/limits'
 
 const num = (v: unknown, d: number): number => (typeof v === 'number' && isFinite(v) ? v : d);
 const str = (v: unknown, d: string): string => (typeof v === 'string' ? v : d);
@@ -20,10 +21,16 @@ const arrNum = (v: unknown): number[] | null =>
 
 const unitId = (v: unknown): UnitId => (typeof v === 'string' && v in UNITS ? (v as UnitId) : 'm3s');
 
+/** Largest |ms| a JavaScript Date represents; beyond it every date formatter
+ *  throws "Invalid time value", which once took the Data, Plots and Timing
+ *  tabs to the render boundary on a hand-edited project file. */
+export const DATE_MS_MAX = 8.64e15;
+const validMs = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x) && Math.abs(x) <= DATE_MS_MAX;
+
 let seq = 0;
 const nid = (p: string) => `${p}_load_${Date.now().toString(36)}_${(seq++).toString(36)}`;
 
-function loadView(v: unknown, stepMs: number, n: number): ViewState {
+function loadView(v: unknown, stepMs: number, n: number, warn: (msg: string) => void): ViewState {
   const base = defaultView(stepMs, n);
   if (typeof v !== 'object' || v === null) return base;
   const o = v as Record<string, unknown>;
@@ -31,7 +38,11 @@ function loadView(v: unknown, stepMs: number, n: number): ViewState {
   // whitelist known keys only: anything else in the file is ignored
   if (o.transform === 'none' || o.transform === 'log' || o.transform === 'sqrt' || o.transform === 'inverse') out.transform = o.transform;
   if (o.nanPolicy === 'pairwise' || o.nanPolicy === 'zero' || o.nanPolicy === 'mean') out.nanPolicy = o.nanPolicy;
-  if (Array.isArray(o.window) && o.window.length === 2 && o.window.every(x => typeof x === 'number')) out.window = [o.window[0] as number, o.window[1] as number];
+  if (o.window != null) {
+    const w = o.window;
+    if (Array.isArray(w) && w.length === 2 && w.every(validMs)) out.window = [w[0] as number, w[1] as number];
+    else warn('the analysis window was invalid and has been cleared');
+  }
   if (typeof o.season === 'object' && o.season !== null) {
     const s = o.season as Record<string, unknown>;
     if (typeof s.startDoy === 'number' && typeof s.endDoy === 'number') out.season = { startDoy: s.startDoy, endDoy: s.endDoy };
@@ -49,7 +60,13 @@ function loadView(v: unknown, stepMs: number, n: number): ViewState {
   }
   if (typeof o.showBootstrapCIs === 'boolean') out.showBootstrapCIs = o.showBootstrapCIs;
   if (typeof o.activeTab === 'string') out.activeTab = o.activeTab as ViewState['activeTab'];
-  if (typeof o.timingConfig === 'object' && o.timingConfig !== null) out.timingConfig = { ...base.timingConfig, ...(o.timingConfig as object) } as ViewState['timingConfig'];
+  if (o.timingConfig !== undefined) {
+    // Every timing field is validated: a NaN band or a null threshold in a
+    // hand-edited file once hung the worker or blanked the Timing tab.
+    const { config, changed } = clampTimingConfig(o.timingConfig, base.timingConfig);
+    out.timingConfig = config;
+    if (changed || typeof o.timingConfig !== 'object' || o.timingConfig === null) warn('timing settings were invalid and have been reset to defaults');
+  }
   return out;
 }
 
@@ -64,6 +81,12 @@ function loadDataset(raw: unknown, errors: string[]): Dataset | null {
   if (!dates || !obsVals || !runsRaw) { errors.push(`dataset "${name}": missing or malformed dates/observed/runs`); return null; }
   if (obsVals.length !== dates.length) { errors.push(`dataset "${name}": observed length ${obsVals.length} ≠ dates length ${dates.length}`); return null; }
 
+  // A null or out-of-range date cannot be drawn or formatted: the row is
+  // dropped here (alignByDate skips NaN dates) and the file is told about it.
+  let badDates = 0;
+  for (let i = 0; i < dates.length; i++) if (!validMs(dates[i])) { dates[i] = NaN; badDates++; }
+  if (badDates) errors.push(`dataset "${name}": ${badDates} row${badDates === 1 ? '' : 's'} with a missing or out-of-range date ${badDates === 1 ? 'was' : 'were'} skipped.`);
+
   const runsIn: { name: string; values: number[]; unit: UnitId; visible: boolean; color?: string }[] = [];
   for (const rr of runsRaw) {
     if (typeof rr !== 'object' || rr === null) continue;
@@ -73,6 +96,16 @@ function loadDataset(raw: unknown, errors: string[]): Dataset | null {
     runsIn.push({ name: str(r.name, `simulation ${runsIn.length + 1}`), values: vals, unit: unitId(r.inputUnit), visible: r.visible !== false, color: typeof r.color === 'string' ? r.color : undefined });
   }
   if (!runsIn.length) { errors.push(`dataset "${name}": no valid simulations`); return null; }
+  if (runsIn.length > LIMITS.runs) {
+    errors.push(`dataset "${name}": ${runsIn.length} simulations found; only the first ${LIMITS.runs} were loaded.`);
+    runsIn.length = LIMITS.runs;
+  }
+  if (runsIn.every(r => !r.visible)) {
+    // Every tab indexes the visible simulations; an all-hidden dataset has
+    // nothing to draw, so the first one is shown and the file is told about it.
+    runsIn[0].visible = true;
+    errors.push(`dataset "${name}": every simulation was hidden; the first one was made visible.`);
+  }
 
   // Reuse the exact commit-path invariants: joint sort, dedup-first, finite dates.
   const aligned = alignByDate({
@@ -103,7 +136,7 @@ function loadDataset(raw: unknown, errors: string[]): Dataset | null {
       typeof (d.area as any).value === 'number' && isFinite((d.area as any).value) && (d.area as any).value > 0 &&
       ['km2', 'mi2', 'ha', 'acre'].includes((d.area as any).unit))
       ? { value: (d.area as any).value, unit: (d.area as any).unit as AreaUnitId } : null,
-    view: loadView(d.view, step.ms, aligned.dates.length),
+    view: loadView(d.view, step.ms, aligned.dates.length, msg => errors.push(`dataset "${name}": ${msg}`)),
     createdAt: num(d.createdAt, Date.now()),
   };
 }

@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { useApp, serialiseProject } from './store/store'
 import { parseProjectFile } from './store/projectLoad'
 import { DataTab } from './ui/DataTab'
@@ -9,7 +9,10 @@ import { SandboxTab } from './ui/SandboxTab'
 import { MapTab } from './ui/MapTab'
 import { CompareTab } from './ui/CompareTab'
 import { ReportTab } from './ui/ReportTab'
+import { ConfirmDialog } from './ui/Dialog'
+import { ErrorBoundary } from './ui/ErrorBoundary'
 import { download } from './ui/format'
+import { fileSizeMessage, fmtMB, largeProjectNotice, LIMITS } from './ingest/limits'
 import { APP_VERSION_SHORT } from './version'
 import type { Project } from './types'
 
@@ -32,6 +35,8 @@ const TABS = [
   ['map', 'Map'], ['report', 'Report'],
 ] as const;
 
+type Notice = { title: string; body: string };
+
 export default function App() {
   const project = useApp(s => s.project);
   const setActiveTab = useApp(s => s.setActiveTab);
@@ -41,20 +46,35 @@ export default function App() {
   const theme = useApp(s => s.theme);
   const toggleTheme = useApp(s => s.toggleTheme);
   const loadRef = useRef<HTMLInputElement>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [confirmNew, setConfirmNew] = useState(false);
+  const [pendingProject, setPendingProject] = useState<{ file: File; body: string } | null>(null);
 
   const ds = project.datasets.find(d => d.id === project.activeDatasetId) ?? null;
   const tab = ds?.view.activeTab ?? 'data';
 
-  async function onLoadProject(f: File) {
+  const resetLoadInput = () => { if (loadRef.current) loadRef.current.value = ''; };
+
+  async function readProject(f: File) {
     try {
       const { project, warnings } = parseProjectFile(await f.text());
       loadProject(project);
-      if (warnings.length) alert(`Project loaded with ${warnings.length} skipped item(s):\n- ${warnings.join('\n- ')}`);
+      if (warnings.length) setNotice({ title: 'Project loaded', body: `Project loaded with ${warnings.length} skipped or corrected item(s):\n- ${warnings.join('\n- ')}` });
     } catch (e) {
-      alert(`Could not load project: ${e instanceof Error ? e.message : e}`);
+      setNotice({ title: 'Could not load project', body: e instanceof Error ? e.message : String(e) });
     } finally {
-      if (loadRef.current) loadRef.current.value = '';
+      resetLoadInput();
     }
+  }
+
+  /** Size is checked before the file is read: JSON.parse of a 200 MB project
+   *  needs about a gigabyte and freezes the tab for tens of seconds. */
+  function onLoadProject(f: File) {
+    const tooBig = fileSizeMessage(f.size, 'project');
+    if (tooBig) { setNotice({ title: 'Could not load project', body: tooBig }); resetLoadInput(); return; }
+    const large = largeProjectNotice(f.size);
+    if (large) { setPendingProject({ file: f, body: large }); return; }
+    void readProject(f);
   }
 
   return (
@@ -82,16 +102,18 @@ export default function App() {
           <button title="Save project (.hme.json)" disabled={!project.datasets.length}
             onClick={() => {
               const json = serialiseProject(project);
-              if (json.length > 25_000_000) alert(`Heads-up: this project serialises to ${(json.length / 1e6).toFixed(0)} MB (spec suggests staying under 25 MB). It will still save, but loading may be slow.`);
               download(`hme_project_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.hme.json`, json, 'application/json');
+              if (json.length > LIMITS.warnProjectBytes) {
+                setNotice({ title: 'Large project file', body: `This project serialises to ${fmtMB(json.length)}. It was saved, but loading it again will take a while, and project files above ${fmtMB(LIMITS.projectBytes)} cannot be loaded. Consider saving fewer datasets per file.` });
+              }
             }}>Save</button>
           <label className="filebtn" title="Load a saved project">Load
             <input ref={loadRef} type="file" accept=".json" className="vh" aria-label="Load a saved .hme.json project" onChange={e => e.target.files?.[0] && onLoadProject(e.target.files[0])} />
           </label>
           <button title="Start a new empty project" disabled={!project.datasets.length}
-            onClick={() => { if (confirm('Clear all datasets and start a new project? Unsaved work is lost.')) useApp.getState().loadProject({ schemaVersion: 1, datasets: [], activeDatasetId: null }); }}>New</button>
+            onClick={() => setConfirmNew(true)}>New</button>
           <button className="theme-toggle" onClick={toggleTheme} title="Toggle light or dark interface" aria-label="Toggle colour theme">
-            {theme === 'dark' ? '\u2600\uFE0E' : '\u263D'}
+            {theme === 'dark' ? '☀︎' : '☽'}
           </button>
         </div>
       </header>
@@ -124,14 +146,16 @@ export default function App() {
       </div></nav>
 
       <main className="main" id="main">
-        {tab === 'data' && <DataTab />}
-        {tab === 'metrics' && ds && <MetricsTab />}
-        {tab === 'plots' && ds && <PlotsTab />}
-        {tab === 'timing' && ds && <TimingTab />}
-        {tab === 'sandbox' && ds && <SandboxTab />}
-        {tab === 'compare' && ds && <CompareTab />}
-        {tab === 'map' && ds && <MapTab />}
-        {tab === 'report' && ds && <ReportTab />}
+        <ErrorBoundary key={`${tab}|${ds?.id ?? ''}`}>
+          {tab === 'data' && <DataTab />}
+          {tab === 'metrics' && ds && <MetricsTab />}
+          {tab === 'plots' && ds && <PlotsTab />}
+          {tab === 'timing' && ds && <TimingTab />}
+          {tab === 'sandbox' && ds && <SandboxTab />}
+          {tab === 'compare' && ds && <CompareTab />}
+          {tab === 'map' && ds && <MapTab />}
+          {tab === 'report' && ds && <ReportTab />}
+        </ErrorBoundary>
       </main>
 
       <footer className="footer">
@@ -142,6 +166,21 @@ export default function App() {
         </span>
         <span className="credit">Developed by Shahvaran et al., 2026</span>
       </footer>
+
+      <ConfirmDialog open={confirmNew} title="Start a new project?" confirmLabel="Start new project"
+        onConfirm={() => { setConfirmNew(false); useApp.getState().loadProject({ schemaVersion: 1, datasets: [], activeDatasetId: null } as Project); }}
+        onCancel={() => setConfirmNew(false)}>
+        Clear all datasets and start a new project? Unsaved work is lost.
+      </ConfirmDialog>
+      <ConfirmDialog open={!!pendingProject} title="Large project file" confirmLabel="Load anyway"
+        onConfirm={() => { const p = pendingProject; setPendingProject(null); if (p) void readProject(p.file); }}
+        onCancel={() => { setPendingProject(null); resetLoadInput(); }}>
+        {pendingProject?.body}
+      </ConfirmDialog>
+      <ConfirmDialog open={!!notice} title={notice?.title ?? ''} confirmLabel="OK" cancelLabel={null}
+        onConfirm={() => setNotice(null)}>
+        {notice?.body}
+      </ConfirmDialog>
     </div>
   );
 }

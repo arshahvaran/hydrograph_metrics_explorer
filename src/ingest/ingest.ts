@@ -1,7 +1,8 @@
 import Papa from 'papaparse'
-import { parseDates, type DateFormat } from './dateParse'
-import { parseValue } from './missing'
+import { parseDates, type DateFormat, type ParsedDates } from './dateParse'
+import { parseValue, detectCommaDecimal } from './missing'
 import { validateDataset, type ValidationResult } from './validate'
+import { runsMessage, tableShapeMessage, usedRange } from './limits'
 import type { UnitId } from '../types'
 import type { CommitInput } from '../store/store'
 
@@ -33,7 +34,26 @@ export async function parseWorkbook(buf: ArrayBuffer): Promise<RawTable> {
   // QA-009: the data is not always on the first sheet: take the first sheet
   // with at least a header and one data row, and say which one was used.
   for (const name of wb.SheetNames) {
-    const aoa = XLSX.utils.sheet_to_json<any[]>(wb.Sheets[name], { header: 1, defval: '' });
+    const ws = wb.Sheets[name];
+    // The sheet's declared range is a free check on its size before the
+    // row arrays are materialised (which costs about 300 bytes per cell).
+    // Excel inflates that range with formatted-but-empty rows and columns,
+    // so above a cap the populated cells decide, and the reader is then
+    // confined to them so the empty rows are never materialised.
+    let range: string | undefined;
+    if (ws['!ref']) {
+      const r = XLSX.utils.decode_range(ws['!ref']);
+      const what = `Sheet “${name}”`;
+      let bad = tableShapeMessage({ rows: r.e.r - r.s.r, columns: r.e.c - r.s.c + 1 }, what);
+      if (bad) {
+        const used = usedRange(ws);
+        if (!used) continue;
+        bad = tableShapeMessage(used, what);
+        range = XLSX.utils.encode_range(used);
+      }
+      if (bad) throw new Error(bad);
+    }
+    const aoa = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: '', range });
     const rows = aoa.filter(r => r.some((c: any) => String(c ?? '').trim() !== ''));
     if (rows.length >= 2) {
       const note = wb.SheetNames.length > 1
@@ -64,6 +84,26 @@ export interface Staged {
   guidance: string | null;
 }
 
+/** Parsed columns memoised across successive stage() calls on the same table,
+ *  so that a role change or a keystroke in the Data tab re-parses nothing.
+ *  Create one per table with newStageCache(); the keys carry every option a
+ *  parse depends on. */
+export interface StageCache {
+  dates: Map<string, ParsedDates>;
+  cols: Map<string, number[]>;
+  comma: Map<number, boolean>;
+}
+export const newStageCache = (): StageCache => ({ dates: new Map(), cols: new Map(), comma: new Map() });
+
+function cached<K, V>(map: Map<K, V> | undefined, key: K, make: () => V): V {
+  if (!map) return make();
+  const hit = map.get(key);
+  if (hit !== undefined) return hit;
+  const v = make();
+  map.set(key, v);
+  return v;
+}
+
 /** Guess sensible default roles: first column date, second observed, rest runs. */
 export function guessRoles(header: string[]): ColumnRole[] {
   return header.map((h, i) => {
@@ -79,16 +119,22 @@ export function guessRoles(header: string[]): ColumnRole[] {
 }
 
 /** Apply the mapping and produce a validated, committable dataset. */
-export function stage(table: RawTable, opt: StageOptions): Staged {
+export function stage(table: RawTable, opt: StageOptions, cache?: StageCache): Staged {
   const dateCol = opt.roles.indexOf('date');
   const obsCol = opt.roles.indexOf('observed');
   const runCols = opt.roles.map((r, i) => (r === 'run' ? i : -1)).filter(i => i >= 0);
 
   const dates = dateCol >= 0
-    ? parseDates(table.rows.map(r => r[dateCol] ?? ''), opt.dateFormat)
+    ? cached(cache?.dates, `${dateCol}|${opt.dateFormat}`, () => parseDates(table.rows.map(r => r[dateCol] ?? ''), opt.dateFormat))
     : { ms: table.rows.map(() => NaN), used: 'none', ambiguous: false, failures: table.rows.length };
 
-  const col = (j: number) => table.rows.map(r => parseValue(r[j], { missingValue: opt.missingValue }));
+  // The comma's role (decimal mark or thousands group) is decided per column
+  // from the cells themselves, so "1,234" and "1,23" in one column agree.
+  const commaDecimal = (j: number) => cached(cache?.comma, j, () => detectCommaDecimal(table.rows, j));
+  const col = (j: number) => cached(cache?.cols, `${j}|${opt.missingValue}`, () => {
+    const cd = commaDecimal(j);
+    return table.rows.map(r => parseValue(r[j], { missingValue: opt.missingValue, commaDecimal: cd }));
+  });
   const label = (j: number) => (table.header[j] || `col ${j + 1}`).replace(/\s*\[.+?\]\s*/, '').trim();
 
   const observed = obsCol >= 0 ? { name: label(obsCol), values: col(obsCol) } : null;
@@ -98,6 +144,8 @@ export function stage(table: RawTable, opt: StageOptions): Staged {
   if (dates.ambiguous && opt.dateFormat === 'auto') {
     validation.errors.push('Day/month order is ambiguous in this file; pick MDY or DMY explicitly in the date-format selector.');
   }
+  const tooMany = runsMessage(runCols.length);
+  if (tooMany) validation.errors.push(tooMany);
 
   // Unassigned roles are a to-do, not a failure: one guidance message instead
   // of a wall of blocking errors right after an upload (roles start all-Ignore

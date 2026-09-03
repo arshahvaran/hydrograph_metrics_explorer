@@ -22,8 +22,8 @@ describe('privacy manifest', () => {
       }
     }
     expect(hits.sort()).toEqual([
-      'src/ingest/ingest.ts:130',   // same-origin sample loader (BASE_URL/samples/…)
-      'src/report/report.ts:177',   // data: URLs only (plot images into the DOCX)
+      'src/ingest/ingest.ts:178',   // same-origin sample loader (BASE_URL/samples/…)
+      'src/report/report.ts:185',   // data: URLs only (plot images into the DOCX)
     ]);
   });
   it('src has no beacons, sockets, or geolocation', () => {

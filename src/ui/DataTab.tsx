@@ -1,7 +1,9 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useApp } from '../store/store'
-import { parseDelimited, parseWorkbook, guessRoles, stage, fetchSample, type RawTable, type ColumnRole } from '../ingest/ingest'
+import { parseDelimited, parseWorkbook, guessRoles, stage, fetchSample, newStageCache, type RawTable, type ColumnRole, type StageCache } from '../ingest/ingest'
+import { fileSizeMessage, inspectDelimited, largeTableNotice, largeWorkbookNotice, pasteMessage, tableShapeMessage } from '../ingest/limits'
 import { EditableGrid } from './EditableGrid'
+import { ConfirmDialog } from './Dialog'
 import { UNITS } from '../units/registry'
 import { fmtDate, fmtNum } from './format'
 import type { DateFormat } from '../ingest/dateParse'
@@ -16,6 +18,11 @@ const ROLE_LABELS: Record<ColumnRole, string> = { date: 'Date', observed: 'Obser
 const UNIT_CHOICES: UnitId[] = ['m3s', 'cfs', 'ls', 'mm_step', 'in_day'];
 
 const ROLE_OPTIONS: ColumnRole[] = ['date', 'observed', 'run', 'ignore'];
+
+/** Above this many rows the busy state is painted before the parser runs. */
+const PAINT_BUSY_ROWS = 50_000;
+
+type PendingLoad = { title: string; body: string; run: () => void };
 
 export function DataTab() {
   const commitDataset = useApp(s => s.commitDataset);
@@ -34,14 +41,22 @@ export function DataTab() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [convertMsg, setConvertMsg] = useState<string | null>(null);
+  const [pendingLoad, setPendingLoad] = useState<PendingLoad | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const cacheRef = useRef<StageCache>(newStageCache());
 
   const mv = missingValue.trim() === '' ? null : Number(missingValue.trim().replace(',', '.'));
-  const staged = table && roles.length
-    ? stage({ ...table, header: colNames }, { name, roles, dateFormat, unit, missingValue: mv !== null && isFinite(mv) ? mv : null })
-    : null;
+  const mvNum = mv !== null && isFinite(mv) ? mv : null;
+  // Staged once per input that matters, never once per render: a keystroke in
+  // the Name box used to re-parse every column (seconds on a large table), and
+  // the column cache makes a role change cost only the validation pass.
+  const staged = useMemo(() => (table && roles.length
+    ? stage({ ...table, header: colNames }, { name: '', roles, dateFormat, unit, missingValue: mvNum }, cacheRef.current)
+    : null), [table, colNames, roles, dateFormat, unit, mvNum]);
+  const commitInput = staged?.commit ? { ...staged.commit, name } : null;
 
   function loadTable(t: RawTable, suggestedName: string, rolesOverride?: ColumnRole[]) {
+    cacheRef.current = newStageCache();
     setTable(t);
     setColNames(t.header.slice());
     // Uploaded / pasted data starts unmapped: the user assigns every column
@@ -62,18 +77,57 @@ export function DataTab() {
     finally { setBusy(false); }
   }
 
-  async function onFile(f: File) {
+  /** Run a parser with the busy state painted first when it will take a while. */
+  async function runParse(work: () => RawTable | Promise<RawTable>, suggestedName: string, paintFirst: boolean) {
     setBusy(true); setError(null);
     try {
-      if (/\.xlsx?$/i.test(f.name)) loadTable(await parseWorkbook(await f.arrayBuffer()), f.name.replace(/\.\w+$/, ''));
-      else loadTable(parseDelimited(await f.text()), f.name.replace(/\.\w+$/, ''));
+      if (paintFirst) await new Promise<void>(r => setTimeout(r, 16));
+      loadTable(await work(), suggestedName);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); if (fileRef.current) fileRef.current.value = ''; }
+    finally { setBusy(false); }
+  }
+
+  /** Delimited text from a file or the paste box: a cheap line count and
+   *  header scan first, then the hard caps, then a confirmation for large
+   *  tables, and only then the real parser. */
+  function loadDelimited(text: string, suggestedName: string, bytes: number) {
+    const shape = inspectDelimited(text);
+    const hard = tableShapeMessage(shape);
+    if (hard) { setError(hard); return; }
+    const go = () => {
+      if (shape.rows > PAINT_BUSY_ROWS) { void runParse(() => parseDelimited(text), suggestedName, true); return; }
+      try { loadTable(parseDelimited(text), suggestedName); }
+      catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    };
+    const soft = largeTableNotice(shape, bytes);
+    if (soft) setPendingLoad({ title: 'Large dataset', body: soft, run: go });
+    else go();
+  }
+
+  async function onFile(f: File) {
+    setError(null);
+    if (fileRef.current) fileRef.current.value = '';
+    const isWorkbook = /\.xlsx?$/i.test(f.name);
+    const suggested = f.name.replace(/\.\w+$/, '');
+    // The size check happens before a single byte is read.
+    const tooBig = fileSizeMessage(f.size, isWorkbook ? 'workbook' : 'delimited');
+    if (tooBig) { setError(tooBig); return; }
+    if (isWorkbook) {
+      const go = () => { void runParse(async () => parseWorkbook(await f.arrayBuffer()), suggested, true); };
+      const soft = largeWorkbookNotice(f.size);
+      if (soft) setPendingLoad({ title: 'Large workbook', body: soft, run: go });
+      else go();
+      return;
+    }
+    let text: string;
+    try { text = await f.text(); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); return; }
+    loadDelimited(text, suggested, f.size);
   }
 
   function commit() {
-    if (!staged?.commit) return;
-    commitDataset(staged.commit);
+    if (!commitInput) return;
+    commitDataset(commitInput);
     setActiveTab('plots');
   }
 
@@ -90,17 +144,23 @@ export function DataTab() {
             <input ref={fileRef} type="file" accept=".csv,.txt,.tsv,.xlsx,.xls" className="vh" aria-label="Upload CSV, TXT, TSV or XLSX data files"
               onChange={e => e.target.files?.[0] && onFile(e.target.files[0])} />
           </label>
+          {busy && <span className="muted" aria-live="polite">Reading the file…</span>}
         </div>
         <details>
           <summary>…or paste / type into an editable sheet</summary>
-          <EditableGrid onUse={(t2, name, r) => loadTable(t2, name, r)} seedText={pasteText} />
+          <EditableGrid onUse={(t2, name, r) => loadTable(t2, name, r)} />
           <p className="muted">Or paste raw delimited text below (tab, comma, semicolon or pipe; first row = headers). <a href="samples/hme_template.csv" download>download the CSV template</a>.</p>
           <textarea rows={6} value={pasteText} placeholder={'date,observed,simulated_1\n2011-01-01,12.4,10.8\n2011-01-02,11.9,10.2'}
-            onChange={e => setPasteText(e.target.value)} />
-          <button className="primary" disabled={!pasteText.trim()}
-            onClick={() => loadTable(parseDelimited(pasteText), 'Pasted data')}>Parse pasted data</button>
+            onChange={e => {
+              const v = e.target.value;
+              const tooBig = pasteMessage(v.length);
+              if (tooBig) { setError(tooBig); return; }
+              setPasteText(v);
+            }} />
+          <button className="primary" disabled={!/\S/.test(pasteText) || busy}
+            onClick={() => loadDelimited(pasteText, 'Pasted data', pasteText.length)}>Parse pasted data</button>
         </details>
-        {error && <div className="error">{error}</div>}
+        {error && <div className="error" role="alert">{error}</div>}
       </section>
 
       {table && (
@@ -172,7 +232,7 @@ export function DataTab() {
                   </tbody>
                 </table>
               </div>
-              <button className="primary" disabled={!staged.commit} onClick={commit}>Use this data →</button>
+              <button className="primary" disabled={!commitInput} onClick={commit}>Use this data →</button>
             </>
           )}
         </section>
@@ -196,6 +256,12 @@ export function DataTab() {
           <p className="muted">Head to <strong>Metrics</strong> for the full catalogue, <strong>Timing</strong> for the shape-aware panel, or <strong>Sandbox</strong> to stress-test the metrics.</p>
         </section>
       )}
+
+      <ConfirmDialog open={!!pendingLoad} title={pendingLoad?.title ?? ''} confirmLabel="Continue"
+        onConfirm={() => { const p = pendingLoad; setPendingLoad(null); p?.run(); }}
+        onCancel={() => setPendingLoad(null)}>
+        {pendingLoad?.body}
+      </ConfirmDialog>
     </div>
   );
 }
