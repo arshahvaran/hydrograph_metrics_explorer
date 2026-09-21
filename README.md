@@ -1,10 +1,16 @@
-# Hydrograph Metrics Explorer (HME)
+<p align="center">
+  <img src="public/icon.svg" alt="Hydrograph Metrics Explorer" width="150">
+</p>
 
-[![Live app](https://img.shields.io/badge/Live%20app-arshahvaran.github.io-0b6e99)](https://arshahvaran.github.io/hydrograph_metrics_explorer/)
-[![Version](https://img.shields.io/badge/version-1.13-informational)](https://github.com/arshahvaran/hydrograph_metrics_explorer/tags)
-[![CC BY-NC 4.0][cc-by-nc-shield]][cc-by-nc]
+<h1 align="center">Hydrograph Metrics Explorer (HME)</h1>
 
-**A client-side web tool for timing- and shape-aware evaluation of hydrologic model simulations.**
+<p align="center">
+  <a href="https://arshahvaran.github.io/hydrograph_metrics_explorer/"><img src="https://img.shields.io/badge/Live%20app-arshahvaran.github.io-0b6e99" alt="Live app"></a>
+  <a href="https://github.com/arshahvaran/hydrograph_metrics_explorer/tags"><img src="https://img.shields.io/badge/version-1.13-informational" alt="Version"></a>
+  <a href="https://creativecommons.org/licenses/by-nc/4.0/"><img src="https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg" alt="CC BY-NC 4.0"></a>
+</p>
+
+**A browser-based tool for timing- and shape-aware evaluation of hydrologic model simulations.**
 
 **Live app:** https://arshahvaran.github.io/hydrograph_metrics_explorer/
 
@@ -52,7 +58,8 @@ live metric readouts and presets, including a double-penalty demonstration.
 
 **Comparison and reporting.** C2M-normalised multi-simulation ranking with user-weighted
 priority metrics and a recommended simulation; a station map with catchment area; DOCX and
-PDF evaluation reports generated fully client-side; portable `.hme.json` project files.
+PDF evaluation reports generated entirely in the browser; portable `.hme.json` project
+files.
 
 ## Getting started
 
@@ -109,4 +116,3 @@ This work is licensed under a
 
 [cc-by-nc]: https://creativecommons.org/licenses/by-nc/4.0/
 [cc-by-nc-image]: https://licensebuttons.net/l/by-nc/4.0/88x31.png
-[cc-by-nc-shield]: https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg

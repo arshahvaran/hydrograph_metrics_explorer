@@ -1,4 +1,4 @@
-// Report generation (spec §16): Word (.docx) and PDF, entirely client-side.
+// Report generation (spec §16): Word (.docx) and PDF, entirely in the browser.
 // DOCX via docx-js (dual DXA widths on tables, ShadingType.CLEAR, typed
 // ImageRun, one Paragraph per line; per the documented gotchas). PDF via a
 // print-styled window that mirrors the same content, so the two match.
