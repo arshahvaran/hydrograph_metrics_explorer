@@ -10,7 +10,9 @@
   <a href="https://creativecommons.org/licenses/by-nc/4.0/"><img src="https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg" alt="CC BY-NC 4.0"></a>
 </p>
 
-**A browser-based tool for timing- and shape-aware evaluation of hydrologic model simulations.**
+**A browser-based evaluation tool that computes timing- and shape-aware hydrograph metrics
+alongside conventional ones such as NSE and KGE, updating every metric live as users shift,
+scale, or offset their flow series.**
 
 **Live app:** https://arshahvaran.github.io/hydrograph_metrics_explorer/
 
