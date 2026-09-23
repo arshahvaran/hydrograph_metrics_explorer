@@ -139,7 +139,7 @@ function SandboxTabInner({ ds }: { ds: Dataset }) {
         <div className="twocol">
           <div className="tblscroll">
             <table className="grid">
-              <thead><tr><th>Classical</th><th>Perturbed series</th><th>Original series</th></tr></thead>
+              <thead><tr><th>Conventional</th><th>Perturbed series</th><th>Original series</th></tr></thead>
               <tbody>
                 {CLASSICAL.map(([id, label, dg]) => (
                   <tr key={id}><td>{label}</td><td>{fmtNum(out.values[id], dg)}</td><td className="muted">{fmtNum(baseline.values[id], dg)}</td></tr>

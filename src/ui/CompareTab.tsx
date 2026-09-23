@@ -139,8 +139,8 @@ function CompareTabInner({ ds }: { ds: Dataset }) {
           {' '}· composite {winner.composite.toFixed(3)} across {activePriorities.length} priority metrics
           {contributors.length ? <>; strongest on {contributors.join(' and ')}</> : null}.
           {activePriorities.some(p => byId.get(p.id)?.timing)
-            ? ' Timing-aware metrics are included, so this ranking rewards getting events at a more proper time, not just a more proper average.'
-            : ' Tip: add a timing-aware metric (⏱) so the ranking cannot be won by a magnitude-only fit.'}
+            ? ' Timing and shape metrics are included, so this ranking rewards getting events at a more proper time, not just a more proper average.'
+            : ' Tip: add a timing or shape metric (⏱) so the ranking cannot be won by a magnitude-only fit.'}
         </div>
         ) : (
           <p className="muted">No composite could be computed: the selected priority metrics are unavailable for these simulations.</p>

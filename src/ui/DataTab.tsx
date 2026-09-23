@@ -253,7 +253,7 @@ export function DataTab() {
             </td></tr>
           </tbody></table>
           {convertMsg && <div className="error">{convertMsg}</div>}
-          <p className="muted">Head to <strong>Metrics</strong> for the full catalogue, <strong>Timing</strong> for the shape-aware panel, or <strong>Sandbox</strong> to stress-test the metrics.</p>
+          <p className="muted">Head to <strong>Metrics</strong> for the full catalogue, <strong>Timing</strong> for the timing and shape diagnostics, or <strong>Sandbox</strong> to stress-test the metrics.</p>
         </section>
       )}
 

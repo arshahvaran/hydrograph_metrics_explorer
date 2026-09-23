@@ -118,7 +118,7 @@ describe('Sandbox tab, round 6', () => {
     const section = (await screen.findByText(/Metrics comparison/)).closest('section')!;
     const headers = within(section as HTMLElement).getAllByRole('columnheader');
     expect(headers.map(h => h.textContent)).toEqual([
-      'Classical', 'Perturbed series', 'Original series',
+      'Conventional', 'Perturbed series', 'Original series',
       '⏱ Timing & shape', 'Perturbed series', 'Original series',
     ]);
     for (const h of headers) expect(h.className).not.toMatch(/\bmuted\b/);

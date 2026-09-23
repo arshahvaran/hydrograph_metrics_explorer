@@ -10,17 +10,19 @@
   <a href="https://creativecommons.org/licenses/by-nc/4.0/"><img src="https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg" alt="CC BY-NC 4.0"></a>
 </p>
 
-**A browser-based evaluation tool that computes timing- and shape-aware hydrograph metrics
+**A browser-based evaluation tool that computes shift-tolerant hydrograph metrics
 alongside conventional ones such as NSE and KGE, updating every metric live as users shift,
 scale, or offset their flow series.**
 
 **Live app:** https://arshahvaran.github.io/hydrograph_metrics_explorer/
 
-HME accompanies a review of performance-assessment frameworks that look beyond conventional
+HME accompanies a review of shift-tolerant metrics, which look beyond conventional
 efficiency scores (NSE, KGE and relatives) to the *temporal structure* of model error:
 peak-timing offsets, event-scale volume and lag errors, Series Distance, band-constrained
-Dynamic Time Warping, cross-wavelet phase lag, Diagnostic Efficiency, and the Wasserstein
-distance between hydrographs treated as distributions of flow mass over time.
+Dynamic Time Warping, cross-wavelet phase lag, and the Wasserstein distance between
+hydrographs treated as distributions of flow mass over time. Diagnostic Efficiency is
+computed too, although the review places it with the conventional metrics: its timing
+term is a linear correlation, which responds to a lag without quantifying it.
 
 Everything (parsing, unit conversion, every metric, every plot, report generation) runs in
 your browser. **No data ever leaves the page**; there is no server, no database, no account.
@@ -42,11 +44,11 @@ detection, user-declared missing values, and a unit engine covering volumetric f
 area/step-aware depth-to-volume conversion (with automatic rescaling of absolute event
 thresholds).
 
-**Metrics.** A 63-metric panel: the classical families (error norms, correlation and
+**Metrics.** A 63-metric panel: the conventional families (error norms, correlation and
 agreement, efficiencies including KGE variants and bounded C2M forms, flow-duration-curve
-signatures, transforms, benchmark skill scores) plus the timing- and shape-aware core (peak
+signatures, transforms, benchmark skill scores), the shift-tolerant core (peak
 timing after Gauch et al., 2021; event peak, volume, and lag errors; Series Distance;
-banded DTW; Wasserstein W1/W2; cross-wavelet phase lag; Diagnostic Efficiency). Optional
+banded DTW; Wasserstein W1/W2; cross-wavelet phase lag), and Diagnostic Efficiency. Optional
 95% block-bootstrap confidence intervals. An "essentials" preset mirrors Table 2 of the
 companion paper.
 

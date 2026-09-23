@@ -212,7 +212,7 @@ export async function buildDocx(p: ReportPayload): Promise<Blob> {
 
   if (sections.metrics) {
     H('2. Metrics');
-    Ptext('Rows shaded green and marked ⏱ are the timing- and shape-aware measures this tool adds over conventional suites.', { italic: true });
+    Ptext('Rows shaded green and marked ⏱ are the timing and shape metrics: the shift-tolerant metrics, which are recommended as complements to the conventional ones, plus the lag at best fit and Diagnostic Efficiency.', { italic: true });
     const nameW = 2900, optW = 1100;
     // QA: with many runs a single table overflows US-Letter. Chunk the run
     // columns so each table fits; chunk size derives from the minimum legible

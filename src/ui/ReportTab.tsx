@@ -48,7 +48,7 @@ export function ReportTab() {
         {!runs.length && <p className="warning">Add at least one visible model simulation first.</p>}
         <div className="controls">
           {(
-            [['summary', 'Data & settings'], ['metrics', 'Metrics table (timing rows flagged)'],
+            [['summary', 'Data & settings'], ['metrics', 'Metrics table (timing and shape rows shaded)'],
              ['plots', 'Figures'], ['events', 'Event summary'], ['ranking', 'Ranking & recommendation']] as const
           ).map(([k, label]) => (
             <label key={k}><input type="checkbox" checked={sections[k]} onChange={() => toggle(k)} /> {label}</label>
@@ -66,7 +66,7 @@ export function ReportTab() {
         {error && <div className="error" role="alert">{error}</div>}
         <p className="muted">
           The report embeds the current analysis subset, all settings (a provenance appendix lets anyone regenerate it),
-          the full metrics table with the timing-aware rows shaded, the hydrograph/scatter/lag-sweep figures, per-event
+          the full metrics table with the timing and shape rows shaded, the hydrograph/scatter/lag-sweep figures, per-event
           errors, and, with two or more runs, the composite ranking with a recommended run. Filename:
           {' '}<code>{reportFilename(ds, 'docx')}</code>. The PDF route opens your browser's print dialog; choose “Save as PDF”.
         </p>

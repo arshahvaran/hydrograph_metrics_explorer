@@ -109,7 +109,7 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
         <p className="muted" aria-live="polite">
           Valid pairs per simulation (n): {runs.map((r, i) => `${r.name}: ${outputs[i]?.n ?? '…'}`).join(' · ')}.{busy && !computeError ? ' Computing in a background worker…' : ''}{frame.caption ? ` Subset: ${frame.caption}.` : ''}
           {ds.view.transform !== 'none' && ' Metrics are computed on the transformed series.'}
-          {' '}Rows tinted <span className="timingchip">⏱</span> are the timing- &amp; shape-aware measures, recommended as complements to conventional metrics. For datasets with multiple simulations, the better value in each row is underlined.
+          {' '}Rows tinted <span className="timingchip">⏱</span> are the timing and shape metrics: the shift-tolerant metrics, which are recommended as complements to the conventional ones, plus the lag at best fit and Diagnostic Efficiency. For datasets with multiple simulations, the better value in each row is underlined.
         </p>
         {computeError && <div className="error" role="alert">{computeError}</div>}
         {outputs.flatMap(o => o?.notes ?? []).filter((v, i, a) => a.indexOf(v) === i).map(nn => <div key={nn} className="warning">{nn}</div>)}
@@ -185,7 +185,7 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
           <div className="mapscroll">
             <table className="grid reftable" aria-label="Metric reference: equations, ranges and blind spots">
               <thead>
-                <tr><th>Metric</th><th>Equation</th><th>Range</th><th>Optimum</th><th>Better</th><th>Measures / blind spot</th></tr>
+                <tr><th>Metric</th><th>Equation</th><th>Range</th><th>Optimum</th><th>Better</th><th>What it measures / blind spot</th></tr>
               </thead>
               <tbody>
                 {GROUPS.map(g => (

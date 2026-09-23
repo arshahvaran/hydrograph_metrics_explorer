@@ -85,7 +85,7 @@ export default function App() {
           <img className="logo" src={`${import.meta.env.BASE_URL}logo.svg`} alt="" aria-hidden="true" />
           <div>
             <h1>Hydrograph Metrics Explorer (HME)</h1>
-            <p className="tagline">Evaluate hydrological model performance beyond conventional NSE or KGE with timing- and shape-aware measures.</p>
+            <p className="tagline">Evaluate hydrological model performance beyond conventional NSE or KGE with shift-tolerant metrics.</p>
           </div>
         </div>
         <div className="headerright">
