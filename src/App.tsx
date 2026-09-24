@@ -49,6 +49,7 @@ export default function App() {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [confirmNew, setConfirmNew] = useState(false);
   const [pendingProject, setPendingProject] = useState<{ file: File; body: string } | null>(null);
+  const [pendingReplace, setPendingReplace] = useState<File | null>(null);
 
   const ds = project.datasets.find(d => d.id === project.activeDatasetId) ?? null;
   const tab = ds?.view.activeTab ?? 'data';
@@ -69,9 +70,11 @@ export default function App() {
 
   /** Size is checked before the file is read: JSON.parse of a 200 MB project
    *  needs about a gigabyte and freezes the tab for tens of seconds. */
-  function onLoadProject(f: File) {
+  function onLoadProject(f: File, replaceConfirmed = false) {
     const tooBig = fileSizeMessage(f.size, 'project');
     if (tooBig) { setNotice({ title: 'Could not load project', body: tooBig }); resetLoadInput(); return; }
+    // Loading replaces every open dataset, so ask first, as New does.
+    if (!replaceConfirmed && useApp.getState().project.datasets.length > 0) { setPendingReplace(f); return; }
     const large = largeProjectNotice(f.size);
     if (large) { setPendingProject({ file: f, body: large }); return; }
     void readProject(f);
@@ -171,6 +174,11 @@ export default function App() {
         onConfirm={() => { setConfirmNew(false); useApp.getState().loadProject({ schemaVersion: 1, datasets: [], activeDatasetId: null } as Project); }}
         onCancel={() => setConfirmNew(false)}>
         Clear all datasets and start a new project? Unsaved work is lost.
+      </ConfirmDialog>
+      <ConfirmDialog open={!!pendingReplace} title="Replace the open project?" confirmLabel="Load project"
+        onConfirm={() => { const f = pendingReplace; setPendingReplace(null); if (f) onLoadProject(f, true); }}
+        onCancel={() => { setPendingReplace(null); resetLoadInput(); }}>
+        Loading a project replaces all open datasets. Unsaved work is lost.
       </ConfirmDialog>
       <ConfirmDialog open={!!pendingProject} title="Large project file" confirmLabel="Load anyway"
         onConfirm={() => { const p = pendingProject; setPendingProject(null); if (p) void readProject(p.file); }}

@@ -433,7 +433,11 @@ describe('round 14 follow-ups: error scoping, project dates, correction notes', 
     raw.datasets[0].dates[2] = null;
     render(<App />);
     await upload(new File([JSON.stringify(raw)], 'dates.hme.json', { type: 'application/json' }), 'Load a saved .hme.json project');
-    const dlg = await screen.findByRole('dialog', {}, { timeout: 5000 });
+    // a dataset is open, so Load first asks before replacing it (audit project-08)
+    const ask = await screen.findByRole('dialog', {}, { timeout: 5000 });
+    expect(ask).toHaveAccessibleName('Replace the open project?');
+    await act(async () => { fireEvent.click(within(ask).getByRole('button', { name: 'Load project' })); });
+    const dlg = await screen.findByRole('dialog', { name: 'Project loaded' }, { timeout: 5000 });
     expect(dlg).toHaveAccessibleName('Project loaded');
     expect(dlg.textContent).toContain('dataset "round14": 3 rows with a missing or out-of-range date were skipped.');
     fireEvent.click(within(dlg).getByRole('button', { name: 'OK' }));
