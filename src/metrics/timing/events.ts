@@ -13,6 +13,7 @@
 
 import { mean, stdPop, median, quantile, type Vec } from '../support/stats'
 import { nse, kge2009, r as pearsonR } from '../classical/catalogue'
+import { matchEvents, overlapEdges } from './eventMatch'
 
 type Positions = ArrayLike<number> | undefined;
 const at = (pos: Positions) => (pos ? (k: number) => pos[k] : (k: number) => k);
@@ -88,7 +89,8 @@ export interface EventError {
   /** 100·(simPeak − obsPeak)/obsPeak; NaN when the peak is unresolved. */
   peakMagErrPct: number;
   volumeErrPct: number;     // 100·(Σsim − Σobs)/Σobs over the obs event window (+ = over)
-  /** The observed event has an overlapping simulated event (a hit). The
+  /** The observed event is paired one to one with an overlapping simulated
+   *  event (a hit; eventMatch.ts). The
    *  summary means use matched events only; a miss has no simulated event. */
   matched: boolean;
 }
@@ -119,14 +121,17 @@ export function eventErrors(obs: Vec, sim: Vec, opt: EventOptions, matchToleranc
   const { events: obsEvents, threshold } = detectEvents(obs, opt, pos);
   const simEvents = detectEvents(sim, { ...opt, thresholdKind: 'absolute', thresholdValue: threshold }, pos).events;
 
-  // hit/miss/false-alarm bookkeeping by window overlap (± tolerance, in time steps)
-  const overlaps = (a: EventSpan, b: EventSpan) =>
-    P(a.start) - matchTolerance <= P(b.end) && P(b.start) - matchTolerance <= P(a.end);
+  // Hit/miss/false-alarm bookkeeping by window overlap (± tolerance, in time
+  // steps), one to one: the same matching as Series Distance (eventMatch.ts),
+  // the most hits and then the least total peak distance, so the event
+  // metrics and Series Distance pair the same events. A first-overlap pass
+  // in time order gave as many hits but could mark the wrong observed event
+  // as matched (a farther one), and then average its errors.
+  const { simOf } = matchEvents(obsEvents.length, simEvents.length, overlapEdges(obsEvents, simEvents, matchTolerance, P));
   const hitSim = new Set<number>();
-  const matched = obsEvents.map(oe => {
-    const j = simEvents.findIndex((se, k) => !hitSim.has(k) && overlaps(oe, se));
-    if (j >= 0) hitSim.add(j);
-    return j >= 0;
+  const matched = obsEvents.map((_, i) => {
+    if (simOf[i] >= 0) hitSim.add(simOf[i]);
+    return simOf[i] >= 0;
   });
   const hits = matched.filter(Boolean).length;
 
