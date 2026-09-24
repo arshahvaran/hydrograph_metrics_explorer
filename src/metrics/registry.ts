@@ -4,7 +4,7 @@
 import * as C from './classical/catalogue'
 import { applyNanPolicy, type NanPolicy } from '../ingest/missing'
 import { peakTiming, eventErrors, lagSweep, type EventOptions } from './timing/events'
-import { dtw, wasserstein1, wasserstein2sq } from './timing/dtwWasserstein'
+import { dtwOnTimeAxis, wasserstein1, wasserstein2sq, massIssue, DTW_CELL_BUDGET, type DtwRecordResult } from './timing/dtwWasserstein'
 import { diagnosticEfficiency, seriesDistance } from './timing/deSd'
 import { xwtLag } from './timing/xwt'
 import type { TimingConfig } from '../types'
@@ -98,10 +98,10 @@ export const REGISTRY: MetricMeta[] = [
   M({ id: 'sd_occ', label: 'SD occurrence', group: 'Timing & shape', optimum: '1', direction: 'max', range: '[0,1]', timing: true, unitful: false, digits: 3, blurb: 'Series Distance event threat score (Ehret & Zehe, 2011).', equation: '\\frac{\\text{hits}}{\\text{hits}+\\text{misses}+\\text{false}}\\ \\text{(matched events)}' }),
   M({ id: 'sd_amp', label: 'SD amplitude err %', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞)', timing: true, unitful: false, digits: 2, blurb: 'Mean relative amplitude offset on matched rise/recession segments.', equation: '\\overline{100\\,(S(u)-O(u))/O(u)}\\ \\text{over segment positions }u' }),
   M({ id: 'sd_time', label: 'SD timing err', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'Mean timing offset on matched segments; + = sim late. Time-synchronous scores fold this offset invisibly into amplitude error.', equation: '\\overline{t_S(u)-t_O(u)}\\ \\text{over segment positions }u' }),
-  M({ id: 'dtw_warp', label: 'DTW mean |warp|', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'Mean |i−j| along the optimal Sakoe–Chiba-banded alignment; average timing distortion in steps.', equation: '\\frac{1}{|\\pi^*|}\\sum_{(i,j)\\in\\pi^*}|i-j|,\\quad \\pi^*=\\arg\\min_{\\pi}\\textstyle\\sum|O_i-S_j|,\\ |i-j|\\le w' }),
-  M({ id: 'dtw_dist', label: 'DTW distance (per step)', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞)', timing: true, unitful: true, digits: 3, blurb: 'Alignment-invariant amplitude mismatch after optimal warping.', equation: '\\frac{1}{|\\pi^*|}\\sum_{(i,j)\\in\\pi^*}|O_i-S_j|' }),
-  M({ id: 'w1', label: 'Wasserstein W₁', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'Earth-mover distance between mass-normalised hydrographs over time: equals the lag exactly under a pure shift; volume-blind by construction.', equation: '\\sum_t\\big|F_O(t)-F_S(t)\\big|\\,\\Delta t' }),
-  M({ id: 'w2sq', label: 'Wasserstein W₂²', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞) steps²', timing: true, unitful: false, digits: 2, blurb: 'Squared-lag form featured in the paper (Magyar & Sambridge, 2023): smooth and convex in the shift where NSE collapses.', equation: '\\int_0^1\\big(F_O^{-1}(u)-F_S^{-1}(u)\\big)^2\\,du' }),
+  M({ id: 'dtw_warp', label: 'DTW mean |warp|', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'Mean time offset |tᵢ−tⱼ|, in steps of the record, along the optimal alignment inside a Sakoe–Chiba band of ±w steps (Timing tab; default = the peak window). It includes warping that only hides amplitude error, up to the band. Among equally cheap alignments it takes the one with the fewest warping moves, then the least total warp, so the value does not depend on the direction of time.', equation: '\\frac{1}{|\\pi^*|}\\sum_{(i,j)\\in\\pi^*}|t_i-t_j|,\\quad \\pi^*=\\arg\\min_{\\pi}\\textstyle\\sum|O_i-S_j|,\\ |t_i-t_j|\\le w' }),
+  M({ id: 'dtw_dist', label: 'DTW distance (per step)', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞)', timing: true, unitful: true, digits: 3, blurb: 'Amplitude mismatch left after optimal warping within the band (±w steps): mean |O−S| per matched pair.', equation: '\\frac{1}{|\\pi^*|}\\sum_{(i,j)\\in\\pi^*}|O_i-S_j|' }),
+  M({ id: 'w1', label: 'Wasserstein W₁', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'Earth-mover distance, in steps, between the hydrographs treated as unit masses over time (Magyar & Sambridge, 2023). A pure shift reads the lag only for an event with zero flow at both ends of the record; with baseflow, or flow at the record ends, it reads less (about lag × the share of the mass that moves). Blind to proportional (multiplicative) volume error only: an additive bias moves mass toward low flows and registers as timing. Needs non-negative flow.', equation: '\\sum_t\\big|F_O(t)-F_S(t)\\big|\\,\\Delta t' }),
+  M({ id: 'w2sq', label: 'Wasserstein W₂²', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞) steps²', timing: true, unitful: false, digits: 2, blurb: 'Squared form featured in the paper (Magyar & Sambridge, 2023): equals the squared lag for a pure shift of an event with zero flow at both ends of the record, less with baseflow; smooth and convex in the shift where NSE collapses. Same conditions as W₁.', equation: '\\int_0^1\\big(F_O^{-1}(u)-F_S^{-1}(u)\\big)^2\\,du' }),
   M({ id: 'xwt_lag', label: 'XWT phase lag', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'Power-weighted mean cross-wavelet lag over red-noise-significant, in-cone regions (Morlet; Torrence & Compo, 1998). Scale-resolved curve on the Timing tab.', equation: '\\frac{\\phi(s,t)}{2\\pi}\\,T(s)\\ \\text{power-weighted, significant \\& in-cone}' }),
 ];
 
@@ -145,9 +145,11 @@ export interface ComputeOutput {
     peaks?: ReturnType<typeof peakTiming>;
     events?: ReturnType<typeof eventErrors>;
     sd?: ReturnType<typeof seriesDistance>;
-    /** decim: the path indices are in decimated space (long records);
-     *  multiply by decim to recover compacted-pair indices. */
-    dtw?: ReturnType<typeof dtw> & { decim: number };
+    /** decim: 1 at full resolution. Above the cell budget DTW runs on block
+     *  means of `decim` consecutive pairs: `path` and `band` are then in
+     *  blocks (multiply by decim for compacted-pair indices and steps).
+     *  meanAbsWarp and bandSteps are always in steps of the record. */
+    dtw?: DtwRecordResult;
     xwt?: ReturnType<typeof xwtLag>;
     sweep?: ReturnType<typeof lagSweep>;
   };
@@ -249,17 +251,19 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
     const events = eventErrors(ro, rs, evOpt, t.peakMatchTolerance);
     const sd = seriesDistance(ro, rs, evOpt, t.peakMatchTolerance);
     if (ctx.transform !== 'none') notes.push(`Event, peak-timing and Series Distance metrics are computed on untransformed flows; the ${ctx.transform} transform applies to the other metrics.`);
-    // DTW guard for very long series: decimate to keep the DP tractable
-    let dtwRes; let dtwDecim = 1;
-    if (o.length > 6000) {
-      dtwDecim = Math.ceil(o.length / 4000);
-      const m = Math.floor(o.length / dtwDecim);
-      const o2 = new Float64Array(m), s2 = new Float64Array(m);
-      for (let i = 0; i < m; i++) { o2[i] = o[i * dtwDecim]; s2[i] = s[i * dtwDecim]; }
-      dtwRes = dtw(o2, s2, t.dtwBandFraction);
-      notes.push(`DTW computed on 1/${dtwDecim} decimation for tractability`);
-    } else {
-      dtwRes = dtw(o, s, t.dtwBandFraction);
+    // D1: the time axis of DTW, W1 and W2^2 is the original step index of each
+    // surviving pair, so a gap never shortens a warp or a transport distance.
+    const tAxis = raw.index;
+    // D6: band in steps, full resolution with banded storage; block means
+    // (never point samples) only above the cell budget.
+    const dtwRes = dtwOnTimeAxis(o, s, tAxis, t.dtwBand);
+    if (dtwRes.decim > 1) {
+      notes.push(`DTW was computed on means of ${dtwRes.decim} consecutive pairs because the full-resolution alignment would need more than ${Math.round(DTW_CELL_BUDGET / 1e6)} million cells; DTW distance and mean |warp| are approximate, with a resolution of about ${dtwRes.decim} steps, and the band was rounded up to ${dtwRes.bandSteps} steps.`);
+    }
+    let longGaps = 0;
+    for (let k = 1; k < tAxis.length; k++) if (tAxis[k] - tAxis[k - 1] - 1 > dtwRes.bandSteps) longGaps++;
+    if (longGaps > 0) {
+      notes.push(`${longGaps} gap${longGaps === 1 ? ' is' : 's are'} longer than the DTW band (±${dtwRes.bandSteps} steps); the DTW alignment cannot warp across ${longGaps === 1 ? 'it' : 'them'}, so the pairs at ${longGaps === 1 ? 'its edges' : 'their edges'} are aligned with zero warp.`);
     }
     const xw = xwtLag(o, s);
     const sweep = lagSweep(o, s, -30, 30);
@@ -280,16 +284,28 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
     values.lag_best = sweep.bestLag;
     values.de = de.de; values.de_const = de.brelMean; values.de_dyn = de.bArea;
     values.sd_occ = sd.occurrence; values.sd_amp = sd.meanAmplitudeErrPct; values.sd_time = sd.meanTimingErr;
-    values.dtw_warp = dtwRes.meanAbsWarp * dtwDecim;
+    values.dtw_warp = dtwRes.meanAbsWarp;
     values.dtw_dist = dtwRes.normalized;
-    values.w1 = wasserstein1(o, s);
-    values.w2sq = wasserstein2sq(o, s);
+    values.w1 = wasserstein1(o, s, tAxis);
+    values.w2sq = wasserstein2sq(o, s, tAxis);
     values.xwt_lag = xw.headlineLag;
 
+    if (!Number.isFinite(values.w1)) {
+      // W1/W2^2 read flow as mass: one negative value or a zero total makes
+      // them undefined for the whole record, which must not happen silently
+      const why: string[] = [];
+      const under = ctx.transform !== 'none' ? ` under the ${ctx.transform} transform` : '';
+      for (const [x, who] of [[o, 'observed series'], [s, 'simulation']] as const) {
+        const iss = massIssue(x);
+        if (iss?.negative) why.push(`the ${who} has ${iss.negative} negative value${iss.negative === 1 ? '' : 's'}${under}`);
+        else if (iss?.zeroTotal) why.push(`the ${who} sums to zero`);
+      }
+      if (why.length) notes.push(`W₁ and W₂² are n/a: they treat flow as mass over time and need non-negative values with a positive total; ${why.join(' and ')}.`);
+    }
     if (de.nonPerennial) notes.push('DE: observed record is not strictly positive; diagnostic efficiency assumptions violated');
     if (events.events.length === 0) notes.push('No events at the current threshold; raise/lower it on the Timing tab');
 
-    Object.assign(extras, { de, peaks, events, sd, dtw: { ...dtwRes, decim: dtwDecim }, xwt: xw, sweep });
+    Object.assign(extras, { de, peaks, events, sd, dtw: dtwRes, xwt: xw, sweep });
   }
 
   enforceFinite(values);

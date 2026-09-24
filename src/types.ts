@@ -25,8 +25,11 @@ export interface Run extends SeriesData {
 }
 
 export interface TimingConfig {
-  /** Sakoe–Chiba band as a fraction of series length n (default 0.1). */
-  dtwBandFraction: number;
+  /** Sakoe–Chiba band half-width in time steps: the largest time offset DTW
+   *  may use (default: the peak-match window; range 1 step to 10 % of n).
+   *  Project files before v1.14 stored dtwBandFraction instead; see
+   *  migrateDtwBand. */
+  dtwBand: number;
   /** 'auto' or explicit list of wavelet scales (in steps). */
   waveletScales: 'auto' | number[];
   eventThreshold: { kind: 'percentile' | 'absolute'; value: number };
@@ -105,7 +108,11 @@ export interface Project {
 export function defaultTimingConfig(stepMs: number, n: number): TimingConfig {
   const daily = stepMs >= 22 * 3600_000; // daily or coarser
   return {
-    dtwBandFraction: 0.1,
+    // the largest physically credible lag, taken as the default peak-match
+    // window below (Sakoe & Chiba, 1978, set the window from the plausible
+    // timing deviation, not from the record length); never above the
+    // accepted range of 10 % of a very short record
+    dtwBand: Math.min(daily ? 3 : 24, dtwBandMax(n)),
     waveletScales: 'auto',
     eventThreshold: { kind: 'percentile', value: 90 },
     eventMinDistance: daily ? 5 : 24,
@@ -118,17 +125,54 @@ export function defaultTimingConfig(stepMs: number, n: number): TimingConfig {
 
 /** Accepted ranges for the timing settings; the Timing tab clamps at the
  *  control and the project loader and store clamp again. The DTW band is a
- *  fraction of n, the percentile a value in [0, 100]. */
+ *  whole number of steps (its upper bound for a record of n steps is
+ *  dtwBandMax(n), 10 % of n), the percentile a value in [0, 100]. */
 export const TIMING_RANGES = {
   eventPercentile: [0, 100],
   eventMinDistance: [1, 100_000],
   eventWarmup: [0, 10_000_000],
   peakMatchTolerance: [1, 10_000],
-  dtwBandFraction: [0.01, 1],
+  dtwBand: [1, 100_000],
   peakProminence: [0, Number.MAX_VALUE],
 } as const;
 
+/** Largest DTW band offered for a record of n steps: 10 % of n, at least 1. */
+export const dtwBandMax = (n: number): number =>
+  Math.max(1, Math.min(TIMING_RANGES.dtwBand[1], Math.floor(n / 10)));
+
 const finiteNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+/**
+ * Project files before v1.14 stored the DTW band as a fraction of the record
+ * (dtwBandFraction, default 0.1). The band is now a number of steps. A file
+ * that still has the fraction (and no dtwBand) is migrated here, with a note:
+ * the old default of 10 % becomes the new default band (10 % of the record
+ * was the setting that let DTW hide amplitude error as timing); any other
+ * fraction becomes round(fraction × n) steps, limited to 1 … dtwBandMax(n);
+ * an unreadable fraction falls back to the default. Loading never fails here.
+ */
+export function migrateDtwBand(raw: unknown, n: number, base: TimingConfig): { raw: unknown; note: string | null } {
+  if (typeof raw !== 'object' || raw === null) return { raw, note: null };
+  const o = raw as Record<string, unknown>;
+  if (!Object.prototype.hasOwnProperty.call(o, 'dtwBandFraction')) return { raw, note: null };
+  const out: Record<string, unknown> = {};
+  for (const k of Object.keys(o)) if (k !== 'dtwBandFraction') out[k] = o[k];
+  if (o.dtwBand !== undefined) return { raw: out, note: null };
+  const f = o.dtwBandFraction;
+  const def = base.dtwBand;
+  if (f === 0.1) {
+    return { raw: out, note: `the DTW band was the old default of 10% of the record; the band is now set in time steps, and the default of ${def} step${def === 1 ? '' : 's'} (the peak window) is used` };
+  }
+  if (finiteNum(f) && f > 0) {
+    const hi = dtwBandMax(n);
+    const want = Math.max(1, Math.round(f * n));
+    const steps = Math.min(hi, want);
+    out.dtwBand = steps;
+    const pct = Number((f * 100).toPrecision(4));
+    return { raw: out, note: `the DTW band of ${pct}% of the record was converted to ${steps} time step${steps === 1 ? '' : 's'}${steps < want ? ' (the band is limited to 10% of the record)' : ''}` };
+  }
+  return { raw: out, note: `the DTW band in the file was not a valid fraction of the record; the default of ${def} step${def === 1 ? '' : 's'} is used` };
+}
 
 /**
  * Coerce an untrusted timing configuration (a hand-edited project file, a
@@ -137,9 +181,10 @@ const finiteNum = (v: unknown): v is number => typeof v === 'number' && Number.i
  * whether anything that WAS supplied had to be corrected (missing fields are
  * forward-compatibility, not corruption). A NaN band fraction once sent the
  * DTW backtrack into an unbounded loop and a null threshold crashed the
- * Timing tab, so every field is checked here.
+ * Timing tab, so every field is checked here. With `n` (the record length)
+ * the DTW band is also limited to dtwBandMax(n).
  */
-export function clampTimingConfig(raw: unknown, base: TimingConfig): { config: TimingConfig; changed: boolean } {
+export function clampTimingConfig(raw: unknown, base: TimingConfig, n?: number): { config: TimingConfig; changed: boolean } {
   const o = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
   let changed = false;
   const take = (v: unknown, range: readonly [number, number], d: number, integer = false): number => {
@@ -171,7 +216,9 @@ export function clampTimingConfig(raw: unknown, base: TimingConfig): { config: T
     else peakProminence = take(o.peakProminence, TIMING_RANGES.peakProminence, typeof base.peakProminence === 'number' ? base.peakProminence : 0);
   }
   const config: TimingConfig = {
-    dtwBandFraction: take(o.dtwBandFraction, TIMING_RANGES.dtwBandFraction, base.dtwBandFraction),
+    dtwBand: take(o.dtwBand,
+      n === undefined ? TIMING_RANGES.dtwBand : [TIMING_RANGES.dtwBand[0], dtwBandMax(n)],
+      base.dtwBand, true),
     waveletScales,
     eventThreshold,
     eventMinDistance: take(o.eventMinDistance, TIMING_RANGES.eventMinDistance, base.eventMinDistance, true),

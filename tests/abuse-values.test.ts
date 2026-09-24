@@ -64,9 +64,10 @@ describe('all-NaN pair: nothing throws, n=0, everything n/a', () => {
 describe('timing metrics at their edges', () => {
   const o = seq(60, i => 4 + 3 * Math.exp(-(((i % 20) - 8) ** 2) / 8));
   const s = seq(60, i => 4 + 3 * Math.exp(-(((i % 20) - 11) ** 2) / 8));
-  it('DTW band fraction 0 clamps to a usable band; path is monotonic corner-to-corner', () => {
-    for (const f of [0, 0.05, 5]) {
+  it('DTW band 0 clamps to a usable band (1 step); path is monotonic corner-to-corner', () => {
+    for (const f of [0, 0.05, 5, 1e9]) {
       const r = dtw(o, s, f);
+      expect(r.band).toBe(Math.max(1, Math.round(f)));
       expect(r.path[0]).toEqual([0, 0]);
       expect(r.path[r.path.length - 1]).toEqual([o.length - 1, s.length - 1]);
       let [pi, pj] = r.path[0];
