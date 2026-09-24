@@ -149,7 +149,12 @@ export function summaryPairs(ds: Dataset, frame: Frame): [string, string][] {
     ['Unit', UNITS[ds.targetUnit].label + (ds.area ? ` · area ${ds.area.value} ${ds.area.unit}` : '')],
     ['Location', ds.location ? `${ds.location.lat.toFixed(4)}, ${ds.location.lon.toFixed(4)} (WGS84)` : 'n/a'],
     ['NaN policy / transform / benchmark', `${v.nanPolicy} / ${v.transform} / ${v.benchmark}`],
-    ['Timing config', `events ≥ P${v.timingConfig.eventThreshold.value}${v.timingConfig.eventThreshold.kind === 'absolute' ? ' (abs)' : ''}, min-distance ${v.timingConfig.eventMinDistance}, peak window ±${v.timingConfig.peakMatchTolerance}, DTW band ${Math.round(v.timingConfig.dtwBandFraction * 100)}%`],
+    ['Timing config', `events ≥ ${v.timingConfig.eventThreshold.kind === 'absolute' ? `${v.timingConfig.eventThreshold.value} ${UNITS[ds.targetUnit].label}` : `P${v.timingConfig.eventThreshold.value} of observed flow`}, min-distance ${v.timingConfig.eventMinDistance}, peak window ±${v.timingConfig.peakMatchTolerance}, DTW band ${Math.round(v.timingConfig.dtwBandFraction * 100)}%`],
+    // Every other setting that changes a reported value (audit report-05).
+    ['Event warm-up / peak prominence', `${v.timingConfig.eventWarmup} steps / ${v.timingConfig.peakProminence === 'auto' ? 'auto (standard deviation of the observed flow)' : `${v.timingConfig.peakProminence} ${UNITS[ds.targetUnit].label}`}`],
+    ['Wavelet scales', String(v.timingConfig.waveletScales)],
+    ['Input units (converted)', [`${ds.observed.name || 'observed'}: ${UNITS[ds.observed.inputUnit]?.label ?? ds.observed.inputUnit}`, ...ds.runs.filter(r => r.visible).map(r => `${r.name}: ${UNITS[r.inputUnit]?.label ?? r.inputUnit}`)].join('; ')],
+    ['Bootstrap CIs', v.showBootstrapCIs ? 'shown (block bootstrap, seeded)' : 'not computed'],
   ];
 }
 
@@ -296,7 +301,8 @@ export async function buildDocx(p: ReportPayload): Promise<Blob> {
     }
   }
 
-  if (notes.trim()) { H('Notes'); Ptext(notes.trim()); }
+  // one paragraph per line, so the notes keep their line breaks
+  if (notes.trim()) { H('Notes'); for (const line of notes.trim().split(/\r?\n/)) Ptext(line); }
 
   kids.push(new Paragraph({
     spacing: { before: 260, after: 40 },
@@ -359,12 +365,12 @@ export function openPrintReport(p: ReportPayload): void {
     const rows = rankRuns(runs.map((r, i) => ({ runName: r.name, values: outputs[i].values })), priorities);
     const order = rows.map((_, i) => i).sort((a, b) => rows[a].rank - rows[b].rank);
     body += `<h2>5. Simulation ranking</h2><table><thead>${rowsHtml(['Rank', 'Simulation', ...priorities.map(p2 => `${p2.id} (w=${p2.weight})`), 'Composite'], 'th')}</thead><tbody>` +
-      order.map(i => rowsHtml([String(rows[i].rank), rows[i].runName, ...priorities.map(p2 => (isFinite(rows[i].perMetric[p2.id]) ? rows[i].perMetric[p2.id].toFixed(2) : 'n/a')), rows[i].composite.toFixed(3)], 'td', rows[i].rank === 1 ? 'timing' : '')).join('') + '</tbody></table>' +
+      order.map(i => rowsHtml([String(rows[i].rank), rows[i].runName, ...priorities.map(p2 => (isFinite(rows[i].perMetric[p2.id]) ? rows[i].perMetric[p2.id].toFixed(2) : 'n/a')), isFinite(rows[i].composite) ? rows[i].composite.toFixed(3) : 'n/a'], 'td', rows[i].rank === 1 && isFinite(rows[i].composite) ? 'timing' : '')).join('') + '</tbody></table>' +
       (isFinite(rows[order[0]].composite)
         ? `<p><strong>Recommended simulation: ${esc(rows[order[0]].runName)}</strong> (composite ${rows[order[0]].composite.toFixed(3)}).</p>`
         : '<p><em>No composite could be computed for the selected priority metrics.</em></p>');
   }
-  if (notes.trim()) body += `<h2>Notes</h2><p>${esc(notes.trim())}</p>`;
+  if (notes.trim()) body += `<h2>Notes</h2><p>${esc(notes.trim()).split(/\r?\n/).join('<br>')}</p>`;
   body += `<p class="meta">${esc(REPORT_CREDIT)}<br/><a href="${REPO_URL}">${esc(REPORT_CREDIT_LINK_TEXT)}</a></p>`;
 
   const w = window.open('', '_blank');

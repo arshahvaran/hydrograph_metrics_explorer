@@ -65,7 +65,7 @@ export function ReportTab() {
         </div>
         {error && <div className="error" role="alert">{error}</div>}
         <p className="muted">
-          The report embeds the current analysis subset, all settings (a provenance appendix lets anyone regenerate it),
+          The report embeds the current analysis subset, every setting that changes a reported value (section 1),
           the full metrics table with the timing and shape rows shaded, the hydrograph/scatter/lag-sweep figures, per-event
           errors, and, with two or more runs, the composite ranking with a recommended run. Filename:
           {' '}<code>{reportFilename(ds, 'docx')}</code>. The PDF route opens your browser's print dialog; choose “Save as PDF”.
