@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useApp } from '../store/store'
 import { csvLine } from './format'
 
@@ -60,6 +60,52 @@ function themeTemplate(): any {
       hoverlabel: { font: { family: '"Hanken Grotesk", sans-serif' } },
     },
   };
+}
+
+/**
+ * Plotly draws trace names, point text, hover text, titles and annotations as
+ * pseudo-HTML: it renders <a href>, <b>, <br> and the like. Dataset and run
+ * names come from user files and shared project files, so a run named
+ * '<a href="https://evil.example/">Model A</a>' became a live link in every
+ * legend (audit SEC-MAP, Plotly sink). Every such string is escaped here, in
+ * one place, before it reaches Plotly (the tabs through PlotHost, the report
+ * figures through plotPng); Plotly decodes &amp; &lt; &gt; back, so the
+ * characters show literally. The app puts no markup in these fields, and the
+ * CSV export keeps the raw names.
+ */
+export const plotText = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const escText = (v: unknown): unknown =>
+  typeof v === 'string' ? plotText(v)
+    : Array.isArray(v) ? v.map(x => (typeof x === 'string' ? plotText(x) : x))
+      : v;
+const escTitle = (t: unknown): unknown =>
+  typeof t === 'string' ? plotText(t)
+    : t && typeof t === 'object' && typeof (t as any).text === 'string' ? { ...(t as object), text: plotText((t as any).text) }
+      : t;
+
+/** Traces with every user-visible string escaped (a new array; the input is not changed). */
+export function plotSafeTraces(traces: any[]): any[] {
+  return traces.map(tr => {
+    if (!tr || typeof tr !== 'object') return tr;
+    const out = { ...tr };
+    for (const k of ['name', 'text', 'hovertext']) if (k in out) out[k] = escText(out[k]);
+    if (out.legendgrouptitle) out.legendgrouptitle = escTitle(out.legendgrouptitle);
+    if (out.colorbar?.title) out.colorbar = { ...out.colorbar, title: escTitle(out.colorbar.title) };
+    if (out.marker?.colorbar?.title) out.marker = { ...out.marker, colorbar: { ...out.marker.colorbar, title: escTitle(out.marker.colorbar.title) } };
+    return out;
+  });
+}
+
+/** Layout with its title, axis titles, legend title and annotation text escaped. */
+export function plotSafeLayout<T extends Record<string, any>>(layout: T): T {
+  const out: Record<string, any> = { ...layout };
+  if ('title' in out) out.title = escTitle(out.title);
+  for (const k of Object.keys(out)) {
+    if (/^[xy]axis\d*$/.test(k) && out[k] && typeof out[k] === 'object' && 'title' in out[k]) out[k] = { ...out[k], title: escTitle(out[k].title) };
+  }
+  if (out.legend?.title) out.legend = { ...out.legend, title: escTitle(out.legend.title) };
+  if (Array.isArray(out.annotations)) out.annotations = out.annotations.map((a: any) => (a && typeof a === 'object' && 'text' in a ? { ...a, text: escText(a.text) } : a));
+  return out as T;
 }
 
 type TraceKind = 'xy' | 'heatmap' | 'polar';
@@ -126,18 +172,21 @@ export function tracesToCsv(traces: any[]): string {
 export function PlotHost({ traces, layout, height = 380, name = 'hme_plot', square = false }: { traces: any[]; layout: any; height?: number; name?: string; square?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const theme = useApp(s => s.theme);
+  // what Plotly draws: user text escaped (plotSafeTraces); the CSV uses the raw traces
+  const shownTraces = useMemo(() => plotSafeTraces(traces), [traces]);
+  const shownLayout = useMemo(() => plotSafeLayout(layout ?? {}), [layout]);
   useEffect(() => {
     let cancelled = false;
     loadPlotly().then(P => {
       if (cancelled || !ref.current) return;
-      P.react(ref.current, traces, { ...BASE_LAYOUT, template: themeTemplate(), ...layout, ...(square ? { width: height, height, autosize: false } : { width: null, height, autosize: true }) }, {
+      P.react(ref.current, shownTraces, { ...BASE_LAYOUT, template: themeTemplate(), ...shownLayout, ...(square ? { width: height, height, autosize: false } : { width: null, height, autosize: true }) }, {
         responsive: true, displaylogo: false,
         modeBarButtonsToRemove: ['lasso2d', 'select2d'],
         toImageButtonOptions: { format: 'png', filename: 'hme_plot', scale: 2 },
       });
     });
     return () => { cancelled = true; };
-  }, [traces, layout, theme]);
+  }, [shownTraces, shownLayout, theme]);
   useEffect(() => () => {
     if (ref.current) loadPlotly().then(P => P.purge(ref.current!));
   }, []);
@@ -151,8 +200,8 @@ export function PlotHost({ traces, layout, height = 380, name = 'hme_plot', squa
     // regardless of the on-screen theme.
     const P = await loadPlotly();
     const fig = {
-      data: traces,
-      layout: { ...BASE_LAYOUT, template: exportTemplate(), ...layout, paper_bgcolor: '#ffffff', plot_bgcolor: '#ffffff', width: exportW, height },
+      data: shownTraces,
+      layout: { ...BASE_LAYOUT, template: exportTemplate(), ...shownLayout, paper_bgcolor: '#ffffff', plot_bgcolor: '#ffffff', width: exportW, height },
     };
     const url = await P.toImage(fig, { format: 'jpeg', width: exportW, height, scale: 300 / 96 });
     const a = document.createElement('a');

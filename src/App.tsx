@@ -162,7 +162,7 @@ export default function App() {
       </main>
 
       <footer className="footer">
-        <span>All computation runs in the browser; uploaded data never leaves this page. The Map tab loads OpenStreetMap tiles for the station's area.</span>
+        <span>All computation runs in the browser; your flow series never leave this page. Fonts load from Google Fonts, and the Map tab loads OpenStreetMap tiles for the station's area.</span>
         <span>
           v{APP_VERSION_SHORT} ·{' '}
           <a href="https://github.com/arshahvaran/hydrograph_metrics_explorer" target="_blank" rel="noreferrer">Source, License, &amp; Citation</a>

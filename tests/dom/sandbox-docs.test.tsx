@@ -1,6 +1,7 @@
 /** Audit timing-sandbox-09, claims-07, claims-09, claims-11, claims-12. */
 import { it, expect, beforeAll, beforeEach } from 'vitest'
 import { readFileSync } from 'fs'
+import { execSync } from 'child_process'
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import { computeAll } from '../../src/metrics/registry'
 import { useApp } from '../../src/store/store'
@@ -59,8 +60,51 @@ it('claims-09: the Sandbox readout includes R²', async () => {
 
 it('claims-07: the page says that the Map tab loads OpenStreetMap tiles', () => {
   render(<App />);
-  expect(document.body.textContent).toContain('The Map tab loads OpenStreetMap tiles');
+  expect(document.body.textContent).toContain('the Map tab loads OpenStreetMap tiles');
   expect(readFileSync('README.md', 'utf8')).toMatch(/OpenStreetMap basemap tiles/);
+});
+
+it('claims-07 (review): both outside requests are named wherever the page promises privacy', () => {
+  const html = readFileSync('index.html', 'utf8');
+  const readme = readFileSync('README.md', 'utf8').replace(/\r?\n\s*/g, ' ');
+  // the only third-party hosts the page loads from
+  const hosts = new Set((html.match(/https:\/\/[a-z0-9.-]+/g) ?? []).map(u => u.slice(8)));
+  hosts.delete('arshahvaran.github.io');           // og:url, the app itself
+  expect([...hosts].sort()).toEqual(['fonts.googleapis.com', 'fonts.gstatic.com']);
+  // README: fonts on every load, tiles on the Map tab, and what the tiles reveal
+  expect(readme).not.toMatch(/The only outside requests are the Map tab/);
+  expect(readme).toMatch(/Google Fonts/);
+  expect(readme).toMatch(/every page load/);
+  expect(readme).toMatch(/OpenStreetMap basemap tiles[^.]*station/);
+  // og:description is qualified, not an unconditional promise
+  const og = html.match(/property="og:description" content="([^"]*)"/)![1];
+  expect(og).not.toMatch(/your data never leaves the page\.?$/);
+  expect(og).toMatch(/Google Fonts/);
+  expect(og).toMatch(/OpenStreetMap/);
+  // the footer names both
+  render(<App />);
+  const footer = document.querySelector('footer')!.textContent!;
+  expect(footer).toMatch(/Google Fonts/);
+  expect(footer).toMatch(/OpenStreetMap/);
+  // the Map tab does not call the station's area "not your data"
+  const map = readFileSync('src/ui/MapTab.tsx', 'utf8');
+  expect(map).not.toContain('(not your data)');
+  expect(map).toMatch(/station location/);
+});
+
+it('claims-09 (review): the README headline claims a panel of metrics in the Sandbox, not every metric', () => {
+  const readme = readFileSync('README.md', 'utf8').replace(/\r?\n\s*/g, ' ');
+  expect(readme).not.toMatch(/updating every metric live/);
+  expect(readme).toMatch(/updating a panel of conventional and shift-tolerant metrics live/);
+});
+
+it('claims-11 (review): Python bytecode is neither committed nor left unignored', () => {
+  const ignore = readFileSync('.gitignore', 'utf8').split(/\r?\n/).map(s => s.trim());
+  expect(ignore).toContain('__pycache__/');
+  expect(ignore).toContain('*.pyc');
+  let tracked = '';
+  try { tracked = execSync('git ls-files', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); } catch { return; /* not a git checkout */ }
+  expect(tracked.split(/\r?\n/).filter(f => /__pycache__|\.pyc$/.test(f))).toEqual([]);
 });
 
 it('claims-11/claims-12: the generator writes into the repo; npm test builds before the bundle scan', () => {
