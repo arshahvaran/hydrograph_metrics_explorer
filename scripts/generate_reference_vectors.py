@@ -13,7 +13,7 @@ Runs the *inspected* sources of:
 Outputs reference_vectors.json with full float64 precision (repr, 17 sig. digits).
 These values are the ground truth for HME's TypeScript metric unit tests.
 """
-import json, warnings, math, sys
+import json, warnings, math, sys, os
 import numpy as np
 
 # Defensive shims for older libs on numpy>=2
@@ -215,7 +215,7 @@ def main():
         }
     doc = {
         "meta": {
-            "generated_by": "gen_reference_vectors.py",
+            "generated_by": "generate_reference_vectors.py",
             "purpose": "Ground-truth values for HME classical-metric unit tests and "
                        "C2M/KGEnp/DE cross-checks.",
             "libraries": {
@@ -240,7 +240,8 @@ def main():
         "lag_sweep_truth_synth730_shift3": lag_table(OBS730, shift(OBS730, 3)),
         "convention_pins": convention_pins(),
     }
-    with open("/home/claude/out/reference_vectors.json", "w") as fh:
+    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests", "fixtures", "reference_vectors.json")
+    with open(out, "w") as fh:
         json.dump(doc, fh, indent=1)
     print("wrote reference_vectors.json")
     # quick sanity echoes

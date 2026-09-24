@@ -10,7 +10,7 @@ import { OBSERVED_COLOR } from '../types'
 import type { Dataset, SandboxState } from '../types'
 import { UNITS } from '../units/registry'
 
-const CLASSICAL: [string, string, number][] = [['nse', 'NSE', 3], ['kge2009', 'KGE', 3], ['r', 'r', 3], ['rmse', 'RMSE', 3], ['pbias', 'PBIAS %', 2]];
+const CLASSICAL: [string, string, number][] = [['nse', 'NSE', 3], ['kge2009', 'KGE', 3], ['r', 'r', 3], ['r2', 'R²', 3], ['rmse', 'RMSE', 3], ['pbias', 'PBIAS %', 2]];
 const TIMING: [string, string, number][] = [['w1', 'W₁ [steps]', 2], ['w2sq', 'W₂² [steps²]', 2], ['dtw_warp', 'DTW |warp| [steps]', 2], ['peak_lag_abs', 'Peak |lag| [steps]', 2], ['lag_best', 'Best-fit lag [steps]', 0], ['xwt_lag', 'XWT lag [steps]', 2]];
 
 export function SandboxTab() {
@@ -43,12 +43,17 @@ function SandboxTabInner({ ds }: { ds: Dataset }) {
   const baselineSeries = useSeriesOutput(ds, 'sandbox-baseline-obs', sb.mode === 'synthetic' ? ds.observed.values : null);
   const baselineRun = useRunOutput(ds, sb.mode === 'synthetic' ? null : target);
   const computeError = useComputeError(ds);
-  // retain the last completed panel (and baseline) so slider drags never blank the readout
+  // retain the last completed panel (and baseline) so slider drags never blank the readout;
+  // a new target simulation or mode is a different series, so its old panel is dropped
+  // rather than shown under the new name (audit timing-sandbox-09)
   const lastOut = useRef<ReturnType<typeof Object> | null>(null) as React.MutableRefObject<any>;
+  const lastBase = useRef<any>(null);
+  const lastKey = useRef('');
+  const targetKey = `${ds.id}|${sb.mode}|${target?.id ?? 'obs'}`;
+  if (lastKey.current !== targetKey) { lastKey.current = targetKey; lastOut.current = null; lastBase.current = null; }
   if (outLive) lastOut.current = outLive;
   const out = outLive ?? lastOut.current;
   const baselineLive = sb.mode === 'synthetic' ? baselineSeries : baselineRun;
-  const lastBase = useRef<any>(null);
   if (baselineLive) lastBase.current = baselineLive;
   const baseline = baselineLive ?? lastBase.current;
 
