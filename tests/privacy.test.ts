@@ -22,7 +22,7 @@ describe('privacy manifest', () => {
       }
     }
     expect(hits.sort()).toEqual([
-      'src/ingest/ingest.ts:178',   // same-origin sample loader (BASE_URL/samples/…)
+      'src/ingest/ingest.ts:391',   // same-origin sample loader (BASE_URL/samples/…)
       'src/report/report.ts:185',   // data: URLs only (plot images into the DOCX)
     ]);
   });

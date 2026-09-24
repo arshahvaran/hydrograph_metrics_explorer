@@ -1,12 +1,13 @@
 import { useMemo, useRef, useState } from 'react'
 import { useApp } from '../store/store'
-import { parseDelimited, parseWorkbook, guessRoles, stage, fetchSample, newStageCache, type RawTable, type ColumnRole, type StageCache } from '../ingest/ingest'
+import { parseDelimited, parseWorkbook, guessRoles, stage, fetchSample, newStageCache, unitFromHeader, type RawTable, type ColumnRole, type StageCache } from '../ingest/ingest'
 import { fileSizeMessage, inspectDelimited, largeTableNotice, largeWorkbookNotice, pasteMessage, tableShapeMessage } from '../ingest/limits'
 import { EditableGrid } from './EditableGrid'
 import { ConfirmDialog } from './Dialog'
 import { UNITS } from '../units/registry'
 import { fmtDate, fmtNum } from './format'
 import type { DateFormat } from '../ingest/dateParse'
+import type { DecimalMark } from '../ingest/missing'
 import type { UnitId } from '../types'
 
 const SAMPLES = [
@@ -15,7 +16,7 @@ const SAMPLES = [
 ];
 
 const ROLE_LABELS: Record<ColumnRole, string> = { date: 'Date', observed: 'Observed', run: 'Simulated', ignore: 'Ignore' };
-const UNIT_CHOICES: UnitId[] = ['m3s', 'cfs', 'ls', 'mm_step', 'in_day'];
+const UNIT_CHOICES: UnitId[] = ['m3s', 'cfs', 'ls', 'm3day', 'MLday', 'MGD', 'acftday', 'mm_step', 'in_day'];
 
 const ROLE_OPTIONS: ColumnRole[] = ['date', 'observed', 'run', 'ignore'];
 
@@ -35,6 +36,8 @@ export function DataTab() {
   const [colNames, setColNames] = useState<string[]>([]);
   const [dateFormat, setDateFormat] = useState<DateFormat>('auto');
   const [unit, setUnit] = useState<UnitId>('m3s');
+  const [unitNote, setUnitNote] = useState<string | null>(null);
+  const [decimalMark, setDecimalMark] = useState<DecimalMark>('auto');
   const [missingValue, setMissingValue] = useState('');
   const [name, setName] = useState('My dataset');
   const [pasteText, setPasteText] = useState('');
@@ -51,8 +54,8 @@ export function DataTab() {
   // the Name box used to re-parse every column (seconds on a large table), and
   // the column cache makes a role change cost only the validation pass.
   const staged = useMemo(() => (table && roles.length
-    ? stage({ ...table, header: colNames }, { name: '', roles, dateFormat, unit, missingValue: mvNum }, cacheRef.current)
-    : null), [table, colNames, roles, dateFormat, unit, mvNum]);
+    ? stage({ ...table, header: colNames }, { name: '', roles, dateFormat, unit, missingValue: mvNum, decimalMark }, cacheRef.current)
+    : null), [table, colNames, roles, dateFormat, unit, mvNum, decimalMark]);
   const commitInput = staged?.commit ? { ...staged.commit, name } : null;
 
   function loadTable(t: RawTable, suggestedName: string, rolesOverride?: ColumnRole[]) {
@@ -64,10 +67,12 @@ export function DataTab() {
     setRoles(rolesOverride ?? t.header.map(() => 'ignore' as ColumnRole));
     setName(suggestedName);
     setError(null);
-    const m = t.header.map(h => /\[(.+?)\]/.exec(h)?.[1]?.replace(/\s/g, '').toLowerCase()).find(Boolean);
-    if (m === 'm3/s' || m === 'm³/s') setUnit('m3s');
-    else if (m === 'cfs' || m === 'ft3/s') setUnit('cfs');
-    else if (m === 'l/s') setUnit('ls');
+    // The unit and the decimal mark describe one file: a new file starts
+    // from its own headers and from auto, never from the previous file.
+    const u = unitFromHeader(t.header);
+    setUnit(u.unit ?? 'm3s');
+    setUnitNote(u.note);
+    setDecimalMark('auto');
   }
 
   async function onSample(file: string, label: string) {
@@ -77,12 +82,17 @@ export function DataTab() {
     finally { setBusy(false); }
   }
 
-  /** Run a parser with the busy state painted first when it will take a while. */
-  async function runParse(work: () => RawTable | Promise<RawTable>, suggestedName: string, paintFirst: boolean) {
+  /** Run a parser with the busy state painted first when it will take a while.
+   *  With `confirmLarge` (workbooks, whose row count is only known after the
+   *  read) a large table asks for the same confirmation as delimited text. */
+  async function runParse(work: () => RawTable | Promise<RawTable>, suggestedName: string, paintFirst: boolean, confirmLarge = false) {
     setBusy(true); setError(null);
     try {
       if (paintFirst) await new Promise<void>(r => setTimeout(r, 16));
-      loadTable(await work(), suggestedName);
+      const t = await work();
+      const soft = confirmLarge ? largeTableNotice({ rows: t.rows.length, columns: t.header.length }) : null;
+      if (soft) setPendingLoad({ title: 'Large dataset', body: soft, run: () => loadTable(t, suggestedName) });
+      else loadTable(t, suggestedName);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   }
@@ -113,7 +123,7 @@ export function DataTab() {
     const tooBig = fileSizeMessage(f.size, isWorkbook ? 'workbook' : 'delimited');
     if (tooBig) { setError(tooBig); return; }
     if (isWorkbook) {
-      const go = () => { void runParse(async () => parseWorkbook(await f.arrayBuffer()), suggested, true); };
+      const go = () => { void runParse(async () => parseWorkbook(await f.arrayBuffer()), suggested, true, true); };
       const soft = largeWorkbookNotice(f.size);
       if (soft) setPendingLoad({ title: 'Large workbook', body: soft, run: go });
       else go();
@@ -183,11 +193,19 @@ export function DataTab() {
                 {UNIT_CHOICES.map(id => <option key={id} value={id}>{UNITS[id].label}</option>)}
               </select>
             </label>
+            <label>Decimal mark{' '}
+              <select aria-label="Decimal mark" value={decimalMark} onChange={e => setDecimalMark(e.target.value as DecimalMark)}>
+                <option value="auto">Auto detect</option>
+                <option value="point">Point (1,234.5)</option>
+                <option value="comma">Comma (1.234,5)</option>
+              </select>
+            </label>
             <label>Missing value{' '}
               <input aria-label="Missing value" value={missingValue} placeholder="e.g., -999" style={{ width: '6.5em' }}
                 onChange={e => setMissingValue(e.target.value)} />
             </label>
           </div>
+          {unitNote && <p className="muted" role="status">{unitNote}</p>}
           <div className="mapscroll">
             <table className="grid">
               <thead>

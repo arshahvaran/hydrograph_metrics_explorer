@@ -101,14 +101,14 @@ describe('workbook used range: a declared range inflated by formatting is not a 
     const t = await parseWorkbook(wsBuffer(ws));
     expect(t.header).toEqual(['date', 'observed', 'm1']);
     expect(t.rows.length).toBe(10);
-    expect(t.rows[9]).toEqual(['2001-01-10', '10', '10.5']);
+    expect(t.rows[9]).toEqual(['2001-01-10', 10, 10.5]);   // workbook numbers stay numbers
   }, 30000);
   it('a declared range of 104 columns with data in 3 loads', async () => {
     const ws = XLSX.utils.aoa_to_sheet([['date', 'observed', 'm1'], ['2001-01-01', 1, 2], ['2001-01-02', 2, 3]]);
     ws['!ref'] = 'A1:CZ3';
     const t = await parseWorkbook(wsBuffer(ws));
     expect(t.header).toEqual(['date', 'observed', 'm1']);
-    expect(t.rows).toEqual([['2001-01-01', '1', '2'], ['2001-01-02', '2', '3']]);
+    expect(t.rows).toEqual([['2001-01-01', 1, 2], ['2001-01-02', 2, 3]]);
   }, 30000);
   it('a sheet with a populated cell on row 1,000,002 is still refused by the row cap', async () => {
     const ws = XLSX.utils.aoa_to_sheet([['date', 'observed', 'sim'], ['2001-01-01', 1, 2]]);

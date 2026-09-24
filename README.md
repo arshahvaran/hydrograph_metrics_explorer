@@ -86,11 +86,18 @@ Deployed to GitHub Pages from the `gh-pages` branch (`dist/` contents).
 ## Input data
 
 One date column plus one observed and any number of simulated discharge columns, in CSV,
-TXT, or XLSX (or pasted directly). Column roles are assigned explicitly at import; missing
-values are declared in the "Missing value" box rather than assumed. Supported units include
-m³/s, ft³/s, L/s, m³/day, ac-ft/day, and depth per step (mm, in) with a catchment area.
-Everything runs inside one browser tab, so inputs are bounded: delimited files up to
-200 MB, workbooks up to 25 MB, project files up to 100 MB, tables up to 1,000,000 rows,
+TXT, or XLSX (or pasted directly). Column roles are assigned explicitly at import. Empty
+cells and the texts NA, NaN, null, n/a, -, --, ---, none and missing are read as missing;
+any other no-data value (e.g. -999) is declared in the "Missing value" box, and cells that
+are not numbers are counted and reported. The decimal mark is decided per column (a decimal
+comma or point, with thousands grouping by dot, comma, space or apostrophe); when a column
+could be read either way, such as 12,345, the Data tab asks. Date-times with a UTC offset
+are converted to UTC, and spreadsheet date-times are read as written, without a time-zone
+conversion. Supported units include m³/s, ft³/s, L/s, m³/day, ML/day, MGD, ac-ft/day, and
+depth (mm per time step, in per day) with a catchment area; a unit in square brackets in
+the column headers, such as `obs [ft³/s]`, sets the unit at import. Everything runs inside
+one browser tab, so inputs are bounded: delimited files up to 200 MB, workbooks up to
+25 MB, project files up to 100 MB, tables up to 1,000,000 rows,
 100 columns and 30 million cells, and up to 60 simulated columns per dataset. Tables above
 250,000 rows ask for confirmation before loading and are plotted at reduced resolution
 (every point still counts in the metrics); bootstrap intervals need between 30 and
