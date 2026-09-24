@@ -261,7 +261,7 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
           }}>Export CSV</button>
         </h2>
         <div className="mapscroll"><table className="grid" aria-label="Detected events and per-event errors">
-          <thead><tr><th>#</th><th>window</th><th>obs peak [{UNITS[ds.targetUnit].label}]</th><th title="hit: a simulated event overlaps this observed event; miss: none does. The summary means use hits only.">matched</th><th>peak lag</th><th>peak mag err %</th><th>volume err %</th></tr></thead>
+          <thead><tr><th>#</th><th>window</th><th>obs peak [{UNITS[ds.targetUnit].label}]</th><th title="hit: this observed event is paired with an overlapping simulated event (one to one: the most hits, then the nearest peaks, as for Series Distance); miss: it is not paired. The summary means use hits only.">matched</th><th>peak lag</th><th>peak mag err %</th><th>volume err %</th></tr></thead>
           <tbody>
             {events.slice(0, 40).map((e, i) => (
               <tr key={i}>

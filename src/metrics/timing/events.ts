@@ -89,7 +89,8 @@ export interface EventError {
   /** 100·(simPeak − obsPeak)/obsPeak; NaN when the peak is unresolved. */
   peakMagErrPct: number;
   volumeErrPct: number;     // 100·(Σsim − Σobs)/Σobs over the obs event window (+ = over)
-  /** The observed event has an overlapping simulated event (a hit). The
+  /** The observed event is paired one to one with an overlapping simulated
+   *  event (a hit; eventMatch.ts). The
    *  summary means use matched events only; a miss has no simulated event. */
   matched: boolean;
 }
