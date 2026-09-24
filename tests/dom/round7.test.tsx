@@ -84,7 +84,10 @@ describe('Compare tab, round 7', () => {
     expect(screen.getByText(/How scoring works: for each selected metric/)).toBeTruthy();
     // defaults include timing metrics, so the timing-aware sentence shows with the new wording
     expect(document.body.textContent).toContain('at a more proper time, not just a more proper average.');
-    expect(document.body.textContent).toContain('Recommended simulation:');
+    // the fixture's two runs tie exactly (0.500: each leads on two of the four
+    // metrics); a tie is reported as a tie, not as an alphabetical recommendation (audit report-08)
+    expect(document.body.textContent).toContain('Tie between modelA and modelB');
+    expect(document.body.textContent).not.toContain('Recommended simulation:');
   });
 });
 

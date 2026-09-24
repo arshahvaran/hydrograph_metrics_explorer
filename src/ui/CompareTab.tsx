@@ -1,7 +1,7 @@
 import { useApp } from '../store/store'
 import type { Dataset } from '../types'
 import { useRunOutputs, frameFor, useComputeError } from './compute'
-import { rankRuns, DEFAULT_PRIORITIES } from '../metrics/rank'
+import { rankRuns, DEFAULT_PRIORITIES, SHIFT_TOLERANT_IDS } from '../metrics/rank'
 import { REGISTRY, byId } from '../metrics/registry'
 import { fmtNum } from './format'
 
@@ -47,12 +47,16 @@ function CompareTabInner({ ds }: { ds: Dataset }) {
   const order = rows.map((_, i) => i).sort((a, b) => rows[a].rank - rows[b].rank);
   const winner = rows[order[0]];
   const winnerRun = runs[order[0]];
+  // every run sharing rank 1: a tie is reported as a tie, not as a recommendation
+  const leaders = order.filter(i => rows[i].rank === 1 && isFinite(rows[i].composite));
+  // "strongest on": metrics where the winner is the best of the runs, and not at the floor
   const contributors = activePriorities
-    .map(p => ({ id: p.id, sc: winner.perMetric[p.id] }))
-    .filter(c => isFinite(c.sc))
+    .map(p => ({ id: p.id, sc: winner.perMetric[p.id], top: Math.max(...rows.map(r => (isFinite(r.perMetric[p.id]) ? r.perMetric[p.id] : -Infinity))) }))
+    .filter(c => isFinite(c.sc) && c.sc > 0 && c.sc >= c.top - 1e-9)
     .sort((a, b) => b.sc - a.sc)
     .slice(0, 2)
     .map(c => byId.get(c.id)?.label ?? c.id);
+  const hasShiftTolerant = activePriorities.some(p => SHIFT_TOLERANT_IDS.has(p.id));
 
   const setWeight = (id: string, weight: number) => {
     updateView({ priorityMetrics: priorities.map(p => (p.id === id ? { ...p, weight } : p)) });
@@ -102,7 +106,7 @@ function CompareTabInner({ ds }: { ds: Dataset }) {
             </div>
           </div>
         </div>
-        <p className="muted">How scoring works: for each selected metric, every simulation gets a score between 0 and 1 relative to the others in this comparison. The simulation closest to that metric's ideal value scores 1, the furthest scores 0, and the rest fall in between. Whether the ideal is high (NSE, KGE, R²), zero (RMSE, W₁, lags), or a balance point (PBIAS at 0) is handled automatically. The composite is the weighted average of these scores, so higher is always better. Unbounded efficiencies pass through the bounded C2M form first so no single score dominates. Subset: {frame.caption || 'full record'}.</p>
+        <p className="muted">How scoring works: for each selected metric, every simulation gets a score between 0 and 1 relative to the others in this comparison. The simulation closest to that metric's ideal value scores 1, the furthest scores 0, and the rest fall in between. Whether the ideal is high (NSE, KGE, R²), zero (RMSE, W₁, lags), or a balance point (PBIAS at 0) is handled automatically. The composite is the weighted average of these scores, so higher is always better. A metric that cannot be computed for a simulation (for example peak timing on a flat line) scores 0 for it, so every simulation is compared on the same metrics; equal composites share a rank. Unbounded efficiencies pass through the bounded C2M form first so no single score dominates. Subset: {frame.caption || 'full record'}.</p>
       </section>
 
       <section className="card">
@@ -135,12 +139,14 @@ function CompareTabInner({ ds }: { ds: Dataset }) {
         </table></div>
         {isFinite(winner.composite) ? (
         <div className="callout">
-          <strong>Recommended simulation: <span style={{ color: winnerRun.color }}>{winner.runName}</span></strong>
+          {leaders.length > 1
+            ? <strong>Tie between {leaders.map(i => runs[i].name).join(' and ')}</strong>
+            : <strong>Recommended simulation: <span style={{ color: winnerRun.color }}>{winner.runName}</span></strong>}
           {' '}· composite {winner.composite.toFixed(3)} across {activePriorities.length} priority metrics
-          {contributors.length ? <>; strongest on {contributors.join(' and ')}</> : null}.
-          {activePriorities.some(p => byId.get(p.id)?.timing)
-            ? ' Timing and shape metrics are included, so this ranking rewards getting events at a more proper time, not just a more proper average.'
-            : ' Tip: add a timing or shape metric (⏱) so the ranking cannot be won by a magnitude-only fit.'}
+          {leaders.length === 1 && contributors.length ? <>; strongest on {contributors.join(' and ')}</> : null}.
+          {hasShiftTolerant
+            ? ' Shift-tolerant timing metrics are included, so this ranking rewards getting events at a more proper time, not just a more proper average.'
+            : ' Tip: add a shift-tolerant timing metric (e.g. peak-timing lag, W₁ or DTW warp) so the ranking cannot be won by a magnitude-only fit.'}
         </div>
         ) : (
           <p className="muted">No composite could be computed: the selected priority metrics are unavailable for these simulations.</p>

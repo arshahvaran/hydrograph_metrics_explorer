@@ -437,6 +437,16 @@ export function perturb(base: ArrayLike<number>, s: SandboxState): Float64Array 
   return out;
 }
 
+/** Every run whose value ties the best one (the same score under bestIndex's
+ *  rule, e.g. +2 and -2 steps for a target-zero metric), so ties are all marked. */
+export function bestIndices(values: number[], direction: 'max' | 'min' | 'zero' | 'one'): Set<number> {
+  const b = bestIndex(values, direction);
+  const out = new Set<number>();
+  if (b < 0) return out;
+  values.forEach((v, i) => { if (isFinite(v) && bestIndex([v, values[b]], direction) === 0) out.add(i); });
+  return out;
+}
+
 /** Best value of a row across runs, honouring the metric's direction. A
  *  'min' metric (optimum 0, range [0, ∞)) is scored by its distance to 0, as
  *  the composite ranking does (rank.ts scoreMetric): a value below 0 is out of
