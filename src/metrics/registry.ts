@@ -97,7 +97,7 @@ export const REGISTRY: MetricMeta[] = [
   M({ id: 'de_const', label: 'DE constant (B̄rel)', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞)', timing: true, unitful: false, digits: 3, blurb: 'Mean relative FDC bias; the constant error share. Built from the flow-duration curve, so blind to timing.', equation: '\\bar{B}_{rel}=\\overline{(S^{FDC}-O^{FDC})/O^{FDC}}' }),
   M({ id: 'de_dyn', label: 'DE dynamic (|B|area)', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞)', timing: true, unitful: false, digits: 3, blurb: 'Area of residual FDC bias; high-vs-low-flow error trade. Built from the flow-duration curve, so blind to timing.', equation: '\\int_0^1\\big|B_{rel}(i)-\\bar{B}_{rel}\\big|\\,di' }),
   M({ id: 'sd_occ', label: 'SD occurrence', group: 'Timing & shape', optimum: '1', direction: 'max', range: '[0,1]', timing: true, unitful: false, digits: 3, blurb: 'Series Distance event threat score (Ehret & Zehe, 2011).', equation: '\\frac{\\text{hits}}{\\text{hits}+\\text{misses}+\\text{false}}\\ \\text{(matched events)}' }),
-  M({ id: 'sd_amp', label: 'SD amplitude err %', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞)', timing: true, unitful: false, digits: 2, blurb: 'Mean relative amplitude offset on matched rise/recession segments.', equation: '\\overline{100\\,(S(u)-O(u))/O(u)}\\ \\text{over segment positions }u' }),
+  M({ id: 'sd_amp', label: 'SD amplitude err', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞)', timing: true, unitful: true, digits: 3, blurb: 'Mean amplitude offset S − O on matched rise/recession segments, in flow units (Ehret & Zehe, 2011); + = simulation high. Events are windows above the observed-flow threshold on both series, so a constant bias widens the simulated windows and shows partly as timing error.', equation: '\\overline{S(u)-O(u)}\\ \\text{over segment positions }u' }),
   M({ id: 'sd_time', label: 'SD timing err', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'Mean timing offset on matched segments; + = sim late. Time-synchronous scores fold this offset invisibly into amplitude error.', equation: '\\overline{t_S(u)-t_O(u)}\\ \\text{over segment positions }u' }),
   M({ id: 'dtw_warp', label: 'DTW mean |warp|', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'Mean time offset |tᵢ−tⱼ|, in steps of the record, along the optimal alignment inside a Sakoe–Chiba band of ±w steps (Timing tab; default = the peak window). It includes warping that only hides amplitude error, up to the band. Among equally cheap alignments it takes the one with the fewest warping moves, then the least total warp, so the value does not depend on the direction of time.', equation: '\\frac{1}{|\\pi^*|}\\sum_{(i,j)\\in\\pi^*}|t_i-t_j|,\\quad \\pi^*=\\arg\\min_{\\pi}\\textstyle\\sum|O_i-S_j|,\\ |t_i-t_j|\\le w' }),
   M({ id: 'dtw_dist', label: 'DTW distance (per step)', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞)', timing: true, unitful: true, digits: 3, blurb: 'Amplitude mismatch left after optimal warping within the band (±w steps): mean |O−S| per matched pair.', equation: '\\frac{1}{|\\pi^*|}\\sum_{(i,j)\\in\\pi^*}|O_i-S_j|' }),
@@ -284,7 +284,7 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
     // hardcoded 100 steps (which silently suppressed real peaks in daily data).
     const peaks = peakTiming(ro, rs, { prominence: t.peakProminence, minDistance: t.eventMinDistance, window: t.peakMatchTolerance });
     const events = eventErrors(ro, rs, evOpt, t.peakMatchTolerance);
-    const sd = seriesDistance(ro, rs, evOpt, t.peakMatchTolerance);
+    const sd = seriesDistance(ro, rs, evOpt, t.peakMatchTolerance, 20, raw.index);
     // D1: the time axis of DTW, W1 and W2^2 is the original step index of each
     // surviving pair, so a gap never shortens a warp or a transport distance.
     const tAxis = raw.index;
@@ -317,7 +317,7 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
     values.event_lag = events.medianPeakLag;
     values.lag_best = sweep.bestLag;
     values.de = de.de; values.de_const = de.brelMean; values.de_dyn = de.bArea;
-    values.sd_occ = sd.occurrence; values.sd_amp = sd.meanAmplitudeErrPct; values.sd_time = sd.meanTimingErr;
+    values.sd_occ = sd.occurrence; values.sd_amp = sd.meanAmplitudeErr; values.sd_time = sd.meanTimingErr;
     values.dtw_warp = dtwRes.meanAbsWarp;
     values.dtw_dist = dtwRes.normalized;
     values.w1 = wasserstein1(ro, rs, tAxis);
@@ -337,6 +337,7 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
       if (why.length) notes.push(`W₁ and W₂² are n/a: they treat flow as mass over time and need non-negative values with a positive total; ${why.join(' and ')}.`);
     }
     if (de.nonPerennial) notes.push('DE: observed record is not strictly positive; diagnostic efficiency assumptions violated');
+    if (de.rUndefined) notes.push('DE: the correlation r is undefined for a constant series and is set to 0, as in diag-eff (Schwemmle et al., 2021).');
     if (events.events.length === 0) notes.push('No events at the current threshold; raise/lower it on the Timing tab');
 
     Object.assign(extras, { de, peaks, events, sd, dtw: dtwRes, xwt: xw, sweep });

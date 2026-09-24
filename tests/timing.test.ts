@@ -87,7 +87,7 @@ describe('pure +k shift identities', () => {
     const sd = seriesDistance(obs, sim, { thresholdKind: 'percentile', thresholdValue: 90, minDistance: 20, warmup: 0 }, 15)
     expect(sd.occurrence).toBe(1)
     expect(Math.abs(sd.meanTimingErr - k)).toBeLessThan(1)
-    expect(Math.abs(sd.meanAmplitudeErrPct)).toBeLessThan(8)
+    expect(Math.abs(sd.meanAmplitudeErr)).toBeLessThan(0.08 * Math.max(...obs))
   })
   it(`lag sweep: argmax at +k with NSE exactly 1`, () => {
     const sw = lagSweep(obs, sim)
