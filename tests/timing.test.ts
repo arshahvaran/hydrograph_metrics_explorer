@@ -66,7 +66,7 @@ describe('pure +k shift identities', () => {
     close(wasserstein1(obs, sim2), k, 1e-10)
   })
   it(`DTW: zero residual distance after warping; mean |warp| ≈ k`, () => {
-    const res = dtw(obs, sim, 0.1)
+    const res = dtw(obs, sim, 40)
     expect(res.distance).toBeLessThan(1e-9)
     expect(res.meanAbsWarp).toBeGreaterThan(k - 1)
     expect(res.meanAbsWarp).toBeLessThanOrEqual(k)

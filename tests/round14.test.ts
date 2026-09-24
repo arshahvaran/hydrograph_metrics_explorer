@@ -26,7 +26,7 @@ import { parseDelimited, stage, newStageCache } from '../src/ingest/ingest'
 import { validateDataset } from '../src/ingest/validate'
 import { nse, logNse, lmIndex, nseRel } from '../src/metrics/classical/catalogue'
 import { fmtNum } from '../src/ui/format'
-import { dtw } from '../src/metrics/timing/dtwWasserstein'
+import { dtw, DTW_DEFAULT_BAND } from '../src/metrics/timing/dtwWasserstein'
 import { lagSweep, peakTiming, eventErrors, LAG_SWEEP_MIN_PAIRS } from '../src/metrics/timing/events'
 import { computeAll } from '../src/metrics/registry'
 import { bootstrapCIs, BOOTSTRAP_MIN_N, BOOTSTRAP_MAX_N } from '../src/metrics/bootstrap'
@@ -186,7 +186,7 @@ describe('DTW never loops', () => {
   const o = seq(60, i => 4 + 3 * Math.exp(-(((i % 20) - 8) ** 2) / 8));
   const s = seq(60, i => 4 + 3 * Math.exp(-(((i % 20) - 11) ** 2) / 8));
   it('a non-finite or negative band falls back to the default band', () => {
-    const ref = dtw(o, s, 0.1);
+    const ref = dtw(o, s, DTW_DEFAULT_BAND);
     for (const bad of [NaN, -1, Infinity as number, 'x' as unknown as number]) {
       const r = dtw(o, s, bad);
       expect(r.band).toBe(ref.band);
@@ -286,9 +286,9 @@ describe('bootstrap limits', () => {
 describe('timing configuration is clamped everywhere it enters', () => {
   const base = defaultTimingConfig(DAY, 1000);
   it('non-finite, wrong-typed and out-of-range fields are corrected and reported', () => {
-    const { config, changed } = clampTimingConfig({ dtwBandFraction: 'x', eventThreshold: null, eventMinDistance: -4, peakMatchTolerance: 1e9, eventWarmup: 2.6, peakProminence: -1, waveletScales: [0, -1] }, base);
+    const { config, changed } = clampTimingConfig({ dtwBand: 'x', eventThreshold: null, eventMinDistance: -4, peakMatchTolerance: 1e9, eventWarmup: 2.6, peakProminence: -1, waveletScales: [0, -1] }, base);
     expect(changed).toBe(true);
-    expect(config.dtwBandFraction).toBe(base.dtwBandFraction);
+    expect(config.dtwBand).toBe(base.dtwBand);
     expect(config.eventThreshold).toEqual(base.eventThreshold);
     expect(config.eventMinDistance).toBe(1);
     expect(config.peakMatchTolerance).toBe(10_000);
@@ -302,15 +302,15 @@ describe('timing configuration is clamped everywhere it enters', () => {
   it('missing fields are defaults, not corruption; a valid config passes through unchanged', () => {
     expect(clampTimingConfig({}, base)).toEqual({ config: base, changed: false });
     expect(clampTimingConfig(undefined, base).changed).toBe(false);
-    const custom = { ...base, dtwBandFraction: 0.25, eventMinDistance: 7, waveletScales: [2, 4, 8] };
+    const custom = { ...base, dtwBand: 25, eventMinDistance: 7, waveletScales: [2, 4, 8] };
     expect(clampTimingConfig(custom, base)).toEqual({ config: custom, changed: false });
   });
   it('the store clamps updateTiming patches', () => {
     useApp.getState().loadProject({ schemaVersion: 1, datasets: [], activeDatasetId: null });
     useApp.getState().commitDataset(stage(parseDelimited(csvOf(40)), { name: 'clamp', roles: ['date', 'observed', 'run'], dateFormat: 'auto', unit: 'm3s', missingValue: null }).commit!);
-    useApp.getState().updateTiming({ dtwBandFraction: NaN, peakMatchTolerance: -5 } as any);
+    useApp.getState().updateTiming({ dtwBand: NaN, peakMatchTolerance: -5 } as any);
     const t = useApp.getState().project.datasets[0].view.timingConfig;
-    expect(t.dtwBandFraction).toBe(0.1);
+    expect(t.dtwBand).toBe(3);
     expect(t.peakMatchTolerance).toBe(1);
   });
 });
@@ -324,7 +324,7 @@ describe('project loader repairs what would crash or hang the tabs', () => {
     return parseProjectFile(JSON.stringify(raw));
   };
   it('a NaN-producing band or a null threshold resets the timing settings with a warning', () => {
-    const { project, warnings } = projectWith(d => { d.view.timingConfig.dtwBandFraction = 'x'; d.view.timingConfig.eventThreshold = null; });
+    const { project, warnings } = projectWith(d => { d.view.timingConfig.dtwBand = 'x'; d.view.timingConfig.eventThreshold = null; });
     expect(project.datasets[0].view.timingConfig).toEqual(defaultTimingConfig(DAY, 40));
     expect(warnings).toContain('dataset "proj": timing settings were invalid and have been reset to defaults');
   });

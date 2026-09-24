@@ -7,7 +7,7 @@
  * projects saved by older versions).
  */
 import type { Project, Dataset, ViewState, UnitId, AreaUnitId } from '../types'
-import { defaultView, RUN_PALETTE, clampTimingConfig } from '../types'
+import { defaultView, RUN_PALETTE, clampTimingConfig, migrateDtwBand } from '../types'
 import { UNITS } from '../units/registry'
 import { alignByDate } from './store'
 import { detectStep } from '../units/stepDetect'
@@ -63,7 +63,11 @@ function loadView(v: unknown, stepMs: number, n: number, warn: (msg: string) => 
   if (o.timingConfig !== undefined) {
     // Every timing field is validated: a NaN band or a null threshold in a
     // hand-edited file once hung the worker or blanked the Timing tab.
-    const { config, changed } = clampTimingConfig(o.timingConfig, base.timingConfig);
+    // Files before v1.14 hold the DTW band as a fraction of the record; it is
+    // converted to steps (or reset to the default) with a note, never refused.
+    const mig = migrateDtwBand(o.timingConfig, n, base.timingConfig);
+    if (mig.note) warn(mig.note);
+    const { config, changed } = clampTimingConfig(mig.raw, base.timingConfig, n);
     out.timingConfig = config;
     if (changed || typeof o.timingConfig !== 'object' || o.timingConfig === null) warn('timing settings were invalid and have been reset to defaults');
   }

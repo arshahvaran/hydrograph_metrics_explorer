@@ -271,7 +271,7 @@ describe('extreme inputs on the analysis tabs', () => {
     commit(csv(60));
     const raw = JSON.parse(serialiseProject(useApp.getState().project));
     raw.datasets[0].view.timingConfig.eventThreshold = null;
-    raw.datasets[0].view.timingConfig.dtwBandFraction = 'x';
+    raw.datasets[0].view.timingConfig.dtwBand = 'x';
     const { project, warnings } = parseProjectFile(JSON.stringify(raw));
     expect(warnings.join('\n')).toMatch(/timing settings were invalid and have been reset to defaults/);
     useApp.getState().loadProject(project);

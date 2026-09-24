@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { Dataset } from '../types'
 import { UNITS } from '../units/registry'
-import { OBSERVED_COLOR, defaultTimingConfig, TIMING_RANGES } from '../types'
+import { OBSERVED_COLOR, defaultTimingConfig, TIMING_RANGES, dtwBandMax } from '../types'
 import { useApp } from '../store/store'
 import { PlotHost } from './PlotHost'
 import { NumField } from './NumField'
@@ -160,8 +160,8 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
               <NumField value={t.peakProminence} min={0} max={Number.MAX_VALUE} style={{ width: '5em' }}
                 label="Prominence" onClamp={setClampNote} onCommit={v => updateTiming({ peakProminence: v })} />}
           </label>
-          <label>DTW band <NumField value={Math.round(t.dtwBandFraction * 100)} min={1} max={50} integer style={{ width: '4em' }}
-            label="DTW band" onClamp={setClampNote} onCommit={v => updateTiming({ dtwBandFraction: v / 100 })} /> % of n</label>
+          <label title="Sakoe–Chiba band: the largest time offset DTW may use, in steps; set it to the largest credible lag (catchment response or routing time). Default = the peak window.">DTW band ± <NumField value={t.dtwBand} min={TIMING_RANGES.dtwBand[0]} max={dtwBandMax(n)} integer unit="steps" style={{ width: '4em' }}
+            label="DTW band" onClamp={setClampNote} onCommit={v => updateTiming({ dtwBand: v })} /> steps</label>
         </div>
         </fieldset>
         {clampNote && !useDefaults && <p className="warning" role="status">{clampNote}</p>}

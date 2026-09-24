@@ -59,8 +59,10 @@ const ctxTol = (n: number, tol: number) => {
 describe('C3: pure time shift; the paper\'s central demonstration', () => {
   const K = 4;
   const o = hydro(240, 0), s = hydro(240, K); // simulation is K steps LATE
-  // Peak-match tolerance is set >= the expected lag, as an analyst would.
-  const out = computeAll(o, s, ctxTol(240, 8));
+  // Peak-match tolerance and DTW band are set >= the expected lag, as an
+  // analyst would (both are in steps; the daily defaults are 3).
+  const out8 = ctxTol(240, 8);
+  const out = computeAll(o, s, { ...out8, timing: { ...out8.timing, dtwBand: 8 } });
   it('synchronous scores degrade', () => {
     expect(out.values.nse).toBeLessThan(0.9);
     expect(out.values.r).toBeLessThan(0.95);
@@ -150,11 +152,10 @@ describe('C6: DTW path properties (seeded property loop)', () => {
     const rng = mulberry32(2024);
     for (let iter = 0; iter < 40; iter++) {
       const n = 8 + Math.floor(rng() * 110);
-      const f = [0.05, 0.1, 0.3, 1][Math.floor(rng() * 4)];
+      const band = [1, 3, 10, 200][Math.floor(rng() * 4)];   // steps
       const o = Float64Array.from({ length: n }, () => rng() * 10);
       const s = Float64Array.from({ length: n }, () => rng() * 10);
-      const r = dtw(o, s, f);
-      const band = Math.max(1, Math.ceil(f * n));
+      const r = dtw(o, s, band);
       expect(r.path[0]).toEqual([0, 0]);
       expect(r.path[r.path.length - 1]).toEqual([n - 1, n - 1]);
       let [pi, pj] = [0, 0];
@@ -170,7 +171,7 @@ describe('C6: DTW path properties (seeded property loop)', () => {
   });
   it('self-distance is zero', () => {
     const o = hydro(100);
-    expect(dtw(o, o, 0.1).normalized).toBeCloseTo(0, 12);
+    expect(dtw(o, o, 10).normalized).toBeCloseTo(0, 12);
   });
 });
 

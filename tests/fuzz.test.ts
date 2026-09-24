@@ -78,10 +78,10 @@ describe('metric invariants over arbitrary finite pairs', () => {
   it('DTW: self-distance 0, distance ≥ 0, path always corner-to-corner', () => {
     fc.assert(fc.property(fc.array(finiteDouble, { minLength: 6, maxLength: 80 }), oA => {
       const o = Float64Array.from(oA);
-      const self = dtw(o, o, 0.1);
+      const self = dtw(o, o, 3);
       expect(self.normalized).toBeCloseTo(0, 10);
       const shuffled = Float64Array.from(oA.slice().reverse());
-      const r = dtw(o, shuffled, 0.2);
+      const r = dtw(o, shuffled, 8);
       expect(r.normalized).toBeGreaterThanOrEqual(0);
       expect(r.path[0]).toEqual([0, 0]);
       expect(r.path[r.path.length - 1]).toEqual([o.length - 1, o.length - 1]);

@@ -13,9 +13,11 @@ import { defaultView } from '../src/types'
 import { dtwTies } from '../src/ui/alignment'
 
 const DAY = 86_400_000
-const ctx = (n: number) => {
+// The shifts below (K = 3, 4 days) exceed the default daily DTW band of 3
+// steps, so these tie-mapping tests widen the band to 10 steps (or more).
+const ctx = (n: number, dtwBand = 10) => {
   const v = defaultView(DAY, n)
-  return { nanPolicy: v.nanPolicy, transform: v.transform, timing: v.timingConfig, heavy: true } as any
+  return { nanPolicy: v.nanPolicy, transform: v.transform, timing: { ...v.timingConfig, dtwBand }, heavy: true } as any
 }
 const mkDates = (n: number, start = Date.UTC(2001, 0, 1)) => Array.from({ length: n }, (_, i) => start + i * DAY)
 const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10)
@@ -92,16 +94,36 @@ describe('DTW alignment ties: missing values (pairwise compaction)', () => {
   })
 })
 
-describe('DTW alignment ties: n > 6000 (decimated path rescaled to full resolution)', () => {
+describe('DTW alignment ties: n > 6000 runs at full resolution (dtw-wass-01)', () => {
   const N = 7000, K = 4
   const o = hydro(N), s = hydro(N, K)
   const dstr = mkDates(N).map(iso)
   const out = computeAll(o, s, ctx(N))
   const trip = triples(dtwTies(out, dstr, Array.from(o), Array.from(s), Number.MAX_SAFE_INTEGER))
-  it('reports the decimation factor', () => {
-    expect(out.extras.dtw!.decim).toBe(2)
+  it('no decimation below the cell budget', () => {
+    expect(out.extras.dtw!.decim).toBe(1)
+    expect(trip[trip.length - 1].xo).toBe(dstr[N - 1])
   })
-  it('ties span the whole record, on the decimation grid, with true values', () => {
+  it('every observed peak ties to the simulated peak K days later', () => {
+    for (let p = 20; p + K < N; p += 40) {
+      expect(trip.find(tt => tt.xo === dstr[p] && tt.xs === dstr[p + K]), `peak at ${p}`).toBeTruthy()
+    }
+  })
+})
+
+describe('DTW alignment ties: above the cell budget (block-mean path rescaled to full resolution)', () => {
+  // a band of 10 % of n (2,000 steps) needs 7.6e7 cells at full resolution,
+  // above the 5e7 budget, so DTW runs on means of 2 consecutive pairs
+  const N = 20_000, K = 4
+  const o = hydro(N), s = hydro(N, K)
+  const dstr = mkDates(N).map(iso)
+  const out = computeAll(o, s, ctx(N, 2000))
+  const trip = triples(dtwTies(out, dstr, Array.from(o), Array.from(s), Number.MAX_SAFE_INTEGER))
+  it('reports the block size and says so in a note', () => {
+    expect(out.extras.dtw!.decim).toBe(2)
+    expect(out.notes.some(n => /DTW was computed on means of 2 consecutive pairs/.test(n))).toBe(true)
+  })
+  it('ties span the whole record, on the block grid, with true values', () => {
     // the old unscaled indices compressed every tie into the first half
     const last = trip[trip.length - 1]
     expect(last.xo).toBe(dstr[(Math.floor(N / 2) - 1) * 2])

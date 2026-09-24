@@ -149,7 +149,7 @@ export function summaryPairs(ds: Dataset, frame: Frame): [string, string][] {
     ['Unit', UNITS[ds.targetUnit].label + (ds.area ? ` · area ${ds.area.value} ${ds.area.unit}` : '')],
     ['Location', ds.location ? `${ds.location.lat.toFixed(4)}, ${ds.location.lon.toFixed(4)} (WGS84)` : 'n/a'],
     ['NaN policy / transform / benchmark', `${v.nanPolicy} / ${v.transform} / ${v.benchmark}`],
-    ['Timing config', `events ≥ P${v.timingConfig.eventThreshold.value}${v.timingConfig.eventThreshold.kind === 'absolute' ? ' (abs)' : ''}, min-distance ${v.timingConfig.eventMinDistance}, peak window ±${v.timingConfig.peakMatchTolerance}, DTW band ${Math.round(v.timingConfig.dtwBandFraction * 100)}%`],
+    ['Timing config', `events ≥ P${v.timingConfig.eventThreshold.value}${v.timingConfig.eventThreshold.kind === 'absolute' ? ' (abs)' : ''}, min-distance ${v.timingConfig.eventMinDistance}, peak window ±${v.timingConfig.peakMatchTolerance}, DTW band ±${v.timingConfig.dtwBand} steps`],
   ];
 }
 
