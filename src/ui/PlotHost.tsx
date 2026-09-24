@@ -36,7 +36,7 @@ function themeTemplate(): any {
   const css = getComputedStyle(document.documentElement);
   const v = (name: string, fb: string) => (css.getPropertyValue(name).trim() || fb);
   const ink = v('--ink', '#101113');
-  const soft = v('--ink-soft', '#697080');
+  const soft = v('--ink-soft', '#646b7b');
   const grid = v('--plotgrid', '#e3e6ea');
   const axis = {
     gridcolor: grid, zerolinecolor: soft,

@@ -4,6 +4,7 @@ import { useRunOutputs, frameFor, useComputeError } from './compute'
 import { rankRuns, DEFAULT_PRIORITIES, SHIFT_TOLERANT_IDS } from '../metrics/rank'
 import { REGISTRY, byId, transformNotes, rankingOmissionNote } from '../metrics/registry'
 import { fmtNum } from './format'
+import { RunName } from './RunName'
 
 /** Priority candidates: the previous shortlist restricted to metrics that are in
  *  the essentials preset (author round 7); a governance test pins this subset. */
@@ -130,7 +131,7 @@ function CompareTabInner({ ds }: { ds: Dataset }) {
             {order.map(i => (
               <tr key={runs[i].id} className={rows[i].rank === 1 ? 'timingrow' : ''}>
                 <td>{rows[i].rank}</td>
-                <td style={{ color: runs[i].color }}>{runs[i].name}</td>
+                <td><RunName name={runs[i].name} color={runs[i].color} /></td>
                 {activePriorities.map(p => (
                   <td key={p.id}>
                     {fmtNum(outputs[i]!.values[p.id], byId.get(p.id)?.digits ?? 3)}
@@ -147,7 +148,7 @@ function CompareTabInner({ ds }: { ds: Dataset }) {
         <div className="callout">
           {leaders.length > 1
             ? <strong>Tie between {leaders.map(i => runs[i].name).join(' and ')}</strong>
-            : <strong>Recommended simulation: <span style={{ color: winnerRun.color }}>{winner.runName}</span></strong>}
+            : <strong>Recommended simulation: <RunName name={winner.runName} color={winnerRun.color} /></strong>}
           {' '}· composite {winner.composite.toFixed(3)} across {ranked.length} priority metric{ranked.length === 1 ? '' : 's'}
           {leaders.length === 1 && contributors.length ? <>; strongest on {contributors.join(' and ')}</> : null}.
           {hasShiftTolerant

@@ -10,7 +10,7 @@
   --panel-2: #f0f2f5;
   --field: #ffffff;
   --ink: #101113;
-  --ink-soft: #697080;
+  --ink-soft: #646b7b;
   --line: #e6e8ec;
   --line-2: #dfe3e8;
   --accent: #0b6e99;
@@ -37,7 +37,7 @@ html[data-theme="dark"] {
   --ink-soft: #9aa2af;
   --line: #2b303a;
   --line-2: #333945;
-  --accent: #5b93a8;
+  --accent: #64a0b6;
   --accent-ink: #0e1217;
   --accent-soft: #1d2730;
   --plotgrid: #2b303a;
@@ -148,6 +148,8 @@ button.primary:hover:not(:disabled) { filter: brightness(1.08); }
 textarea { width: 100%; font-family: "DM Mono", monospace; font-size: 0.84rem; line-height: 1.45; margin: 0.4rem 0; }
 
 .muted { color: var(--ink-soft); font-size: 0.87rem; }
+/* plot colour of a simulation next to its name (RunName) */
+.swatch { display: inline-block; width: 0.7em; height: 0.7em; border-radius: 2px; margin-right: 0.35em; vertical-align: baseline; }
 .error, .warning, .info { border-radius: 8px; padding: 0.5rem 0.7rem; margin: 0.4rem 0; font-size: 0.9rem; }
 .error { background: var(--err-bg); border: 1px solid var(--err-line); }
 .warning { background: var(--warn-bg); border: 1px solid var(--warn-line); }

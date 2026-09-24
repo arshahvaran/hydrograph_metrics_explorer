@@ -8,6 +8,7 @@ import { NumField } from './NumField'
 import { useRunOutputs, useComputeError, frameFor } from './compute'
 import { csvLine, download, fmtNum, fmtStamp } from './format'
 import { byId } from '../metrics/registry'
+import { RunName } from './RunName'
 
 /** Exactly the timing block of the Metrics tab's essentials preset (13). */
 const SUMMARY_IDS = ['sd_occ', 'sd_amp', 'sd_time', 'dtw_warp', 'dtw_dist', 'xwt_lag', 'w1', 'peak_lag_abs', 'peak_lag_signed', 'event_peak', 'event_vol', 'event_lag', 'de'];
@@ -175,7 +176,7 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
         <h2>Timing summary <span className="muted">(lags in steps of {stepLabel})</span></h2>
         {outputs.flatMap(o => o.notes).filter((v, i, a) => a.indexOf(v) === i && /transform|flat|resolv|skipped|sweep|cannot exceed the band/.test(v)).map(nn => <div key={nn} className="warning">{nn}</div>)}
         <div className="mapscroll"><table className="grid" aria-label="Timing summary per simulation">
-          <thead><tr><th>Metric</th><th>Optimum</th>{runs.map(r => <th key={r.id} style={{ color: r.color }}>{r.name}</th>)}</tr></thead>
+          <thead><tr><th>Metric</th><th>Optimum</th>{runs.map(r => <th key={r.id}><RunName name={r.name} color={r.color} /></th>)}</tr></thead>
           <tbody>
             {SUMMARY_IDS.map(id => {
               const m = byId.get(id)!;
