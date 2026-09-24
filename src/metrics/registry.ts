@@ -299,7 +299,8 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
     if (longGaps > 0) {
       notes.push(`${longGaps} gap${longGaps === 1 ? ' is' : 's are'} longer than the DTW band (±${dtwRes.bandSteps} steps); the DTW alignment cannot warp across ${longGaps === 1 ? 'it' : 'them'}, so the pairs at ${longGaps === 1 ? 'its edges' : 'their edges'} are aligned with zero warp.`);
     }
-    const xw = xwtLag(o, s);
+    const xw = xwtLag(o, s, t.waveletScales);
+    if (xw.decimation > 1) notes.push(`Cross-wavelet analysis computed on a 1/${xw.decimation} block-mean of the record for tractability; its lags keep a resolution of about ${xw.decimation} steps.`);
     const sweep = lagSweep(ro, rs, -30, 30);
 
     if (peaks.unresolved > 0) {
