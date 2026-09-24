@@ -228,7 +228,9 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
             layout={{
               polar: {
                 radialaxis: { rangemode: 'tozero', dtick: 0.2 },
-                angularaxis: { thetaunit: 'degrees', dtick: 45, rotation: 90, direction: 'counterclockwise' },
+                // phi follows diag-eff: atan2(mean B_rel, B_area), 0 deg = east, +90 deg = north
+                // (constant positive offset at the top), so theta 0 must sit at east.
+                angularaxis: { thetaunit: 'degrees', dtick: 45, rotation: 0, direction: 'counterclockwise' },
               },
               margin: { t: 36, r: 70, l: 40, b: 36 },
               showlegend: false, hovermode: 'closest',
