@@ -61,7 +61,8 @@ export function alignByDate(input: CommitInput): CommitInput {
  *  prominence in flow units, and the DTW band as a fraction of n. The others
  *  (event spacing, warm-up, peak-match window, wavelet scales) are counted in
  *  steps and keep their meaning only while the step is unchanged. */
-const STEP_FREE: (keyof TimingConfig)[] = ['eventThreshold', 'peakProminence', 'dtwBandFraction'];
+// the DTW band and the peak settings are step counts, so they reset on resampling
+const STEP_FREE: (keyof TimingConfig)[] = ['eventThreshold', 'peakProminence'];
 
 /**
  * The view of a dataset made by "Use this data": the analysis settings of the
@@ -79,7 +80,7 @@ export function subsetView(v: ViewState, stepMs: number, n: number, resampled: b
   view.transform = v.transform;
   view.nanPolicy = v.season ? 'pairwise' : v.nanPolicy;
   view.benchmark = v.benchmark;
-  view.selectedMetrics = [...v.selectedMetrics];
+  view.metricPreset = v.metricPreset;
   view.priorityMetrics = v.priorityMetrics.map(p => ({ ...p }));
   view.boundedDisplay = v.boundedDisplay;
   view.showBootstrapCIs = v.showBootstrapCIs;
