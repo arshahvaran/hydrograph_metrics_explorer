@@ -7,7 +7,7 @@ const BASE_TOKENS = new Set<string>(['', ...MISSING_TOKENS]);
 
 /** The decimal-mark setting of the Data tab. 'auto' decides per column from
  *  the cells (see resolveDecimalMark); 'point' and 'comma' are the user's
- *  answer when a column cannot decide by itself. */
+ *  answer for the columns that auto cannot decide, and only for those. */
 export type DecimalMark = 'auto' | 'point' | 'comma';
 
 export interface MissingOptions {
@@ -106,17 +106,36 @@ export interface ColumnScan {
   ambiguousComma: number;
   /** An ambiguous cell, one with a comma when there is one. */
   ambiguousExample: string;
+  /** Whole numbers written without any mark ("850", "-12"), and one of them. */
+  integers: number;
+  integerExample: string;
+  /** Sum and count of log10 |value| over the non-zero whole numbers and
+   *  over the ambiguous dot cells read with a decimal point ("1.250" is
+   *  1.25). Their means compare the sizes of the two groups. */
+  intLogSum: number;
+  intLogCount: number;
+  dotLogSum: number;
+  dotLogCount: number;
 }
+
+const INTEGER_RE = /^[+\-\u2212]?\d+$/;
 
 /** Scan column `col` of `rows` for decimal-mark evidence (text cells only;
  *  workbook numbers carry no mark). */
 export function scanDecimalMarks(rows: ArrayLike<ArrayLike<unknown>>, col: number): ColumnScan {
-  const out: ColumnScan = { point: 0, comma: 0, ambiguous: 0, ambiguousComma: 0, ambiguousExample: '' };
+  const out: ColumnScan = { point: 0, comma: 0, ambiguous: 0, ambiguousComma: 0, ambiguousExample: '', integers: 0, integerExample: '',
+    intLogSum: 0, intLogCount: 0, dotLogSum: 0, dotLogCount: 0 };
   for (let i = 0; i < rows.length; i++) {
     const cell = rows[i][col];
     if (typeof cell !== 'string') continue;
     const t = cell.trim();
     if (BASE_TOKENS.has(t.toLowerCase())) continue;
+    if (INTEGER_RE.test(t)) {
+      if (!out.integers++) out.integerExample = t;
+      const v = Math.abs(readBoth(t)[0]);
+      if (v > 0) { out.intLogSum += Math.log10(v); out.intLogCount++; }
+      continue;
+    }
     const [p, c] = readBoth(t);
     const pn = Number.isNaN(p), cn = Number.isNaN(c);
     if (pn && cn) continue;
@@ -124,10 +143,28 @@ export function scanDecimalMarks(rows: ArrayLike<ArrayLike<unknown>>, col: numbe
     else if (cn) out.point++;
     else if (p !== c) {
       if (!out.ambiguous++) out.ambiguousExample = t;
-      if (t.indexOf(',') >= 0 && !out.ambiguousComma++) out.ambiguousExample = t;
+      if (t.indexOf(',') >= 0) { if (!out.ambiguousComma++) out.ambiguousExample = t; }
+      else if (p !== 0) { out.dotLogSum += Math.log10(Math.abs(p)); out.dotLogCount++; }
     }
   }
   return out;
+}
+
+/**
+ * Do the whole numbers of a column match its dot cells read with the dot
+ * as a thousands separator ("850" next to "1.000", "1.250": 1000, 1250)
+ * rather than as a decimal point (1, 1.25)? A time series does not jump
+ * by a factor of 1000 between neighbouring kinds of cells, so the reading
+ * that puts the two groups closer in size is the likely one. The grouped
+ * reading is the point reading times 1000 (three orders of magnitude), so
+ * the grouped reading is closer when the whole numbers are on average more
+ * than 10^1.5 (about 32) times the point reading. A stray small whole
+ * number among fixed three-decimal values ("-2" next to "4.873") does not
+ * match.
+ */
+export function integersSuggestGrouping(own: ColumnScan): boolean {
+  if (!own.intLogCount || !own.dotLogCount) return false;
+  return own.intLogSum / own.intLogCount > own.dotLogSum / own.dotLogCount + 1.5;
 }
 
 /**
@@ -144,19 +181,32 @@ export function detectCommaDecimal(rows: ArrayLike<ArrayLike<unknown>>, col: num
 /**
  * Decide how a column's ambiguous cells are read, or null when nothing
  * decides it and the user must choose.
- *  - 'point' / 'comma' (the user's choice) always decide.
- *  - 'auto': the column's own unambiguous cells decide when they all point
- *    one way (null when they contradict each other); otherwise the other
- *    value columns of the file decide when theirs all point one way;
- *    otherwise a column whose ambiguous cells all lack a comma ("5.123")
- *    keeps the decimal point, the anglophone default, and a column with an
- *    ambiguous comma ("12,345") gets null: a comma is never guessed to be
- *    a thousands mark, which would make the value 1000 times too large.
+ *  - The column's own unambiguous cells decide when they all point one way
+ *    (null when they contradict each other).
+ *  - Otherwise the other value columns of the file decide when theirs all
+ *    point one way.
+ *  - Otherwise a column with an ambiguous comma ("12,345") gets null: a
+ *    comma is never guessed to be a thousands mark, which would make the
+ *    value 1000 times too large.
+ *  - Otherwise only dot cells such as "1.000" or "5.123" are ambiguous. They
+ *    get null when the column also has whole numbers of the size that the
+ *    grouped reading gives ("850" next to "1.000": integersSuggestGrouping)
+ *    or when the file has European cues (`european`: ";" between cells or
+ *    dd.mm.yyyy dates), because the point reading would then be 1000 times
+ *    too small (ingest-01). Else they keep the decimal point, the
+ *    anglophone default.
+ *  - `mark` ('point' / 'comma', the user's choice) answers only the columns
+ *    that the steps above leave at null. A column that is already decided
+ *    keeps its own reading.
  * A column with no ambiguous cell needs no decision and gets 'point' (a
  * no-op: every cell has one reading).
  */
-export function resolveDecimalMark(own: ColumnScan, others: ColumnScan[] | (() => ColumnScan[]), mark: DecimalMark = 'auto'): 'point' | 'comma' | null {
-  if (mark !== 'auto') return mark;
+export function resolveDecimalMark(own: ColumnScan, others: ColumnScan[] | (() => ColumnScan[]), mark: DecimalMark = 'auto', european = false): 'point' | 'comma' | null {
+  const auto = autoDecimalMark(own, others, european);
+  return auto === null && mark !== 'auto' ? mark : auto;
+}
+
+function autoDecimalMark(own: ColumnScan, others: ColumnScan[] | (() => ColumnScan[]), european: boolean): 'point' | 'comma' | null {
   if (own.ambiguous === 0) return 'point';
   if (own.comma > 0 && own.point === 0) return 'comma';
   if (own.point > 0 && own.comma === 0) return 'point';
@@ -165,7 +215,18 @@ export function resolveDecimalMark(own: ColumnScan, others: ColumnScan[] | (() =
   for (const s of typeof others === 'function' ? others() : others) { p += s.point; c += s.comma; }
   if (c > 0 && p === 0) return 'comma';
   if (p > 0 && c === 0) return 'point';
-  return own.ambiguousComma > 0 ? null : 'point';
+  if (own.ambiguousComma > 0) return null;
+  if (integersSuggestGrouping(own) || european) return null;
+  return 'point';
+}
+
+/** Why resolveDecimalMark left a column undecided, as a sentence for the
+ *  Data tab's question, or null for the general case ("nothing in the file
+ *  shows which is meant"). `europeanWhy` names the European cue. */
+export function undecidedReason(own: ColumnScan, europeanWhy: string | null): string | null {
+  if (own.ambiguousComma > 0 || own.point > 0 || own.comma > 0) return null;
+  if (integersSuggestGrouping(own)) return `The column also has whole numbers such as “${own.integerExample}”, which are near in size to the values with the dot as a thousands separator.`;
+  return europeanWhy;
 }
 
 export function parseValue(raw: string | number | null | undefined, opts: MissingOptions = {}): number {
@@ -189,7 +250,8 @@ export interface ColumnParse {
   /** Non-empty cells that are neither numbers nor missing tokens. */
   invalid: number;
   invalidExample: string;
-  /** Cells holding a missing-value token (MISSING_TOKENS), and which ones. */
+  /** Cells holding a missing-value token (MISSING_TOKENS), and every
+   *  distinct text among them, in order of first appearance (ingest-10). */
   tokens: number;
   tokenTexts: string[];
 }
@@ -198,6 +260,7 @@ export interface ColumnParse {
 export function parseColumn(cells: ArrayLike<unknown>, opts: MissingOptions = {}): ColumnParse {
   const values = new Array<number>(cells.length);
   const out: ColumnParse = { values, invalid: 0, invalidExample: '', tokens: 0, tokenTexts: [] };
+  const seen = new Set<string>();
   for (let i = 0; i < cells.length; i++) {
     const raw = cells[i];
     if (typeof raw === 'number') { values[i] = parseValue(raw, opts); continue; }
@@ -206,7 +269,7 @@ export function parseColumn(cells: ArrayLike<unknown>, opts: MissingOptions = {}
     if (BASE_TOKENS.has(s.toLowerCase())) {
       values[i] = NaN;
       out.tokens++;
-      if (out.tokenTexts.length < 3 && !out.tokenTexts.includes(s)) out.tokenTexts.push(s);
+      if (!seen.has(s)) { seen.add(s); out.tokenTexts.push(s); }
       continue;
     }
     const v = parseNumericCell(s, opts.commaDecimal === true);

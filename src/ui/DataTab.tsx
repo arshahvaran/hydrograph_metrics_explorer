@@ -37,6 +37,9 @@ export function DataTab() {
   const [dateFormat, setDateFormat] = useState<DateFormat>('auto');
   const [unit, setUnit] = useState<UnitId>('m3s');
   const [unitNote, setUnitNote] = useState<string | null>(null);
+  // True once the user picks a Discharge unit: role changes then no longer
+  // set the unit from the headers.
+  const [unitPicked, setUnitPicked] = useState(false);
   const [decimalMark, setDecimalMark] = useState<DecimalMark>('auto');
   const [missingValue, setMissingValue] = useState('');
   const [name, setName] = useState('My dataset');
@@ -70,10 +73,24 @@ export function DataTab() {
     setError(null);
     // The unit and the decimal mark describe one file: a new file starts
     // from its own headers and from auto, never from the previous file.
-    const u = unitFromHeader(t.header);
+    setUnitPicked(false);
+    unitFromRoles(t.header, rolesOverride);
+    setDecimalMark('auto');
+  }
+
+  /** Set the Discharge unit from the headers of the Observed and Simulated
+   *  columns; before any of them is mapped, from every column (ingest-08). */
+  function unitFromRoles(header: string[], r: ColumnRole[] | undefined) {
+    const flow = (r ?? []).map((x, j) => (x === 'observed' || x === 'run' ? j : -1)).filter(j => j >= 0);
+    const u = unitFromHeader(header, flow.length ? flow : undefined);
     setUnit(u.unit ?? 'm3s');
     setUnitNote(u.note);
-    setDecimalMark('auto');
+  }
+
+  function changeRole(j: number, role: ColumnRole) {
+    const next = roles.map((r, k) => (k === j ? role : r));
+    setRoles(next);
+    if (table && !unitPicked) unitFromRoles(table.header, next);
   }
 
   async function onSample(file: string, label: string) {
@@ -190,7 +207,7 @@ export function DataTab() {
               </select>
             </label>
             <label>Discharge unit{' '}
-              <select aria-label="Discharge unit" value={unit} onChange={e => setUnit(e.target.value as UnitId)}>
+              <select aria-label="Discharge unit" value={unit} onChange={e => { setUnit(e.target.value as UnitId); setUnitPicked(true); }}>
                 {UNIT_CHOICES.map(id => <option key={id} value={id}>{UNITS[id].label}</option>)}
               </select>
             </label>
@@ -207,6 +224,7 @@ export function DataTab() {
             </label>
           </div>
           {unitNote && <p className="muted" role="status">{unitNote}</p>}
+          {decimalMark !== 'auto' && <p className="muted">The Decimal mark choice applies only to the columns that the tool asks about. The other columns keep the mark found in the file.</p>}
           <div className="mapscroll">
             <table className="grid">
               <thead>
@@ -215,7 +233,7 @@ export function DataTab() {
                     <input className="colname" aria-label={`Name of column ${j + 1}`}
                       value={colNames[j] ?? ''} placeholder={`col ${j + 1}`}
                       onChange={e => setColNames(cn => cn.map((x, k) => (k === j ? e.target.value : x)))} />
-                    <select aria-label={`Role for column ${table.header[j] || j + 1}`} value={roles[j]} onChange={e => setRoles(roles.map((r, k) => (k === j ? e.target.value as ColumnRole : r)))}>
+                    <select aria-label={`Role for column ${table.header[j] || j + 1}`} value={roles[j]} onChange={e => changeRole(j, e.target.value as ColumnRole)}>
                       {ROLE_OPTIONS.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                     </select>
                   </th>

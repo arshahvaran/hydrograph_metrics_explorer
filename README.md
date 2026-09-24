@@ -99,12 +99,21 @@ cells and the texts NA, NaN, null, n/a, -, --, ---, none and missing are read as
 any other no-data value (e.g. -999) is declared in the "Missing value" box, and cells that
 are not numbers are counted and reported. The decimal mark is decided per column (a decimal
 comma or point, with thousands grouping by dot, comma, space or apostrophe); when a column
-could be read either way, such as 12,345, the Data tab asks. Date-times with a UTC offset
-are converted to UTC, and spreadsheet date-times are read as written, without a time-zone
-conversion. Supported units include m³/s, ft³/s, L/s, m³/day, ML/day, MGD, ac-ft/day, and
-depth (mm per time step, in per day) with a catchment area; a unit in square brackets in
-the column headers, such as `obs [ft³/s]`, sets the unit at import. Everything runs inside
-one browser tab, so inputs are bounded: delimited files up to 200 MB, workbooks up to
+could be read either way, such as 12,345, the Data tab asks. It also asks about a dot
+before three digits, such as 1.000, when the column also holds whole numbers of the size
+that a thousands separator gives (850 next to 1.000) or the file uses ";" between cells or
+dd.mm.yyyy dates. The Decimal mark answer applies only to the
+columns that the tab asks about. A stray double quote that would merge rows into one cell
+stops the load with the line numbers. Date-times with a UTC offset are converted to UTC, and
+spreadsheet date-times are read as written, without a time-zone conversion, to the whole
+second (to the millisecond when the cell format shows fractions of a second). Text saved
+under a workbook name, such as an HTML table or a CSV file named .xls, is read as text, so
+the tool, not the spreadsheet reader, decides its decimal mark. Supported units include
+m³/s, ft³/s, L/s, m³/day, ML/day, MGD, ac-ft/day, and depth (mm per time step, in per
+day) with a catchment area; a unit in square brackets in the column headers, such as `obs [ft³/s]`, sets the unit at
+import. Once the roles are mapped, only the Observed and Simulated headers count, and a
+unit the tool does not know gives a note. Everything runs inside one browser tab, so
+inputs are bounded: delimited files up to 200 MB, workbooks up to
 25 MB, project files up to 100 MB, tables up to 1,000,000 rows,
 100 columns and 30 million cells, and up to 60 simulated columns per dataset. Tables above
 250,000 rows ask for confirmation before loading and are plotted at reduced resolution
