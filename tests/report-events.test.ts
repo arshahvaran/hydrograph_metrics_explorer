@@ -42,14 +42,14 @@ describe('eventTableRows', () => {
       meanAbsPeakLag: 2, medianPeakLag: 2, meanVolumeErrPct: 5, meanPeakErrPct: -10,
       events: [{
         obs: { start: 5, end: 9, peakIdx: 7, peakQ: 10 },
-        peakLag: 2, peakMagErrPct: -10, volumeErrPct: 5,
+        peakLag: 2, peakMagErrPct: -10, volumeErrPct: 5, matched: true,
       }],
     };
     const frame = { dates } as any;
     const ds = { dates } as any;
     const rows = eventTableRows(ev, frame, ds);
     expect(rows).toEqual([[
-      '1', '2001-01-06', fmtNum(10, 2), fmtNum(9, 2), fmtNum(2, 1), fmtNum(5, 1),
+      '1', '2001-01-06', fmtNum(10, 2), fmtNum(9, 2), fmtNum(2, 1), fmtNum(5, 1), 'hit',
     ]]);
   });
 
@@ -57,7 +57,7 @@ describe('eventTableRows', () => {
     const ev: EventReport = {
       threshold: 8, hits: 0, misses: 1, falseAlarms: 0, threat: 0,
       meanAbsPeakLag: NaN, medianPeakLag: NaN, meanVolumeErrPct: NaN, meanPeakErrPct: NaN,
-      events: [{ obs: { start: 99, end: 100, peakIdx: 99, peakQ: 1 }, peakLag: NaN, peakMagErrPct: NaN, volumeErrPct: NaN }],
+      events: [{ obs: { start: 99, end: 100, peakIdx: 99, peakQ: 1 }, peakLag: NaN, peakMagErrPct: NaN, volumeErrPct: NaN, matched: false }],
     };
     const short = { dates: [Date.UTC(2001, 0, 1)] } as any;
     const rows = eventTableRows(ev, short, short);

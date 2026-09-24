@@ -6,7 +6,7 @@ import { useApp } from '../store/store'
 import { PlotHost } from './PlotHost'
 import { NumField } from './NumField'
 import { useRunOutputs, useComputeError, frameFor } from './compute'
-import { csvLine, download, fmtDate, fmtNum } from './format'
+import { csvLine, download, fmtNum, fmtStamp } from './format'
 import { byId } from '../metrics/registry'
 
 /** Exactly the timing block of the Metrics tab's essentials preset (13). */
@@ -118,16 +118,17 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
   const evRun = runs[Math.min(eventRunIdx, runs.length - 1)];
   // Event indices live in the NaN-compacted paired arrays; pairedIndex maps
   // them back to dataset rows (a gap before an event once shifted every date
-  // in this table by the number of missing values ahead of it).
+  // in this table by the number of missing values ahead of it). Sub-daily
+  // records keep the time of day, so events on one day stay distinct.
   const rowOf = (i: number) => evOut.pairedIndex?.[i] ?? i;
-  const dayAt = (i: number) => { const ms = ds.dates[rowOf(i)]; return Number.isFinite(ms) ? fmtDate(ms) : 'n/a'; };
+  const dayAt = (i: number) => { const ms = ds.dates[rowOf(i)]; return Number.isFinite(ms) ? fmtStamp(ms, frame.step.ms) : 'n/a'; };
   const n = ds.dates.length;
   const events = evOut.extras.events?.events ?? [];
 
   return (
     <div>
       <section className="card">
-        <h2>Timing &amp; shape configuration <span className="muted">(applies to every timing metric, live)</span></h2>
+        <h2>Timing &amp; shape configuration <span className="muted">(live; hover a setting to see which metrics use it)</span></h2>
         <label className="cfgdefault"><span className="switch"><input type="checkbox" checked={useDefaults} onChange={e => {
           const on = e.target.checked;
           setUseDefaults(on);
@@ -145,13 +146,15 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
               max={t.eventThreshold.kind === 'percentile' ? TIMING_RANGES.eventPercentile[1] : Number.MAX_VALUE}
               onCommit={v => updateTiming({ eventThreshold: { ...t.eventThreshold, value: v } })} />
           </label>
-          <label>Min event gap <NumField value={t.eventMinDistance} min={TIMING_RANGES.eventMinDistance[0]} max={TIMING_RANGES.eventMinDistance[1]} integer unit="steps" style={{ width: '4em' }}
+          <label title="Threshold events closer than this are merged (event metrics and Series Distance)">Min event gap <NumField value={t.eventMinDistance} min={TIMING_RANGES.eventMinDistance[0]} max={TIMING_RANGES.eventMinDistance[1]} integer unit="steps" style={{ width: '4em' }}
             label="Min event gap" onClamp={setClampNote} onCommit={v => updateTiming({ eventMinDistance: v })} /> steps</label>
-          <label>Warm-up <NumField value={t.eventWarmup} min={0} max={Math.max(0, n - 2)} integer unit="steps" style={{ width: '4.5em' }}
-            label="Warm-up" onClamp={setClampNote} onCommit={v => updateTiming({ eventWarmup: v })} /> steps</label>
-          <label>Peak window ± <NumField value={t.peakMatchTolerance} min={TIMING_RANGES.peakMatchTolerance[0]} max={TIMING_RANGES.peakMatchTolerance[1]} integer unit="steps" style={{ width: '4em' }}
+          <label title="Steps skipped at the start of the record before event detection. Applies to the event metrics and Series Distance only; to leave a spin-up period out of every metric, set a Custom window on the Plots tab and click Use this data">Event warm-up <NumField value={t.eventWarmup} min={0} max={Math.max(0, n - 2)} integer unit="steps" style={{ width: '4.5em' }}
+            label="Event warm-up" onClamp={setClampNote} onCommit={v => updateTiming({ eventWarmup: v })} /> steps</label>
+          <label title="Half-width of the search window on each side of an observed peak or event (peak timing, event metrics, Series Distance). Default after Gauch et al. (2021): ±12 h for sub-daily data, ±3 steps for daily data">Peak window ± <NumField value={t.peakMatchTolerance} min={TIMING_RANGES.peakMatchTolerance[0]} max={TIMING_RANGES.peakMatchTolerance[1]} integer unit="steps" style={{ width: '4em' }}
             label="Peak window" onClamp={setClampNote} onCommit={v => updateTiming({ peakMatchTolerance: v })} /> steps</label>
-          <label title="Peaks must rise this far above surroundings; auto = σ of observed">Prominence{' '}
+          <label title="Minimum distance between the observed peaks used by peak timing; Gauch et al. (2021) use 100 steps">Peak separation <NumField value={t.peakMinDistance} min={TIMING_RANGES.peakMinDistance[0]} max={TIMING_RANGES.peakMinDistance[1]} integer unit="steps" style={{ width: '4.5em' }}
+            label="Peak separation" onClamp={setClampNote} onCommit={v => updateTiming({ peakMinDistance: v })} /> steps</label>
+          <label title="Peaks must rise this far above surroundings (peak timing); auto = σ of observed">Prominence{' '}
             <select value={t.peakProminence === 'auto' ? 'auto' : 'custom'}
               onChange={e => updateTiming({ peakProminence: e.target.value === 'auto' ? 'auto' : 0 })}>
               <option value="auto">auto (σ obs)</option><option value="custom">custom</option>
@@ -169,7 +172,7 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
 
       <section className="card">
         <h2>Timing summary <span className="muted">(lags in steps of {stepLabel})</span></h2>
-        {outputs.flatMap(o => o.notes).filter((v, i, a) => a.indexOf(v) === i && /transform|flat|resolvable/.test(v)).map(nn => <div key={nn} className="warning">{nn}</div>)}
+        {outputs.flatMap(o => o.notes).filter((v, i, a) => a.indexOf(v) === i && /transform|flat|resolv|skipped|sweep/.test(v)).map(nn => <div key={nn} className="warning">{nn}</div>)}
         <div className="mapscroll"><table className="grid" aria-label="Timing summary per simulation">
           <thead><tr><th>Metric</th><th>Optimum</th>{runs.map(r => <th key={r.id} style={{ color: r.color }}>{r.name}</th>)}</tr></thead>
           <tbody>
@@ -248,21 +251,23 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
           </select>{' '}
           <span className="muted">threshold {fmtNum(evOut.extras.events?.threshold, 2)} {UNITS[ds.targetUnit].label} · tolerance ±{t.peakMatchTolerance} steps</span>{' '}
           <button onClick={() => {
-            const rows = [csvLine(['event', 'window_start', 'window_end', `obs_peak_${ds.targetUnit}`, 'peak_lag_steps', 'peak_mag_err_pct', 'volume_err_pct'])];
+            const rows = [csvLine(['event', 'window_start', 'window_end', `obs_peak_${ds.targetUnit}`, 'matched', 'peak_lag_steps', 'peak_mag_err_pct', 'volume_err_pct'])];
             events.forEach((e, i) => rows.push(csvLine([i + 1,
               dayAt(e.obs.start), dayAt(e.obs.end),
-              e.obs.peakQ, Number.isFinite(e.peakLag) ? e.peakLag : 'n/a', e.peakMagErrPct, e.volumeErrPct])));
+              e.obs.peakQ, e.matched ? 'hit' : 'miss', Number.isFinite(e.peakLag) ? e.peakLag : 'n/a',
+              Number.isFinite(e.peakMagErrPct) ? e.peakMagErrPct : 'n/a', e.volumeErrPct])));
             download(`${ds.name.replace(/[^\w-]+/g, '_')}_events_${evRun.name.replace(/[^\w-]+/g, '_')}.csv`, rows.join('\n'), 'text/csv');
           }}>Export CSV</button>
         </h2>
         <div className="mapscroll"><table className="grid" aria-label="Detected events and per-event errors">
-          <thead><tr><th>#</th><th>window</th><th>obs peak [{UNITS[ds.targetUnit].label}]</th><th>peak lag</th><th>peak mag err %</th><th>volume err %</th></tr></thead>
+          <thead><tr><th>#</th><th>window</th><th>obs peak [{UNITS[ds.targetUnit].label}]</th><th title="hit: a simulated event overlaps this observed event; miss: none does. The summary means use hits only.">matched</th><th>peak lag</th><th>peak mag err %</th><th>volume err %</th></tr></thead>
           <tbody>
             {events.slice(0, 40).map((e, i) => (
               <tr key={i}>
                 <td>{i + 1}</td>
                 <td>{dayAt(e.obs.start)} → {dayAt(e.obs.end)}</td>
                 <td>{fmtNum(e.obs.peakQ, 2)}</td>
+                <td>{e.matched ? 'hit' : 'miss'}</td>
                 <td>{lagText(e.peakLag)}</td>
                 <td>{fmtNum(e.peakMagErrPct, 1)}</td>
                 <td>{fmtNum(e.volumeErrPct, 1)}</td>

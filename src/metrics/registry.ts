@@ -7,6 +7,7 @@ import { peakTiming, eventErrors, lagSweep, type EventOptions } from './timing/e
 import { dtw, wasserstein1, wasserstein2sq } from './timing/dtwWasserstein'
 import { diagnosticEfficiency, seriesDistance } from './timing/deSd'
 import { xwtLag } from './timing/xwt'
+import { timePositions } from './timing/timeAxis'
 import type { TimingConfig } from '../types'
 
 export type Direction = 'max' | 'min' | 'zero' | 'one';
@@ -85,13 +86,13 @@ export const REGISTRY: MetricMeta[] = [
   M({ id: 'fmm', label: '%BiasFMM (median)', group: 'FDC signatures', optimum: '0', direction: 'zero', range: '(−∞,∞)', timing: false, unitful: false, digits: 2, blurb: 'Median-flow bias in log space.', equation: '100\\,\\frac{\\ln\\tilde{S}-\\ln\\tilde{O}}{\\ln\\tilde{O}}' }),
 
   // ----- timing & shape -----
-  M({ id: 'peak_lag_abs', label: 'Peak timing |lag|', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'Mean |lag| of matched hydrograph peaks (Gauch et al., 2021). Directly answers "how late are my floods?"; invisible to NSE/KGE.', equation: '\\frac{1}{P}\\sum_{p=1}^{P}\\big|t^{S}_{p}-t^{O}_{p}\\big|' }),
+  M({ id: 'peak_lag_abs', label: 'Peak timing |lag|', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'Mean |lag| of matched hydrograph peaks (Gauch et al., 2021): observed peaks with prominence above σ of the observed flow and at least the peak separation apart (Gauch: 100 steps), each matched to the largest simulated value within ±the peak window. Directly answers "how late are my floods?"; invisible to NSE/KGE.', equation: '\\frac{1}{P}\\sum_{p=1}^{P}\\big|t^{S}_{p}-t^{O}_{p}\\big|' }),
   M({ id: 'peak_lag_signed', label: 'Peak timing bias', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'Mean signed peak lag; + = simulated peaks late. Cancels mixed early/late errors; read with |lag|.', equation: '\\frac{1}{P}\\sum_{p}\\big(t^{S}_{p}-t^{O}_{p}\\big)' }),
   M({ id: 'event_threat', label: 'Event occurrence (threat)', group: 'Timing & shape', optimum: '1', direction: 'max', range: '[0,1]', timing: true, unitful: false, digits: 3, blurb: 'Hits/(hits+misses+false alarms) of threshold events; did the model produce the flood at all?', equation: '\\frac{\\text{hits}}{\\text{hits}+\\text{misses}+\\text{false}}' }),
-  M({ id: 'event_peak', label: 'Event peak err %', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞)', timing: true, unitful: false, digits: 1, blurb: 'Mean signed peak-height error over matched events; the per-event peak component of Table 2.', equation: '\\overline{100\\,(S_{pk}-O_{pk})/O_{pk}}' }),
-  M({ id: 'event_vol', label: 'Event volume err %', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞)', timing: true, unitful: false, digits: 2, blurb: 'Mean per-event volume error over observed event windows.', equation: '\\overline{100\\,(V_S-V_O)/V_O}\\ \\text{per event}' }),
-  M({ id: 'event_lag', label: 'Event peak lag (median)', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'Median per-event peak lag; + = late.', equation: '\\operatorname{med}_e\\big(t^{S}_{e}-t^{O}_{e}\\big)' }),
-  M({ id: 'lag_best', label: 'Lag at best fit', group: 'Timing & shape', optimum: '0', direction: 'zero', range: 'steps', timing: true, unitful: false, digits: 0, blurb: 'Shift that maximises NSE in the lag sweep; the record-wide timing offset a synchronous metric never reports.', equation: '\\arg\\max_{L}\\ \\mathrm{NSE}\\big(O_t,\\,S_{t+L}\\big)' }),
+  M({ id: 'event_peak', label: 'Event peak err %', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞)', timing: true, unitful: false, digits: 1, blurb: 'Mean signed peak-height error over matched events (misses and unresolved peaks left out); the per-event peak component of Table 2.', equation: '\\overline{100\\,(S_{pk}-O_{pk})/O_{pk}}' }),
+  M({ id: 'event_vol', label: 'Event volume err %', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞)', timing: true, unitful: false, digits: 2, blurb: 'Mean per-event volume error over the windows of matched observed events; + = over-estimation.', equation: '\\overline{100\\,(V_S-V_O)/V_O}\\ \\text{per event}' }),
+  M({ id: 'event_lag', label: 'Event peak lag (median)', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'Median peak lag over matched events (unresolved peaks left out); + = late.', equation: '\\operatorname{med}_e\\big(t^{S}_{e}-t^{O}_{e}\\big)' }),
+  M({ id: 'lag_best', label: 'Lag at best fit', group: 'Timing & shape', optimum: '0', direction: 'zero', range: 'steps', timing: true, unitful: false, digits: 0, blurb: 'Shift that maximises NSE in the lag sweep over ±30 steps (n/a when the maximum lies beyond that range); the record-wide timing offset a synchronous metric never reports.', equation: '\\arg\\max_{L\\in[-30,\\,30]}\\ \\mathrm{NSE}\\big(O_t,\\,S_{t+L}\\big)' }),
   M({ id: 'de', label: 'DE (diagnostic eff.)', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞)', timing: true, unitful: false, digits: 3, blurb: 'Schwemmle et al. (2021): √(constant² + dynamic² + (r−1)²); decomposes into the polar plot on the Timing tab. Needs perennial flow. Not shift-tolerant: its timing term is the linear correlation r, which responds to a lag without quantifying it.', equation: '\\sqrt{\\bar{B}_{rel}^{\\,2}+|B_{area}|^2+(r-1)^2}' }),
   M({ id: 'de_const', label: 'DE constant (B̄rel)', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞)', timing: true, unitful: false, digits: 3, blurb: 'Mean relative FDC bias; the constant error share. Built from the flow-duration curve, so blind to timing.', equation: '\\bar{B}_{rel}=\\overline{(S^{FDC}-O^{FDC})/O^{FDC}}' }),
   M({ id: 'de_dyn', label: 'DE dynamic (|B|area)', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞)', timing: true, unitful: false, digits: 3, blurb: 'Area of residual FDC bias; high-vs-low-flow error trade. Built from the flow-duration curve, so blind to timing.', equation: '\\int_0^1\\big|B_{rel}(i)-\\bar{B}_{rel}\\big|\\,di' }),
@@ -192,8 +193,14 @@ export function classicalValues(o: Float64Array, s: Float64Array): {
   return { values, kge: { kge2009: k09, kge2012: k12, kge2021: k21, kgenp: knp } };
 }
 
+/** Half-width of the lag sweep, in time steps. */
+export const LAG_SWEEP_RANGE = 30;
+
 export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>, ctx: ComputeContext): ComputeOutput {
   const paired0 = applyNanPolicy(obsRaw, simRaw, ctx.nanPolicy);
+  // Time-step position of every row (D1): the row number, or the step count
+  // from the dates when rows are absent from the file.
+  const rowPos = timePositions(ctx.datesMs, Math.min(obsRaw.length, simRaw.length));
   const tr = C.applyTransform(paired0.obs, paired0.sim, ctx.transform);
   const notes: string[] = tr.note ? [tr.note] : [];
   const heavy = ctx.heavy !== false;
@@ -240,15 +247,20 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
     // measures (an absolute threshold of 30 m3/s, a peak height): they run on
     // the untransformed flows of the same surviving pairs. Under a transform
     // the threshold once met log flows near 3 and every event vanished; the
-    // shape measures below (DTW, Wasserstein, XWT, DE, sweep) keep the
-    // transform, which is a legitimate weighting choice for them.
+    // shape measures below (DTW, Wasserstein, XWT, DE) keep the transform,
+    // which is a legitimate weighting choice for them. The lag sweep runs on
+    // untransformed flows (audit rule D2).
     const ro = raw.obs, rs = raw.sim;
-    // QA-011: peak separation must follow the configured event spacing, not a
-    // hardcoded 100 steps (which silently suppressed real peaks in daily data).
-    const peaks = peakTiming(ro, rs, { prominence: t.peakProminence, minDistance: t.eventMinDistance, window: t.peakMatchTolerance });
-    const events = eventErrors(ro, rs, evOpt, t.peakMatchTolerance);
+    // D1: peak and event lags, windows, separations and spans count time steps
+    // of the record (rowPos of each surviving pair), not positions in the
+    // compacted pair arrays, so a gap is never counted as one step.
+    const pos = raw.index.map(i => rowPos[i]);
+    // Peak separation is its own setting (Gauch et al., 2021: 100 steps); the
+    // event gap only merges threshold events.
+    const peaks = peakTiming(ro, rs, { prominence: t.peakProminence, minDistance: t.peakMinDistance, window: t.peakMatchTolerance }, pos);
+    const events = eventErrors(ro, rs, evOpt, t.peakMatchTolerance, pos);
     const sd = seriesDistance(ro, rs, evOpt, t.peakMatchTolerance);
-    if (ctx.transform !== 'none') notes.push(`Event, peak-timing and Series Distance metrics are computed on untransformed flows; the ${ctx.transform} transform applies to the other metrics.`);
+    if (ctx.transform !== 'none') notes.push(`Event, peak-timing, Series Distance and lag-sweep metrics are computed on untransformed flows; the ${ctx.transform} transform applies to the other metrics.`);
     // DTW guard for very long series: decimate to keep the DP tractable
     let dtwRes; let dtwDecim = 1;
     if (o.length > 6000) {
@@ -262,10 +274,24 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
       dtwRes = dtw(o, s, t.dtwBandFraction);
     }
     const xw = xwtLag(o, s);
-    const sweep = lagSweep(o, s, -30, 30);
+    // The sweep pairs obs at step p with sim at step p + L on the record's own
+    // time axis, dropping a pair only when either value is missing at that lag
+    // (not every step that was missing at lag 0), on untransformed flows (D2).
+    const sweep = ctx.nanPolicy === 'pairwise'
+      ? lagSweep(obsRaw, simRaw, -LAG_SWEEP_RANGE, LAG_SWEEP_RANGE, rowPos)
+      : lagSweep(paired0.obs, paired0.sim, -LAG_SWEEP_RANGE, LAG_SWEEP_RANGE, rowPos);
 
     if (peaks.unresolved > 0) {
       notes.push(`${peaks.unresolved} observed peak(s) had no resolvable simulated peak within ±${t.peakMatchTolerance} steps; those pairs are excluded from the peak-timing means. Widen the peak-match tolerance if lags may exceed it.`);
+    }
+    if ((peaks.skipped ?? 0) > 0) {
+      notes.push(`${peaks.skipped} observed peak(s) were skipped by peak timing because their ±${t.peakMatchTolerance}-step search window runs past the start or end of the record or spans missing values (as in the Gauch et al., 2021 reference code).`);
+    }
+    if ((events.unresolved ?? 0) > 0) {
+      notes.push(`${events.unresolved} event peak(s) could not be resolved: the simulated maximum sits on the edge of the ±${t.peakMatchTolerance}-step search window with the simulation still rising beyond it, or a peak sits next to missing values or the record edge. Their peak lag and peak error read n/a and are left out of the event means.`);
+    }
+    if (sweep.outOfRange) {
+      notes.push(`The NSE maximum of the lag sweep lies beyond the ±${LAG_SWEEP_RANGE}-step range, so the best-fit lag is not reported.`);
     }
     const flat = Math.max(peaks.flat ?? 0, events.flat ?? 0);
     if (flat > 0) {
