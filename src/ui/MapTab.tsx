@@ -66,7 +66,7 @@ export function MapTab() {
               mapRef.current?.setView([la, lo], Math.max(mapRef.current.getZoom(), 9));
             }
           }}>Set</button>
-          <span className="muted">…or just click the map.</span>
+          <span className="muted">…or just click the map. The basemap is loaded from OpenStreetMap, so its tile server sees the map area shown (not your data).</span>
         </div>
         <div className="controls">
           <label>Catchment area <input value={areaIn} onChange={e => setAreaIn(e.target.value)} style={{ width: '7em' }} /></label>

@@ -1,6 +1,6 @@
 {
  "meta": {
-  "generated_by": "gen_reference_vectors.py",
+  "generated_by": "generate_reference_vectors.py",
   "purpose": "Ground-truth values for HME classical-metric unit tests and C2M/KGEnp/DE cross-checks.",
   "libraries": {
    "HydroErr": {

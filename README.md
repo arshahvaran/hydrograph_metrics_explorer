@@ -25,7 +25,9 @@ computed too, although the review places it with the conventional metrics: its t
 term is a linear correlation, which responds to a lag without quantifying it.
 
 Everything (parsing, unit conversion, every metric, every plot, report generation) runs in
-your browser. **No data ever leaves the page**; there is no server, no database, no account.
+your browser. **No uploaded data ever leaves the page**; there is no server, no database, no
+account. The only outside requests are the Map tab's OpenStreetMap basemap tiles, which show
+the tile server the map area around the station.
 
 ## Contents
 
@@ -60,7 +62,8 @@ export; an analysis window, wrap-aware seasonal filter, and resampling; a Timing
 lag sweep, cross-wavelet curve, diagnostic-efficiency polar, and an event table.
 
 **Perturbation sandbox.** Shift, offset, scale, dampen, and seeded-noise perturbations with
-live metric readouts and presets, including a double-penalty demonstration.
+live readouts of a panel of conventional and shift-tolerant metrics (NSE, KGE, r, R², RMSE,
+PBIAS, W₁, W₂², DTW warp, peak lag, best-fit lag, XWT lag).
 
 **Comparison and reporting.** C2M-normalised multi-simulation ranking with user-weighted
 priority metrics and a recommended simulation; a station map with catchment area; DOCX and
@@ -79,7 +82,7 @@ To run locally:
 ```bash
 npm install
 npm run dev      # local dev server
-npm test         # vitest suite
+npm test         # production build, then the vitest suite (the privacy test scans dist/)
 npm run build    # typecheck + production build to dist/
 ```
 
