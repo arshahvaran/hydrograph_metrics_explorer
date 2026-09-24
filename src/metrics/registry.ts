@@ -261,7 +261,8 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
     } else {
       dtwRes = dtw(o, s, t.dtwBandFraction);
     }
-    const xw = xwtLag(o, s);
+    const xw = xwtLag(o, s, t.waveletScales);
+    if (xw.decimation > 1) notes.push(`Cross-wavelet analysis computed on a 1/${xw.decimation} block-mean of the record for tractability; its lags keep a resolution of about ${xw.decimation} steps.`);
     const sweep = lagSweep(o, s, -30, 30);
 
     if (peaks.unresolved > 0) {

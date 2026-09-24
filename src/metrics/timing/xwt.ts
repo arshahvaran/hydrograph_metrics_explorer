@@ -75,27 +75,37 @@ function ar1(x: Float64Array): number {
 }
 
 export interface XwtScaleRow {
-  scale: number;
-  period: number;              // steps
-  meanLag: number;             // power-weighted mean lag (steps) over significant, in-COI points
+  scale: number;               // native steps
+  period: number;              // native steps
+  meanLag: number;             // lag (native steps) from the circular power-weighted mean phase, unwrapped across scales
   fracSignificant: number;     // share of in-COI points above the 95 % red-noise level
+  /** |meanLag| > period/2: the phase alone cannot identify this lag; it was
+   *  placed on the branch nearest the next coarser scale's lag. */
+  beyondHalfPeriod: boolean;
 }
 
 export interface XwtResult {
-  headlineLag: number;         // power-weighted mean lag over all significant points (steps)
+  headlineLag: number;         // significant-power-weighted mean of the per-scale lags (native steps)
   headlineAbsLag: number;
   byScale: XwtScaleRow[];
   fracSignificant: number;
-  decimation: number;          // >1 if the series was decimated for tractability
+  decimation: number;          // >1 if the series was block-averaged for tractability
 }
 
 /**
  * Cross-wavelet phase lag. Positive lag = simulation late.
- * The cross spectrum W_os = W_o · conj(W_s) has phase φ = arg(W_os); with the
- * convention above, sim lagging obs by k gives φ < 0?: sign is fixed so that a
- * pure sim delay of k steps yields headlineLag ≈ +k (verified by unit test).
+ * The cross spectrum W_os = W_o · conj(W_s) has phase φ = arg(W_os); a pure
+ * simulation delay of k steps gives φ = +2πk/T at period T (pinned by tests).
+ *
+ * Phase is circular, so per scale the phases are averaged as unit vectors
+ * weighted by cross power (not as numbers, which collapses lags near ±T/2), and
+ * a phase only identifies a lag modulo the period T. Lags are therefore unwrapped
+ * from the coarsest significant scale to the finest: at each finer scale the
+ * 2π branch nearest the previous (coarser) lag is taken, so a shift longer than
+ * half of a fast period is not folded back toward zero or flipped in sign.
+ * `scalesIn` ('auto' or explicit scales in native steps) is the Timing-tab setting.
  */
-export function xwtLag(obsIn: Vec, simIn: Vec): XwtResult {
+export function xwtLag(obsIn: Vec, simIn: Vec, scalesIn: 'auto' | number[] = 'auto'): XwtResult {
   // tractability cap
   let obs = Float64Array.from(obsIn as ArrayLike<number>);
   let sim = Float64Array.from(simIn as ArrayLike<number>);
@@ -113,15 +123,24 @@ export function xwtLag(obsIn: Vec, simIn: Vec): XwtResult {
   }
   const n = obs.length;
 
-  // standardise
+  // standardise (means computed once: inside the map they cost O(n²))
   const so = stdPop(obs), ss = stdPop(sim);
-  const o = Float64Array.from(obs, v => (v - mean(obs)) / (so || 1));
-  const s = Float64Array.from(sim, v => (v - mean(sim)) / (ss || 1));
+  const mo = mean(obs), ms = mean(sim);
+  const o = Float64Array.from(obs, v => (v - mo) / (so || 1));
+  const s = Float64Array.from(sim, v => (v - ms) / (ss || 1));
 
-  // scales: s0 = 2 steps, dj = 0.25, up to n/4
-  const s0 = 2, dj = 0.25;
-  const J = Math.floor(Math.log2(n / (4 * s0)) / dj);
-  const scales = Array.from({ length: J + 1 }, (_, j) => s0 * Math.pow(2, j * dj));
+  // scales, in steps of the (possibly block-averaged) series: auto = s0 = 2,
+  // dj = 0.25, up to n/4; explicit scales arrive in native steps
+  let scales: number[];
+  if (Array.isArray(scalesIn) && scalesIn.length > 0) {
+    scales = [...new Set(scalesIn.map(v => v / decimation))]
+      .filter(v => Number.isFinite(v) && v >= 1 && v <= n / 2)
+      .sort((a, b) => a - b);
+  } else {
+    const s0 = 2, dj = 0.25;
+    const J = Math.floor(Math.log2(n / (4 * s0)) / dj);
+    scales = Array.from({ length: J + 1 }, (_, j) => s0 * Math.pow(2, j * dj));
+  }
 
   const Wo = cwt(o, scales);
   const Ws = cwt(s, scales);
@@ -133,14 +152,15 @@ export function xwtLag(obsIn: Vec, simIn: Vec): XwtResult {
     return (1 - a * a) / (1 + a * a - 2 * a * Math.cos(2 * Math.PI * f));
   };
 
-  const byScale: XwtScaleRow[] = [];
-  let sumW = 0, sumWLag = 0, sumWAbs = 0, sigCount = 0, coiCount = 0;
+  // per scale: significant cross power and its power-weighted circular mean phase
+  const perScale: { sc: number; period: number; power: number; phase: number; frac: number }[] = [];
+  let sigCount = 0, coiCount = 0;
 
   scales.forEach((sc, si) => {
     const period = sc * FOURIER_FACTOR;
     const sigLevel = (Z95 / 2) * Math.sqrt(redNoise(aO, period) * redNoise(aS, period));
     const coi = Math.SQRT2 * sc;
-    let wSum = 0, wLag = 0, sig = 0, inCoi = 0;
+    let wSum = 0, wCos = 0, wSin = 0, sig = 0, inCoi = 0;
     const wo = Wo[si], ws = Ws[si];
     for (let t = 0; t < n; t++) {
       if (Math.min(t, n - 1 - t) < coi) continue;   // outside the cone of influence
@@ -151,16 +171,37 @@ export function xwtLag(obsIn: Vec, simIn: Vec): XwtResult {
       const power = Math.hypot(xr, xi);
       if (power <= sigLevel) continue;
       sig++;
-      const phase = Math.atan2(xi, xr);
-      const lag = (phase / (2 * Math.PI)) * period;  // sim late ⇒ positive (test-pinned)
-      wSum += power; wLag += power * lag;
-      sumW += power; sumWLag += power * lag; sumWAbs += power * Math.abs(lag);
+      // power-weighted unit phasor: Σ power·(cos φ, sin φ) = Σ (xr, xi)
+      wSum += power; wCos += xr; wSin += xi;
     }
     coiCount += inCoi; sigCount += sig;
+    perScale.push({ sc, period, power: wSum, phase: wSum > 0 ? Math.atan2(wSin, wCos) : NaN, frac: inCoi > 0 ? sig / inCoi : 0 });
+  });
+
+  // unwrap from coarse to fine: the principal lag at period T is only known
+  // modulo T; take the branch nearest the last coarser significant lag
+  const lagOf = new Array<number>(perScale.length).fill(NaN);
+  let ref = NaN;
+  for (let k = perScale.length - 1; k >= 0; k--) {
+    const p = perScale[k];
+    if (!Number.isFinite(p.phase)) continue;
+    const principal = (p.phase / (2 * Math.PI)) * p.period;   // sim late ⇒ positive (test-pinned)
+    lagOf[k] = Number.isFinite(ref) ? principal + p.period * Math.round((ref - principal) / p.period) : principal;
+    ref = lagOf[k];
+  }
+
+  const byScale: XwtScaleRow[] = [];
+  let sumW = 0, sumWLag = 0, sumWAbs = 0;
+  perScale.forEach((p, k) => {
+    const lag = lagOf[k];
+    if (Number.isFinite(lag)) { sumW += p.power; sumWLag += p.power * lag; sumWAbs += p.power * Math.abs(lag); }
+    // reported in NATIVE steps: scale, period and lag are all multiplied back
+    // by the block size when the series was block-averaged
     byScale.push({
-      scale: sc, period,
-      meanLag: wSum > 0 ? wLag / wSum : NaN,
-      fracSignificant: inCoi > 0 ? sig / inCoi : 0,
+      scale: p.sc * decimation, period: p.period * decimation,
+      meanLag: lag * decimation,
+      fracSignificant: p.frac,
+      beyondHalfPeriod: Number.isFinite(lag) && Math.abs(lag) > p.period / 2,
     });
   });
 

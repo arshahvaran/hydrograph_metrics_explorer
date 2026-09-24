@@ -85,7 +85,8 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
 
   const xwtTraces = runs.map((r, i) => {
     const rows = outputs[i].extras.xwt?.byScale ?? [];
-    return { x: rows.map(x => x.meanLag), y: rows.map(x => x.period), name: r.name, type: 'scatter', mode: 'lines+markers', marker: { size: 5, color: r.color }, line: { color: r.color, width: 2 }, connectgaps: false };
+    // open markers: |lag| beyond half the period, placed by continuity with coarser scales
+    return { x: rows.map(x => x.meanLag), y: rows.map(x => x.period), name: r.name, type: 'scatter', mode: 'lines+markers', marker: { size: 5, color: r.color, symbol: rows.map(x => (x.beyondHalfPeriod ? 'circle-open' : 'circle')) }, line: { color: r.color, width: 2 }, connectgaps: false };
   });
 
   const polarR = runs.map((_r, i) => outputs[i].extras.de?.temporalR ?? NaN);
@@ -217,7 +218,7 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
             }}
             height={330}
           />
-          <p className="muted">Timing error by timescale: fast scales at the top, slow at the bottom. Gaps mean the two series share no significant common power at that scale.</p>
+          <p className="muted">Timing error by timescale: fast scales at the top, slow at the bottom. Gaps mean the two series share no significant common power at that scale. A phase fixes a lag only to within one period, so lags are carried from coarse to fine scales; open markers show lags longer than half their period, placed by that continuity.</p>
         </section>
 
         <section className="card">
