@@ -31,8 +31,8 @@ it('units-03/timing-sandbox-03/-04: prominence and sandbox offset/noise convert 
   expect(v.sandbox.offset).toBeCloseTo(1500, 9);
   expect(v.sandbox.noiseAmp).toBeCloseTo(800, 9);
   const after = computeForRun(ds(), ds().runs[0]).values;
-  // dtw_warp is unit-invariant only with the DTW tie rule of audit dtw-wass-05 (fix/dtw-wass); add it after the merge
-  for (const id of ['nse', 'kge2009', 'peak_lag_abs', 'peak_lag_signed', 'event_threat', 'w1']) {
+  // dtw_warp is unit-invariant thanks to the DTW tie rule of audit dtw-wass-05
+  for (const id of ['nse', 'kge2009', 'peak_lag_abs', 'peak_lag_signed', 'event_threat', 'w1', 'dtw_warp']) {
     if (Number.isFinite(before[id])) expect([id, after[id]]).toEqual([id, expect.closeTo(before[id], 9)]);
   }
 });
