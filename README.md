@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://arshahvaran.github.io/hydrograph_metrics_explorer/"><img src="https://img.shields.io/badge/Live%20app-arshahvaran.github.io-0b6e99" alt="Live app"></a>
-  <a href="https://github.com/arshahvaran/hydrograph_metrics_explorer/tags"><img src="https://img.shields.io/badge/version-1.14.1-informational" alt="Version"></a>
+  <a href="https://github.com/arshahvaran/hydrograph_metrics_explorer/tags"><img src="https://img.shields.io/badge/version-1.15-informational" alt="Version"></a>
   <a href="https://creativecommons.org/licenses/by-nc/4.0/"><img src="https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg" alt="CC BY-NC 4.0"></a>
 </p>
 
