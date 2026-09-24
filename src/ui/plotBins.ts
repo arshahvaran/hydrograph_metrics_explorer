@@ -5,31 +5,34 @@
 // values against the full-record dates once shifted every point as soon as a
 // window, season, or resample was active (v1.11 regression).
 //
-// Bins are CALENDAR days on a 366-day calendar: Jan 1 = 1, Feb 29 = 60,
-// Mar 1 = 61 and Dec 31 = 366 in every year. The ordinal day of year put
-// every leap-year date after February one bin later than the same date in
-// other years (and split each monthly-resampled month into two medians).
-// Each (year, calendar day) cell holds ONE value: the mean of the finite
-// samples stamped on that day, so sub-daily records are shown as daily means
-// (the last sample of the day once stood for the whole day, and a missing
-// last sample blanked it).
+// Bins are days of the 365-day calendar of the Season filter (calendarDoy in
+// src/metrics/subset.ts, the same function): Jan 1 = 1, Mar 1 = 60 and
+// Dec 31 = 365 in every year, and Feb 29 is pooled with Feb 28 (day 59).
+// The ordinal day of year put every leap-year date after February one bin
+// later than the same date in other years (and split each monthly-resampled
+// month into two medians). A 366-slot calendar (Mar 1 = 61) then left day 60
+// empty in three years of four (a false gap in every common-year spaghetti
+// line, an empty heatmap column, a one-year median on Feb 29) and numbered
+// days one higher than the Season fields after February.
+// Each (year, day) cell holds ONE value: the mean of the finite samples
+// stamped on that day (on Feb 28 and Feb 29 together in a leap year), so
+// sub-daily records are shown as daily means (the last sample of the day
+// once stood for the whole day, and a missing last sample blanked it).
 
-/** Days before each month on a leap-year calendar. */
-const DAYS_BEFORE_MONTH = [0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335];
+import { calendarDoy } from '../metrics/subset'
 
-/** Calendar day on a 366-day calendar (UTC): Feb 29 = 60, Mar 1 = 61 and
- *  Dec 31 = 366 in every year. */
-export function calendarDay(ms: number): number {
-  const d = new Date(ms);
-  return DAYS_BEFORE_MONTH[d.getUTCMonth()] + d.getUTCDate();
-}
+/** Days in the plotted year (the 365-day calendar of calendarDoy). */
+export const DOY_SLOTS = 365;
+
+/** First day of each month on that calendar (1 Jan = 1, 1 Feb = 32, 1 Mar = 60, ...). */
+export const MONTH_START_DOYS: number[] = Array.from({ length: 12 }, (_, m) => calendarDoy(Date.UTC(2001, m, 1)));
 
 /** True when the frame has more than one sample per calendar day. */
 export function isSubDaily(stepMs: number): boolean {
   return stepMs > 0 && stepMs < 86_400_000;
 }
 
-/** One 366-slot row per UTC year; cell [calendarDay - 1] holds the mean of the
+/** One 365-slot row per UTC year; cell [calendarDoy - 1] holds the mean of the
  *  finite values stamped on that day (null when there are none). */
 export function binByYear(datesMs: ArrayLike<number>, y: ArrayLike<number | null>): Map<number, (number | null)[]> {
   const acc = new Map<number, { sum: Float64Array; count: Int32Array }>();
@@ -38,9 +41,9 @@ export function binByYear(datesMs: ArrayLike<number>, y: ArrayLike<number | null
     const v = y[i];
     const yr = new Date(datesMs[i]).getUTCFullYear();
     let a = acc.get(yr);
-    if (!a) { a = { sum: new Float64Array(366), count: new Int32Array(366) }; acc.set(yr, a); }
+    if (!a) { a = { sum: new Float64Array(DOY_SLOTS), count: new Int32Array(DOY_SLOTS) }; acc.set(yr, a); }
     if (v === null || v === undefined || !Number.isFinite(v)) continue;
-    const k = calendarDay(datesMs[i]) - 1;
+    const k = calendarDoy(datesMs[i]) - 1;
     a.sum[k] += v; a.count[k]++;
   }
   const byYear = new Map<number, (number | null)[]>();

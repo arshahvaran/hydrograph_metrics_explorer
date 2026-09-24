@@ -125,14 +125,18 @@ const titleText = (t: any): string | null => (typeof t === 'string' ? t : typeof
  *    after its colour-bar title.
  * The trace column is meta.csvName, else the trace name, else the point's
  * text label (the DE polar labels each point with its simulation).
- * Exported for tests.
+ * `columns` names the x, y and z columns where a plot's axes need saying
+ * (the day-of-year plots name their 365-day calendar); the default headers
+ * are x, y and z. Exported for tests.
  */
-export function tracesToCsv(traces: any[]): string {
+export interface CsvColumns { x?: string; y?: string; z?: string }
+
+export function tracesToCsv(traces: any[], columns: CsvColumns = {}): string {
   const kinds = traces.map(traceKind);
   const hasXY = kinds.some(k => k !== 'polar'), hasZ = kinds.includes('heatmap'), hasPolar = kinds.includes('polar');
   const colourTr = traces.find(tr => arr(tr.marker?.color) && traceKind(tr) !== 'heatmap');
   const colourCol = colourTr ? (titleText(colourTr.marker.colorbar?.title) ?? 'marker_color') : null;
-  const header = ['trace', ...(hasXY ? ['x', 'y'] : []), ...(hasZ ? ['z'] : []), ...(hasPolar ? ['r', 'theta_deg'] : []), ...(colourCol ? [colourCol] : [])];
+  const header = ['trace', ...(hasXY ? [columns.x ?? 'x', columns.y ?? 'y'] : []), ...(hasZ ? [columns.z ?? 'z'] : []), ...(hasPolar ? ['r', 'theta_deg'] : []), ...(colourCol ? [colourCol] : [])];
   const lines = [csvLine(header)];
   traces.forEach((tr, t) => {
     const kind = kinds[t];
@@ -169,7 +173,7 @@ export function tracesToCsv(traces: any[]): string {
   return lines.join('\n');
 }
 
-export function PlotHost({ traces, layout, height = 380, name = 'hme_plot', square = false }: { traces: any[]; layout: any; height?: number; name?: string; square?: boolean }) {
+export function PlotHost({ traces, layout, height = 380, name = 'hme_plot', square = false, csvColumns }: { traces: any[]; layout: any; height?: number; name?: string; square?: boolean; csvColumns?: CsvColumns }) {
   const ref = useRef<HTMLDivElement>(null);
   const theme = useApp(s => s.theme);
   // what Plotly draws: user text escaped (plotSafeTraces); the CSV uses the raw traces
@@ -208,7 +212,7 @@ export function PlotHost({ traces, layout, height = 380, name = 'hme_plot', squa
     a.href = url; a.download = `${name}.jpg`; a.click();
   };
   const dlCsv = () => {
-    const blob = new Blob([tracesToCsv(traces)], { type: 'text/csv' });
+    const blob = new Blob([tracesToCsv(traces, csvColumns)], { type: 'text/csv' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `${name}.csv`;

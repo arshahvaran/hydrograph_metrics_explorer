@@ -4,48 +4,52 @@
  *    the finite samples stamped on that day, so a sub-daily flood peak is
  *    kept in the daily mean and a missing last sample no longer blanks the
  *    day. binByDoy pools those daily values across years.
- *  - plots-06: bins use the calendar day on a 366-day calendar (Feb 29 = 60,
- *    Mar 1 = 61 in every year), so leap years do not shift every date after
- *    February by one bin.
+ *  - plots-06: bins use calendar days, so leap years do not shift every date
+ *    after February by one bin. Since the repair (plots-06-r1/r2) this is the
+ *    365-day calendar of the Season filter (calendarDoy: Mar 1 = 60 in every
+ *    year, Feb 29 pooled with Feb 28); see tests/plots-repair.test.ts.
  *  - plots-11: min/max display decimation keeps a break (null) wherever the
  *    record has missing values, even when the gap is shorter than a bucket.
  *  - plots-07 / plots-08: tracesToCsv writes heatmap cells (z) and polar
  *    points (r, theta, marker colour), not index pairs or a bare header.
  */
 import { describe, it, expect } from 'vitest'
-import { binByDoy, binByYear, calendarDay } from '../src/ui/plotBins'
+import { binByDoy, binByYear } from '../src/ui/plotBins'
+import { calendarDoy } from '../src/metrics/subset'
 import { decimateMinMax } from '../src/ui/decimate'
 import { tracesToCsv } from '../src/ui/PlotHost'
 
 const DAY = 86_400_000, HOUR = 3_600_000;
 
 describe('calendar-day bins (plots-06)', () => {
-  it('Mar 1 is 61 and Dec 31 is 366 in common and leap years alike', () => {
-    expect(calendarDay(Date.UTC(2001, 0, 1))).toBe(1);
-    expect(calendarDay(Date.UTC(2001, 1, 28))).toBe(59);
-    expect(calendarDay(Date.UTC(2004, 1, 29))).toBe(60);
-    expect(calendarDay(Date.UTC(2001, 2, 1))).toBe(61);
-    expect(calendarDay(Date.UTC(2004, 2, 1))).toBe(61);
-    expect(calendarDay(Date.UTC(2001, 11, 31))).toBe(366);
-    expect(calendarDay(Date.UTC(2004, 11, 31))).toBe(366);
+  it('Mar 1 is 60 and Dec 31 is 365 in common and leap years alike (365-day calendar)', () => {
+    expect(calendarDoy(Date.UTC(2001, 0, 1))).toBe(1);
+    expect(calendarDoy(Date.UTC(2001, 1, 28))).toBe(59);
+    expect(calendarDoy(Date.UTC(2004, 1, 29))).toBe(59);
+    expect(calendarDoy(Date.UTC(2001, 2, 1))).toBe(60);
+    expect(calendarDoy(Date.UTC(2004, 2, 1))).toBe(60);
+    expect(calendarDoy(Date.UTC(2001, 11, 31))).toBe(365);
+    expect(calendarDoy(Date.UTC(2004, 11, 31))).toBe(365);
   });
 
-  it('daily 2001-2008: each bin holds one calendar date only', () => {
+  it('daily 2001-2008: each bin holds one calendar date only (Feb 29 with Feb 28)', () => {
     const dates: number[] = [];
     for (let t = Date.UTC(2001, 0, 1); t < Date.UTC(2009, 0, 1); t += DAY) dates.push(t);
     // value = month + day / 100, so a bin that mixes dates holds mixed values
     const y = dates.map(t => new Date(t).getUTCMonth() + 1 + new Date(t).getUTCDate() / 100);
     const b = binByDoy(dates, y);
-    expect(b.get(59)).toEqual(Array(8).fill(2 + 28 / 100));    // Feb 28, every year
-    expect(b.get(60)).toEqual([2 + 29 / 100, 2 + 29 / 100]);           // Feb 29, 2004 and 2008 only
-    expect(b.get(61)).toEqual(Array(8).fill(3 + 1 / 100));    // Mar 1, every year
-    expect(b.get(365)).toEqual(Array(8).fill(12 + 30 / 100));   // Dec 30
-    expect(b.get(366)).toEqual(Array(8).fill(12 + 31 / 100));  // Dec 31
+    const feb = b.get(59)!;                                   // Feb 28, and Feb 29 in 2004 and 2008
+    expect(feb.length).toBe(8);
+    feb.forEach((v, k) => expect(v).toBeCloseTo(k === 3 || k === 7 ? 2.285 : 2.28, 12));
+    expect(b.get(60)).toEqual(Array(8).fill(3 + 1 / 100));    // Mar 1, every year
+    expect(b.get(364)).toEqual(Array(8).fill(12 + 30 / 100)); // Dec 30
+    expect(b.get(365)).toEqual(Array(8).fill(12 + 31 / 100)); // Dec 31
+    expect(b.has(366)).toBe(false);
     const byYear = binByYear(dates, y);
-    expect(byYear.get(2001)![60]).toBe(3 + 1 / 100);          // column 61 = Mar 1
-    expect(byYear.get(2004)![60]).toBe(3 + 1 / 100);
-    expect(byYear.get(2001)![59]).toBeNull();          // no Feb 29 in 2001
-    expect(byYear.get(2004)![59]).toBe(2 + 29 / 100);
+    expect(byYear.get(2001)![59]).toBe(3 + 1 / 100);          // column 60 = Mar 1
+    expect(byYear.get(2004)![59]).toBe(3 + 1 / 100);
+    expect(byYear.get(2001)![58]).toBe(2 + 28 / 100);
+    expect(byYear.get(2004)![58]).toBeCloseTo(2.285, 12);     // mean of Feb 28 and Feb 29
   });
 });
 
@@ -85,7 +89,11 @@ describe('display decimation keeps data gaps (plots-11)', () => {
     for (let i = 100_001; i < 100_006; i++) y[i] = null;
     const x = Array.from({ length: n }, (_, i) => i);
     const d = decimateMinMax(x, y);
-    expect(d.factor).toBe(8);
+    // 8 steps per bucket, 9 once the gap's break and neighbour push the
+    // output past the budget and the buckets are widened (plots-11-r1)
+    expect(d.factor).toBeGreaterThanOrEqual(8);
+    expect(d.factor).toBeLessThanOrEqual(9);
+    expect(d.y.length).toBeLessThanOrEqual(50_002);
     const nullsNear = d.x.filter((xx, k) => d.y[k] === null && xx >= 99_990 && xx <= 100_020);
     expect(nullsNear).toEqual([100_001]);             // at the first missing step
     expect(d.x.every((xx, k) => k === 0 || xx > d.x[k - 1])).toBe(true);
@@ -100,7 +108,9 @@ describe('display decimation keeps data gaps (plots-11)', () => {
     for (let i = 5_998; i < 6_003; i++) y[i] = null;  // straddles buckets of 10 steps
     const x = Array.from({ length: n }, (_, i) => i);
     const d = decimateMinMax(x, y, 2_000);
-    expect(d.factor).toBe(10);
+    expect(d.factor).toBeGreaterThanOrEqual(10);
+    expect(d.factor).toBeLessThanOrEqual(11);
+    expect(d.y.length).toBeLessThanOrEqual(2_002);
     const nullAt = d.x.filter((_, k) => d.y[k] === null);
     expect(nullAt).toEqual([3_000, 5_998]);
     // every drawn segment lies between two finite samples with no missing step between them
