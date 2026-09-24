@@ -8,7 +8,7 @@ import {
   AlignmentType, Document, ExternalHyperlink, HeadingLevel, ImageRun, Packer, Paragraph,
   ShadingType, Table, TableCell, TableRow, TextRun, WidthType, BorderStyle,
 } from 'docx'
-import { REGISTRY, GROUPS, type ComputeOutput } from '../metrics/registry'
+import { REGISTRY, GROUPS, rankingOmissionNote, type ComputeOutput } from '../metrics/registry'
 import { rankRuns, DEFAULT_PRIORITIES, type RankRow } from '../metrics/rank'
 import { fmtNum, fmtStamp } from '../ui/format'
 import { decimateMinMax } from '../ui/decimate'
@@ -201,6 +201,24 @@ async function dataUrlBytes(u: string): Promise<Uint8Array> {
  *  the PBIAS convention (+ = under) used in the metric table. */
 export const EVENT_TABLE_HEADER = ['#', 'Start', 'Obs peak', 'Sim peak', 'Peak lag [steps]', 'Volume err % (+ = over)', 'Matched'];
 
+/** The panel notes behind the reported values, each once, as the Metrics tab
+ *  shows them: what the transform is and applies to, which metrics read n/a
+ *  under it (log: KGE, PBIAS, VE and 14 others), excluded pairs, and so on.
+ *  A note that not every simulation carries names the simulations it belongs
+ *  to. The report once showed n/a for three Table 2 essentials under log with
+ *  no word of why (tb-rev-03). */
+export function computationNotes(runs: Run[], outputs: ComputeOutput[]): string[] {
+  const owners = new Map<string, string[]>();
+  outputs.forEach((o, i) => {
+    for (const n of o?.notes ?? []) {
+      const who = owners.get(n) ?? [];
+      if (!who.includes(runs[i].name)) who.push(runs[i].name);
+      owners.set(n, who);
+    }
+  });
+  return [...owners].map(([n, who]) => (who.length === runs.length ? n : `${who.join(', ')}: ${n}`));
+}
+
 export interface ReportPayload {
   ds: Dataset; frame: Frame; runs: Run[]; outputs: ComputeOutput[];
   images: ReportImage[]; sections: ReportSections; notes: string;
@@ -220,13 +238,25 @@ export async function buildDocx(p: ReportPayload): Promise<Blob> {
   }));
   Ptext(`Generated ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC by Hydrograph Metrics Explorer v${APP_VERSION} (${TOOL_URL}).`, { italic: true });
 
+  // the computation notes go with the first included section that shows values
+  const compNotes = computationNotes(runs, outputs);
+  let notesWritten = false;
+  const writeNotes = () => {
+    if (notesWritten || !compNotes.length) return;
+    notesWritten = true;
+    H('Computation notes', HeadingLevel.HEADING_2);
+    for (const n of compNotes) Ptext(n);
+  };
+
   if (sections.summary) {
     H('1. Data and settings');
     kids.push(tableOf(['Item', 'Value'], summaryPairs(ds, frame).map(([k, v]) => ({ cells: [k, v], boldFirst: true })), [2600, CONTENT - 2600]));
+    writeNotes();
   }
 
   if (sections.metrics) {
     H('2. Metrics');
+    writeNotes();
     Ptext('Rows shaded green and marked ⏱ are the timing and shape metrics: the shift-tolerant metrics, which are recommended as complements to the conventional ones, plus the lag at best fit and Diagnostic Efficiency.', { italic: true });
     const nameW = 2900, optW = 1100;
     // QA: with many runs a single table overflows US-Letter. Chunk the run
@@ -284,6 +314,7 @@ export async function buildDocx(p: ReportPayload): Promise<Blob> {
 
   if (sections.ranking && runs.length >= 2) {
     H('5. Simulation ranking and recommendation');
+    writeNotes();
     const priorities = ds.view.priorityMetrics.length ? ds.view.priorityMetrics : DEFAULT_PRIORITIES;
     const rows: RankRow[] = rankRuns(runs.map((r, i) => ({ runName: r.name, values: outputs[i].values })), priorities);
     const order = rows.map((_, i) => i).sort((a, b) => rows[a].rank - rows[b].rank);
@@ -299,6 +330,8 @@ export async function buildDocx(p: ReportPayload): Promise<Blob> {
       })),
       [w0, wn, ...priorities.map(() => wm), 1400],
     ));
+    const omitted = rankingOmissionNote(priorities, outputs.map(o => o.values), ds.view.transform);
+    if (omitted) Ptext(omitted, { italic: true });
     if (isFinite(rows[order[0]].composite)) {
       const leaders = order.filter(i => rows[i].rank === 1 && isFinite(rows[i].composite)).map(i => rows[i].runName);
       Ptext(`${leaders.length > 1 ? `Tie between ${leaders.join(' and ')}` : `Recommended simulation: ${rows[order[0]].runName}`} (composite ${rows[order[0]].composite.toFixed(3)}). Scores are relative to the compared simulations; a metric a simulation lacks scores 0 for it; unbounded efficiencies are normalised through C2M = E/(2−E) before weighting.`);
@@ -339,11 +372,18 @@ export function openPrintReport(p: ReportPayload): void {
   const rowsHtml = (cells: string[], tag = 'td', cls = '') => `<tr class="${cls}">${cells.map(c => `<${tag}>${esc(c)}</${tag}>`).join('')}</tr>`;
   let body = `<h1>Model evaluation report: ${esc(ds.name)}</h1>
   <p class="meta">Generated ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC by Hydrograph Metrics Explorer v${APP_VERSION}; ${TOOL_URL}.</p>`;
+  const compNotes = computationNotes(runs, outputs);
+  let notesWritten = false;
+  const notesHtml = () => {
+    if (notesWritten || !compNotes.length) return '';
+    notesWritten = true;
+    return `<h3>Computation notes</h3>${compNotes.map(n => `<p class="note">${esc(n)}</p>`).join('')}`;
+  };
   if (sections.summary) {
-    body += `<h2>1. Data and settings</h2><table>${summaryPairs(ds, frame).map(([k, v]) => rowsHtml([k, v])).join('')}</table>`;
+    body += `<h2>1. Data and settings</h2><table>${summaryPairs(ds, frame).map(([k, v]) => rowsHtml([k, v])).join('')}</table>` + notesHtml();
   }
   if (sections.metrics) {
-    body += `<h2>2. Metrics</h2><table><thead>${rowsHtml(['Metric', 'Optimum', ...runs.map(r => r.name)], 'th')}</thead><tbody>`;
+    body += `<h2>2. Metrics</h2>${notesHtml()}<table><thead>${rowsHtml(['Metric', 'Optimum', ...runs.map(r => r.name)], 'th')}</thead><tbody>`;
     for (const g of GROUPS) {
       const ms = REGISTRY.filter(m => m.group === g);
       if (!ms.length) continue;
@@ -370,8 +410,10 @@ export function openPrintReport(p: ReportPayload): void {
     const priorities = ds.view.priorityMetrics.length ? ds.view.priorityMetrics : DEFAULT_PRIORITIES;
     const rows = rankRuns(runs.map((r, i) => ({ runName: r.name, values: outputs[i].values })), priorities);
     const order = rows.map((_, i) => i).sort((a, b) => rows[a].rank - rows[b].rank);
-    body += `<h2>5. Simulation ranking</h2><table><thead>${rowsHtml(['Rank', 'Simulation', ...priorities.map(p2 => `${p2.id} (w=${p2.weight})`), 'Composite'], 'th')}</thead><tbody>` +
+    const omitted = rankingOmissionNote(priorities, outputs.map(o => o.values), ds.view.transform);
+    body += `<h2>5. Simulation ranking</h2>${notesHtml()}<table><thead>${rowsHtml(['Rank', 'Simulation', ...priorities.map(p2 => `${p2.id} (w=${p2.weight})`), 'Composite'], 'th')}</thead><tbody>` +
       order.map(i => rowsHtml([String(rows[i].rank), rows[i].runName, ...priorities.map(p2 => (isFinite(rows[i].perMetric[p2.id]) ? rows[i].perMetric[p2.id].toFixed(2) : 'n/a')), isFinite(rows[i].composite) ? rows[i].composite.toFixed(3) : 'n/a'], 'td', rows[i].rank === 1 && isFinite(rows[i].composite) ? 'timing' : '')).join('') + '</tbody></table>' +
+      (omitted ? `<p class="note">${esc(omitted)}</p>` : '') +
       (isFinite(rows[order[0]].composite)
         ? (() => {
             const leaders = order.filter(i => rows[i].rank === 1 && isFinite(rows[i].composite)).map(i => esc(rows[i].runName));
@@ -388,6 +430,7 @@ export function openPrintReport(p: ReportPayload): void {
     body{font-family:"Times New Roman",Georgia,serif;color:#101113;margin:26mm 20mm;line-height:1.45;font-size:11pt}
     h1{font-size:17pt;margin:0 0 4pt} h2{font-size:13pt;margin:14pt 0 4pt} h3{font-size:11.5pt;margin:10pt 0 2pt}
     .meta{color:#555;font-style:italic;font-size:9.5pt}
+    .note{font-style:italic;font-size:9.5pt;margin:2pt 0}
     table{border-collapse:collapse;width:100%;margin:6pt 0;font-size:9.5pt}
     th,td{border:1px solid #c8ccd2;padding:2.5pt 5pt;text-align:left}
     thead th{background:#eff1f4} tr.group td{background:#eff1f4;font-weight:700}

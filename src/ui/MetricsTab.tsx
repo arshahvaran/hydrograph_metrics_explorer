@@ -1,17 +1,14 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useApp } from '../store/store'
-import { REGISTRY, PRESETS, GROUPS, benchmarkSkill, type BenchmarkSkill, type ComputeOutput } from '../metrics/registry'
+import { REGISTRY, PRESETS, GROUPS } from '../metrics/registry'
 import { useRunOutputs, bestIndices, frameFor, useBootstrapCIsAll, useComputeError } from './compute'
 import { csvLine, fmtNum, download } from './format'
 import { Eq } from './Eq'
 import { APP_VERSION } from '../version'
 import type { Dataset } from '../types'
 
-/** Benchmark skill per computed panel and setting: a panel object stands for
- *  one (dataset, simulation, unit, NaN policy, transform) state, so its skill
- *  rows are recomputed only when the benchmark or the panel changes. */
-const skillCache = new WeakMap<ComputeOutput, Map<string, BenchmarkSkill>>();
-
+/** Tooltip text shared by the two skill rows: how every benchmark is built. */
+const BENCHMARK_CONVENTION = 'The model and the benchmark are scored on the same pairs (where the observation, the simulation and the benchmark are all valid) and under the same transform. Each benchmark is a flow series built from the observations of those pairs: their mean flow, their monthly mean flow (climatology), or the observation at the previous step (persistence; none at the first step or after a missing observation, where the pair is dropped from both scores). The benchmark is then transformed like the simulation.';
 
 export function MetricsTab() {
   const ds = useApp(s => s.project.datasets.find(d => d.id === s.project.activeDatasetId) ?? null);
@@ -38,21 +35,13 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
   const metricRows = REGISTRY.filter(m => selected.includes(m.id));
 
   // benchmark skill (NSE & KGE vs the selected benchmark forecast), scored on
-  // the model's own pairs under the model's transform (design rule D4)
-  const bench = useMemo(() => runs.map((r, i) => {
-    const o = outputs[i];
-    if (!o) return { nseSkill: NaN, kgeSkill: NaN };
-    const key = `${ds.view.benchmark}|${ds.view.nanPolicy}|${ds.view.transform}`;
-    let perOut = skillCache.get(o);
-    if (!perOut) { perOut = new Map(); skillCache.set(o, perOut); }
-    let res = perOut.get(key);
-    if (!res) {
-      res = benchmarkSkill(frame.obs, frame.apply(r.values), ds.view.benchmark,
-        { nanPolicy: ds.view.nanPolicy, transform: ds.view.transform, datesMs: frame.dates });
-      perOut.set(key, res);
-    }
-    return { nseSkill: res.nseSkill, kgeSkill: res.kgeSkill };
-  }), [frame.key, runs.map(r => r.id).join(), ds.view.benchmark, ds.view.nanPolicy, ds.view.transform, outputs]);
+  // the model's own pairs under the model's transform (design rule D4). The
+  // worker computes it with the panel for all three benchmarks, so rendering
+  // only reads it and a benchmark switch recomputes nothing (tb-rev-05).
+  const bench = outputs.map(o => {
+    const b = o?.benchmark?.[ds.view.benchmark];
+    return { nseSkill: b?.nseSkill ?? NaN, kgeSkill: b?.kgeSkill ?? NaN };
+  });
 
   const display = (id: string, v: number) =>
     v;
@@ -169,11 +158,11 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
                   })}
                   {g === 'Efficiencies' && (
                     <>
-                      <tr title="Skill of NSE relative to the selected benchmark: (NSE − NSE_bench)/(1 − NSE_bench). The model and the benchmark are scored on the same pairs (where the observation, the simulation and the benchmark are all valid) and under the same transform. The mean-flow benchmark is the mean of the observations on those pairs, so NSE_bench = 0.">
+                      <tr title={`Skill of NSE relative to the selected benchmark: (NSE − NSE_bench)/(1 − NSE_bench). ${BENCHMARK_CONVENTION} With no transform the mean-flow benchmark scores NSE_bench = 0, so the skill equals NSE; under a transform the transformed mean flow is not the mean of the transformed flows, and NSE_bench is below 0.`}>
                         <td>NSE skill vs {ds.view.benchmark}</td><td className="muted">1</td>
                         {bench.map((b, i) => <td key={runs[i].id}>{fmtNum(b.nseSkill, 3)}</td>)}
                       </tr>
-                      <tr title="Skill of KGE (2009) relative to the selected benchmark: (KGE − KGE_bench)/(1 − KGE_bench) (Knoben et al., 2019), with both scores on the same pairs and under the same transform. The mean-flow benchmark scores KGE_bench = 1 − √2 ≈ −0.41 (r taken as 0 for a constant series). n/a under the log transform, where KGE is n/a.">
+                      <tr title={`Skill of KGE (2009) relative to the selected benchmark: (KGE − KGE_bench)/(1 − KGE_bench) (Knoben et al., 2019). ${BENCHMARK_CONVENTION} With no transform the mean-flow benchmark scores KGE_bench = 1 − √2 ≈ −0.41 (r taken as 0 for a constant series); under a transform its bias ratio moves away from 1 and KGE_bench is lower. n/a under the log transform, where KGE is n/a.`}>
                         <td>KGE skill vs {ds.view.benchmark}</td><td className="muted">1</td>
                         {bench.map((b, i) => <td key={runs[i].id}>{fmtNum(b.kgeSkill, 3)}</td>)}
                       </tr>

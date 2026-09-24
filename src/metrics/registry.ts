@@ -141,6 +141,10 @@ export interface ComputeOutput {
   /** Original-row index of each compacted pair (Paired.index): lets consumers
    *  (the DTW alignment plot) map metric-space indices back to true rows. */
   pairedIndex?: number[];
+  /** NSE and KGE skill against each benchmark forecast, computed with the
+   *  panel (in the worker) so that the Metrics tab only reads it; switching
+   *  the benchmark needs no recomputation. */
+  benchmark?: Record<C.BenchmarkKind, BenchmarkSkill>;
   extras: {
     kge2009: C.KgeResult; kge2012: C.KgeResult; kge2021: C.KgeResult; kgenp: C.KgeResult;
     de?: ReturnType<typeof diagnosticEfficiency>;
@@ -215,10 +219,22 @@ export const LAG_SWEEP_RANGE = 30;
  *  then the pairs the transform makes invalid dropped from the raw and the
  *  transformed arrays alike. Shared by computeAll and benchmarkSkill so a
  *  model and its benchmark are scored on the same sample (D4). */
-function pairForMetrics(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>, ctx: Pick<ComputeContext, 'nanPolicy' | 'transform'>): {
-  o: Float64Array; s: Float64Array; raw: Paired; obsMean: number; notes: string[];
-} {
+interface MetricPairs {
+  /** transformed pairs */
+  o: Float64Array; s: Float64Array;
+  /** the same pairs untransformed, with their original row index */
+  raw: Paired;
+  /** observed mean of the NaN-policy pairs: sets ε and the log reference */
+  obsMean: number;
+  /** observations on the original row axis as the model score sees them:
+   *  the raw record (pairwise) or the filled record (zero / mean) */
+  obsRows: ArrayLike<number>;
+  notes: string[];
+}
+
+function pairForMetrics(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>, ctx: Pick<ComputeContext, 'nanPolicy' | 'transform'>): MetricPairs {
   const paired0 = applyNanPolicy(obsRaw, simRaw, ctx.nanPolicy);
+  const obsRows = ctx.nanPolicy === 'pairwise' ? obsRaw : paired0.obs;
   const obsMean = mean(paired0.obs);
   const tr = C.applyTransform(paired0.obs, paired0.sim, ctx.transform, obsMean);
   const notes: string[] = tr.note ? [tr.note] : [];
@@ -249,15 +265,44 @@ function pairForMetrics(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>, ct
         : `${bad} pair${bad === 1 ? ' was' : 's were'} excluded because ${bad === 1 ? 'it is' : 'they are'} not positive under the ${ctx.transform} transform.`);
     }
   }
-  return { o, s, raw, obsMean, notes };
+  return { o, s, raw, obsMean, obsRows, notes };
 }
 
 /** Note naming what the active transform applies to (design rule D2). */
 export const transformScopeNote = (t: C.Transform): string =>
   `FDC signatures, Diagnostic Efficiency, W₁, W₂², event, peak-timing, Series Distance and lag-sweep metrics are computed on untransformed flows; the ${t} transform applies to the error, correlation and efficiency metrics, the benchmark skill, DTW and XWT.`;
 
+/** Every note that a transform setting adds to the panel, in panel order: what
+ *  the transform is, what it applies to, and (log) which metrics read n/a.
+ *  Shown wherever transformed values appear (Metrics, Timing, Compare and
+ *  Sandbox tabs, reports). */
+export function transformNotes(t: C.Transform): string[] {
+  if (t === 'none') return [];
+  return [C.TRANSFORM_NOTES[t], transformScopeNote(t), ...(t === 'log' ? [C.LOG_NA_NOTE] : [])];
+}
+
+const listing = (xs: string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+
+/** Note for a composite ranking (Compare tab, report): the weighted priority
+ *  metrics that no simulation has a value for, which the ranking leaves out
+ *  of the composite, and why when the log transform makes them n/a. Under
+ *  log the default priorities once lost KGE (2009) without a word. */
+export function rankingOmissionNote(priorities: { id: string; weight: number }[], values: Record<string, number>[], t: C.Transform): string | null {
+  if (!values.length) return null;
+  const gone = priorities.filter(p => p.weight > 0 && values.every(v => !Number.isFinite(v[p.id]))).map(p => p.id);
+  if (!gone.length) return null;
+  const label = (id: string) => byId.get(id)?.label ?? id;
+  const onLog = t === 'log' ? gone.filter(id => C.LOCATION_DEPENDENT.has(id)) : [];
+  let text = `Left out of the composite because no simulation has a value: ${listing(gone.map(label))}.`;
+  if (onLog.length) {
+    text += ` ${listing(onLog.map(label))} ${onLog.length === 1 ? 'reads' : 'read'} n/a on log flows (Santos et al., 2018); set the transform to none, sqrt or inverse to rank on ${onLog.length === 1 ? 'it' : 'them'}.`;
+  }
+  return text;
+}
+
 export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>, ctx: ComputeContext): ComputeOutput {
-  const { o, s, raw, notes } = pairForMetrics(obsRaw, simRaw, ctx);
+  const pairs = pairForMetrics(obsRaw, simRaw, ctx);
+  const { o, s, raw, notes } = pairs;
   // Time-step position of every row (D1): the row number, or the step count
   // from the dates when rows are absent from the file.
   const axis = timeAxisInfo(ctx.datesMs, Math.min(obsRaw.length, simRaw.length));
@@ -274,6 +319,14 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
   const fdcNote = C.fdcLogNote(raw.obs, raw.sim);
   if (fdcNote) notes.push(fdcNote);
   const extras: ComputeOutput['extras'] = { ...kge };
+  // D4: the skill against every benchmark, on this panel's pairs. It is part
+  // of the panel so that it runs in the worker, not during rendering
+  // (tb-rev-05: 1.6 to 3.5 s of blocked UI at 1M rows with 5 simulations).
+  const benchmark = {
+    mean: scoreBenchmark(pairs, 'mean', ctx),
+    climatology: scoreBenchmark(pairs, 'climatology', ctx),
+    persistence: scoreBenchmark(pairs, 'persistence', ctx),
+  };
 
   if (heavy && o.length >= 4) {
     const t = ctx.timing;
@@ -377,7 +430,7 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
   }
 
   enforceFinite(values);
-  return { values, n: raw.n, notes, extras, pairedIndex: raw.index };
+  return { values, n: raw.n, notes, extras, pairedIndex: raw.index, benchmark };
 }
 
 export interface BenchmarkSkill {
@@ -389,53 +442,82 @@ export interface BenchmarkSkill {
 }
 
 /**
- * NSE and KGE skill of a simulation against a benchmark forecast on ONE sample
- * (design rule D4; Knoben et al., 2019; Schaefli & Gupta, 2007). The benchmark
- * is a pseudo-simulation: it goes through the model's NaN policy and the
- * model's transform (same ε and log reference), and both scores are taken on
- * the model's surviving pairs where the benchmark is also valid. Persistence
- * and climatology are built from the observations on the native time axis.
- * The mean-flow benchmark is the mean of the evaluated observations on those
- * pairs, so NSE_bench = 0 and, with r taken as 0 for a constant series,
- * KGE_bench = 1 − √2. Under the log transform KGE is n/a (C.LOG_NA_NOTE), and
- * so is its skill.
+ * NSE and KGE skill of a simulation against a benchmark forecast, on ONE
+ * sample and in ONE space (design rule D4; Knoben et al., 2019; Schaefli &
+ * Gupta, 2007). Every benchmark is a flow series built from the observations
+ * of the model's evaluated pairs (after the NaN policy and after the pairs
+ * the transform drops), in flow units:
+ *  - mean: the mean flow of those observations;
+ *  - climatology: the mean flow of those observations in the same calendar
+ *    month (UTC);
+ *  - persistence: the observation at the previous step of the record (of the
+ *    filled record under the zero / mean policies). There is none at the
+ *    first step or after a missing observation, and the pair is then dropped
+ *    from both scores, under every NaN policy.
+ * The benchmark is then transformed like the simulation (same ε and log
+ * reference), and both scores are taken on the pairs where it exists. With
+ * no transform the mean-flow benchmark scores NSE = 0 and, with r taken as 0
+ * for a constant series, KGE = 1 − √2; the climatology, the least-squares
+ * monthly fit that contains it, never scores lower. Under a transform the
+ * transformed mean flow is not the mean of the transformed flows, so the
+ * mean-flow benchmark scores below those values. Under the log transform KGE
+ * is n/a (C.LOG_NA_NOTE), and so is its skill.
+ * tb-rev-01: the mean benchmark was once the mean of the transformed
+ * observations and the climatology the transformed monthly mean of every raw
+ * observation of the record, so under a transform a climatology could score
+ * far below the mean flow it contains and the skill order inverted.
  */
+function scoreBenchmark(p: MetricPairs, kind: C.BenchmarkKind, ctx: Pick<ComputeContext, 'transform' | 'datesMs'>): BenchmarkSkill {
+  const rows = p.raw.index, ro = p.raw.obs, n0 = rows.length;
+  const flow = new Float64Array(n0);            // benchmark flow at each evaluated pair
+  if (kind === 'mean') {
+    flow.fill(n0 ? mean(ro) : NaN);
+  } else if (kind === 'climatology') {
+    const dates = ctx.datesMs;
+    const month = new Int8Array(n0).fill(-1);
+    const sums = new Float64Array(12), counts = new Float64Array(12);
+    for (let k = 0; dates && k < n0; k++) {
+      const m = new Date(dates[rows[k]]).getUTCMonth();
+      if (!Number.isInteger(m)) continue;         // no date for this row
+      month[k] = m; sums[m] += ro[k]; counts[m]++;
+    }
+    for (let k = 0; k < n0; k++) flow[k] = month[k] < 0 ? NaN : sums[month[k]] / counts[month[k]];
+  } else {
+    for (let k = 0; k < n0; k++) flow[k] = rows[k] > 0 ? p.obsRows[rows[k] - 1] : NaN;
+  }
+
+  const f = C.transformFn(ctx.transform, p.obsMean);
+  const bT = new Float64Array(n0);
+  let keep = 0;
+  for (let k = 0; k < n0; k++) { bT[k] = f(flow[k]); if (Number.isFinite(bT[k])) keep++; }
+  let o = p.o, s = p.s, b = bT;
+  if (keep < n0) {
+    o = new Float64Array(keep); s = new Float64Array(keep); b = new Float64Array(keep);
+    for (let k = 0, j = 0; k < n0; k++) {
+      if (!Number.isFinite(bT[k])) continue;
+      o[j] = p.o[k]; s[j] = p.s[k]; b[j] = bT[k]; j++;
+    }
+  }
+  const logNa = ctx.transform === 'log' && C.LOCATION_DEPENDENT.has('kge2009');
+  const fin = (v: number) => (Number.isFinite(v) ? v : NaN);
+  const nseM = fin(C.nse(o, s)), nseB = fin(C.nse(o, b));
+  const kgeM = logNa ? NaN : fin(C.kge2009(o, s).value);
+  const kgeB = logNa ? NaN : fin(C.benchmarkKge(o, b));
+  return {
+    n: keep,
+    nse: nseM, kge: kgeM, nseBench: nseB, kgeBench: kgeB,
+    nseSkill: fin(C.skill(nseM, nseB)), kgeSkill: fin(C.skill(kgeM, kgeB)),
+  };
+}
+
+/** Benchmark skill of one (obs, sim) record under the view (see
+ *  scoreBenchmark); the panel (computeAll) carries the same values for all
+ *  three benchmarks. */
 export function benchmarkSkill(
   obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>, kind: C.BenchmarkKind,
   ctx: Pick<ComputeContext, 'nanPolicy' | 'transform' | 'datesMs'>,
 ): BenchmarkSkill {
-  const model = pairForMetrics(obsRaw, simRaw, ctx);
-  const rows = model.raw.index;
-  const keep: number[] = [];
-  let bT: Float64Array | null = null;
-  if (kind === 'mean') {
-    for (let k = 0; k < rows.length; k++) keep.push(k);
-  } else {
-    // benchmark value per original row, after the NaN policy applied as for a simulation
-    const bench = C.benchmarkSeries(obsRaw as unknown as number[], kind, ctx.datesMs);
-    const pb = applyNanPolicy(obsRaw, bench, ctx.nanPolicy);
-    const byRow = new Float64Array(Math.max(obsRaw.length, bench.length)).fill(NaN);
-    pb.index.forEach((row, k) => { byRow[row] = pb.sim[k]; });
-    const f = C.transformFn(ctx.transform, model.obsMean);
-    const vals: number[] = [];
-    for (let k = 0; k < rows.length; k++) {
-      const v = f(byRow[rows[k]]);
-      if (isFinite(v)) { keep.push(k); vals.push(v); }
-    }
-    bT = Float64Array.from(vals);
-  }
-  const o = Float64Array.from(keep, k => model.o[k]);
-  const s = Float64Array.from(keep, k => model.s[k]);
-  const b = bT ?? new Float64Array(o.length).fill(mean(o));
-  const logNa = ctx.transform === 'log' && C.LOCATION_DEPENDENT.has('kge2009');
-  const nseM = C.nse(o, s), nseB = C.nse(o, b);
-  const kgeM = logNa ? NaN : C.kge2009(o, s).value;
-  const kgeB = logNa ? NaN : C.benchmarkKge(o, b);
-  return {
-    n: o.length,
-    nse: nseM, kge: kgeM, nseBench: nseB, kgeBench: kgeB,
-    nseSkill: C.skill(nseM, nseB), kgeSkill: C.skill(kgeM, kgeB),
-  };
+  return scoreBenchmark(pairForMetrics(obsRaw, simRaw, ctx), kind, ctx);
 }
 
 /** Bounded C2M display transform for unbounded-below efficiencies (§11.4). */

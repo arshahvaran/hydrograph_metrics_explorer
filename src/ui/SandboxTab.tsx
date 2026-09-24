@@ -9,6 +9,7 @@ import { mean, stdPop } from '../metrics/support/stats'
 import { OBSERVED_COLOR } from '../types'
 import type { Dataset, SandboxState } from '../types'
 import { UNITS } from '../units/registry'
+import { transformNotes } from '../metrics/registry'
 
 const CLASSICAL: [string, string, number][] = [['nse', 'NSE', 3], ['kge2009', 'KGE', 3], ['r', 'r', 3], ['r2', 'R²', 3], ['rmse', 'RMSE', 3], ['pbias', 'PBIAS %', 2]];
 const TIMING: [string, string, number][] = [['w1', 'W₁ [steps]', 2], ['w2sq', 'W₂² [steps²]', 2], ['dtw_warp', 'DTW |warp| [steps]', 2], ['peak_lag_abs', 'Peak |lag| [steps]', 2], ['lag_best', 'Best-fit lag [steps]', 0], ['xwt_lag', 'XWT lag [steps]', 2]];
@@ -141,6 +142,8 @@ function SandboxTabInner({ ds }: { ds: Dataset }) {
 
       <section className="card">
         <h2>Metrics comparison <span className="muted">performance of perturbed and original simulations against observed data</span></h2>
+        {/* the Metrics-tab transform applies here too; under log KGE and PBIAS read n/a (tb-rev-03) */}
+        {transformNotes(ds.view.transform).map(n => <div key={n} className="warning">{n}</div>)}
         <div className="twocol">
           <div className="tblscroll">
             <table className="grid">

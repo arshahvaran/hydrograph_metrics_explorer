@@ -373,12 +373,15 @@ export type Transform = 'none' | 'log' | 'sqrt' | 'inverse';
  *  transformed value, and so every dimensionless metric computed on it,
  *  independent of the flow unit (ln(Q + ε) once added ln(c) to every value
  *  when the unit was scaled by c; Santos et al., 2018). sqrt and inverse are
- *  scale-equivariant already. A value outside the domain answers NaN. */
+ *  scale-equivariant already. A value outside the domain answers NaN, and
+ *  the pair is then dropped with a note: sqrt needs Q ≥ 0; log and inverse
+ *  need Q + ε > 0, the domain on which both are monotone (1/(Q + ε) once
+ *  mapped a flow below −ε to a negative value and kept the pair silently). */
 export function transformFn(t: Transform, obsMean: number): (v: number) => number {
   const eps = EPS_FRAC * obsMean;
   if (t === 'none') return v => v;
   if (t === 'sqrt') return v => (v < 0 ? NaN : Math.sqrt(v));
-  if (t === 'inverse') return v => 1 / (v + eps);
+  if (t === 'inverse') return v => (v + eps > 0 ? 1 / (v + eps) : NaN);
   return v => {
     const q = (v + eps) / obsMean;
     return obsMean > 0 && q > 0 ? Math.log(q) : NaN;
@@ -417,7 +420,10 @@ export const LOG_NA_NOTE = 'On log flows, NRMSE (mean), MAPE, sMAPE, MAAPE, MAPD
 
 // ---------- benchmarks & skill (§11.8) ----------
 export type BenchmarkKind = 'mean' | 'climatology' | 'persistence';
-/** Build the benchmark series aligned with obs; datesMs needed for climatology. */
+/** Build the benchmark series aligned with obs; datesMs needed for climatology.
+ *  Persistence has no forecast at the first step (NaN there): it once copied
+ *  the verifying observation and scored a free zero error. The benchmark skill
+ *  (registry.benchmarkSkill) builds its benchmarks from the evaluated pairs. */
 export function benchmarkSeries(obs: Vec, kind: BenchmarkKind, datesMs?: number[]): Float64Array {
   const n = obs.length;
   const out = new Float64Array(n);
@@ -426,7 +432,7 @@ export function benchmarkSeries(obs: Vec, kind: BenchmarkKind, datesMs?: number[
   const finiteMean = fCount ? fSum / fCount : NaN;
   if (kind === 'mean') { out.fill(finiteMean); return out; }
   if (kind === 'persistence') {
-    out[0] = obs[0];
+    if (n) out[0] = NaN;
     for (let i = 1; i < n; i++) out[i] = obs[i - 1];
     return out;
   }
@@ -445,8 +451,10 @@ export function benchmarkSeries(obs: Vec, kind: BenchmarkKind, datesMs?: number[
 }
 /** KGE (2009) of a benchmark forecast `b`. A constant benchmark (the mean
  *  flow) has σ_b = 0, so r is undefined; Knoben et al. (2019) take r = 0,
- *  with α = 0, which gives KGE = 1 − √2 ≈ −0.41 for the mean of the
- *  observations. Any other benchmark scores the ordinary KGE (2009). */
+ *  with α = 0, which gives KGE = 1 − √(2 + (β − 1)²): 1 − √2 ≈ −0.41 for the
+ *  mean of the observations (β = 1), less under a transform, where the
+ *  transformed mean flow is not the mean of the transformed flows. Any other
+ *  benchmark scores the ordinary KGE (2009). */
 export function benchmarkKge(o: Vec, b: Vec): number {
   const mb = mean(b);
   if (!constantObs(stdPop(b, mb), mb)) return kge2009(o, b).value;
