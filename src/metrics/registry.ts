@@ -2,7 +2,8 @@
 // computes the full panel for one (obs, run) pair under the active view settings.
 
 import * as C from './classical/catalogue'
-import { applyNanPolicy, type NanPolicy } from '../ingest/missing'
+import { applyNanPolicy, type NanPolicy, type Paired } from '../ingest/missing'
+import { mean } from './support/stats'
 import { peakTiming, eventErrors, lagSweep, type EventOptions } from './timing/events'
 import { dtw, wasserstein1, wasserstein2sq } from './timing/dtwWasserstein'
 import { diagnosticEfficiency, seriesDistance } from './timing/deSd'
@@ -170,11 +171,18 @@ function enforceFinite(values: Record<string, number>): void {
   }
 }
 
-export function classicalValues(o: Float64Array, s: Float64Array): {
+/** `o`/`s` are the paired series under the active transform; `raw` holds the
+ *  same pairs untransformed (default: `o`/`s`, i.e. no transform). Design
+ *  rule D2: the FDC signatures always use the untransformed flows (FLV, FMS
+ *  and FMM contain their own logs; a transform once reversed the sign of
+ *  FHV). Under the log transform the location-dependent metrics read n/a
+ *  (C.LOCATION_DEPENDENT). */
+export function classicalValues(o: Float64Array, s: Float64Array, raw: { o: Float64Array; s: Float64Array } = { o, s }, transform: C.Transform = 'none'): {
   values: Record<string, number>;
   kge: { kge2009: ReturnType<typeof C.kge2009>; kge2012: ReturnType<typeof C.kge2012>; kge2021: ReturnType<typeof C.kge2021>; kgenp: ReturnType<typeof C.kgenp> };
 } {
   const k09 = C.kge2009(o, s), k12 = C.kge2012(o, s), k21 = C.kge2021(o, s), knp = C.kgenp(o, s);
+  const ro = raw.o, rs = raw.s;
   const values: Record<string, number> = {
     me: C.me(o, s), mae: C.mae(o, s), mdae: C.mdae(o, s), mse: C.mse(o, s), rmse: C.rmse(o, s),
     rsr: C.rsr(o, s), nrmse_mean: C.nrmseMean(o, s), nrmse_range: C.nrmseRange(o, s), nrmse_iqr: C.nrmseIqr(o, s),
@@ -186,17 +194,28 @@ export function classicalValues(o: Float64Array, s: Float64Array): {
     nse: C.nse(o, s), nse_mod: C.nseMod(o, s), nse_rel: C.nseRel(o, s), lognse: C.logNse(o, s),
     kge2009: k09.value, kge2012: k12.value, kge2021: k21.value, kgenp: knp.value,
     ve: C.ve(o, s), pbias: C.pbias(o, s), beta_nse: C.betaNse(o, s), alpha: C.alphaRatio(o, s),
-    fhv: C.fhv(o, s), flv: C.flv(o, s), fms: C.fms(o, s), fmm: C.fmm(o, s),
+    fhv: C.fhv(ro, rs), flv: C.flv(ro, rs), fms: C.fms(ro, rs), fmm: C.fmm(ro, rs),
   };
+  if (transform === 'log') {
+    for (const id of C.LOCATION_DEPENDENT) values[id] = NaN;
+    k09.value = NaN; k12.value = NaN; knp.value = NaN;
+  }
   enforceFinite(values);
   return { values, kge: { kge2009: k09, kge2012: k12, kge2021: k21, kgenp: knp } };
 }
 
-export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>, ctx: ComputeContext): ComputeOutput {
+/** Pairs of one (obs, sim) record under the view: the NaN policy, then the
+ *  transform (ε and the log reference from the observed mean of these pairs),
+ *  then the pairs the transform makes invalid dropped from the raw and the
+ *  transformed arrays alike. Shared by computeAll and benchmarkSkill so a
+ *  model and its benchmark are scored on the same sample (D4). */
+function pairForMetrics(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>, ctx: Pick<ComputeContext, 'nanPolicy' | 'transform'>): {
+  o: Float64Array; s: Float64Array; raw: Paired; obsMean: number; notes: string[];
+} {
   const paired0 = applyNanPolicy(obsRaw, simRaw, ctx.nanPolicy);
-  const tr = C.applyTransform(paired0.obs, paired0.sim, ctx.transform);
+  const obsMean = mean(paired0.obs);
+  const tr = C.applyTransform(paired0.obs, paired0.sim, ctx.transform, obsMean);
   const notes: string[] = tr.note ? [tr.note] : [];
-  const heavy = ctx.heavy !== false;
 
   // A transform can turn a finite pair into NaN (sqrt of a negative flow, log
   // of a value below -eps, inverse at exactly -eps). Pairing happened before
@@ -224,8 +243,21 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
         : `${bad} pair${bad === 1 ? ' was' : 's were'} excluded because ${bad === 1 ? 'it is' : 'they are'} not positive under the ${ctx.transform} transform.`);
     }
   }
+  return { o, s, raw, obsMean, notes };
+}
 
-  const { values, kge } = classicalValues(o, s);
+/** Note naming what the active transform applies to (design rule D2). */
+export const transformScopeNote = (t: C.Transform): string =>
+  `FDC signatures, Diagnostic Efficiency, W₁, W₂², event, peak-timing, Series Distance and lag-sweep metrics are computed on untransformed flows; the ${t} transform applies to the error, correlation and efficiency metrics, the benchmark skill, DTW and XWT.`;
+
+export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>, ctx: ComputeContext): ComputeOutput {
+  const { o, s, raw, notes } = pairForMetrics(obsRaw, simRaw, ctx);
+  const heavy = ctx.heavy !== false;
+  if (ctx.transform !== 'none') notes.push(transformScopeNote(ctx.transform));
+  if (ctx.transform === 'log') notes.push(C.LOG_NA_NOTE);
+
+  // D2: the FDC signatures take the untransformed surviving pairs.
+  const { values, kge } = classicalValues(o, s, { o: raw.obs, s: raw.sim }, ctx.transform);
   const extras: ComputeOutput['extras'] = { ...kge };
 
   if (heavy && o.length >= 4) {
@@ -235,20 +267,22 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
       minDistance: t.eventMinDistance, warmup: t.eventWarmup,
     };
     const daily = true;
-    const de = diagnosticEfficiency(o, s);
-    // Events, peak timing and Series Distance are threshold-based, physical
-    // measures (an absolute threshold of 30 m3/s, a peak height): they run on
-    // the untransformed flows of the same surviving pairs. Under a transform
-    // the threshold once met log flows near 3 and every event vanished; the
-    // shape measures below (DTW, Wasserstein, XWT, DE, sweep) keep the
-    // transform, which is a legitimate weighting choice for them.
+    // D2: events, peak timing, Series Distance, Diagnostic Efficiency, W₁/W₂²
+    // and the lag sweep run on the untransformed flows of the same surviving
+    // pairs. Events and peaks are threshold-based, physical measures (an
+    // absolute threshold of 30 m3/s once met log flows near 3 and every event
+    // vanished); DE is built on relative FDC errors (S − O)/O and needs
+    // perennial flow (Schwemmle et al., 2021); W₁/W₂² need a non-negative
+    // mass. Under the old log transform each of them changed with the flow
+    // unit. DTW and XWT keep the transform: a weighting choice that, after
+    // D3, no longer depends on the unit.
     const ro = raw.obs, rs = raw.sim;
+    const de = diagnosticEfficiency(ro, rs);
     // QA-011: peak separation must follow the configured event spacing, not a
     // hardcoded 100 steps (which silently suppressed real peaks in daily data).
     const peaks = peakTiming(ro, rs, { prominence: t.peakProminence, minDistance: t.eventMinDistance, window: t.peakMatchTolerance });
     const events = eventErrors(ro, rs, evOpt, t.peakMatchTolerance);
     const sd = seriesDistance(ro, rs, evOpt, t.peakMatchTolerance);
-    if (ctx.transform !== 'none') notes.push(`Event, peak-timing and Series Distance metrics are computed on untransformed flows; the ${ctx.transform} transform applies to the other metrics.`);
     // DTW guard for very long series: decimate to keep the DP tractable
     let dtwRes; let dtwDecim = 1;
     if (o.length > 6000) {
@@ -262,7 +296,7 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
       dtwRes = dtw(o, s, t.dtwBandFraction);
     }
     const xw = xwtLag(o, s);
-    const sweep = lagSweep(o, s, -30, 30);
+    const sweep = lagSweep(ro, rs, -30, 30);
 
     if (peaks.unresolved > 0) {
       notes.push(`${peaks.unresolved} observed peak(s) had no resolvable simulated peak within ±${t.peakMatchTolerance} steps; those pairs are excluded from the peak-timing means. Widen the peak-match tolerance if lags may exceed it.`);
@@ -282,8 +316,8 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
     values.sd_occ = sd.occurrence; values.sd_amp = sd.meanAmplitudeErrPct; values.sd_time = sd.meanTimingErr;
     values.dtw_warp = dtwRes.meanAbsWarp * dtwDecim;
     values.dtw_dist = dtwRes.normalized;
-    values.w1 = wasserstein1(o, s);
-    values.w2sq = wasserstein2sq(o, s);
+    values.w1 = wasserstein1(ro, rs);
+    values.w2sq = wasserstein2sq(ro, rs);
     values.xwt_lag = xw.headlineLag;
 
     if (de.nonPerennial) notes.push('DE: observed record is not strictly positive; diagnostic efficiency assumptions violated');
@@ -294,6 +328,64 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
 
   enforceFinite(values);
   return { values, n: raw.n, notes, extras, pairedIndex: raw.index };
+}
+
+export interface BenchmarkSkill {
+  /** Pairs on which both the model and the benchmark are scored. */
+  n: number;
+  nse: number; kge: number;
+  nseBench: number; kgeBench: number;
+  nseSkill: number; kgeSkill: number;
+}
+
+/**
+ * NSE and KGE skill of a simulation against a benchmark forecast on ONE sample
+ * (design rule D4; Knoben et al., 2019; Schaefli & Gupta, 2007). The benchmark
+ * is a pseudo-simulation: it goes through the model's NaN policy and the
+ * model's transform (same ε and log reference), and both scores are taken on
+ * the model's surviving pairs where the benchmark is also valid. Persistence
+ * and climatology are built from the observations on the native time axis.
+ * The mean-flow benchmark is the mean of the evaluated observations on those
+ * pairs, so NSE_bench = 0 and, with r taken as 0 for a constant series,
+ * KGE_bench = 1 − √2. Under the log transform KGE is n/a (C.LOG_NA_NOTE), and
+ * so is its skill.
+ */
+export function benchmarkSkill(
+  obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>, kind: C.BenchmarkKind,
+  ctx: Pick<ComputeContext, 'nanPolicy' | 'transform' | 'datesMs'>,
+): BenchmarkSkill {
+  const model = pairForMetrics(obsRaw, simRaw, ctx);
+  const rows = model.raw.index;
+  const keep: number[] = [];
+  let bT: Float64Array | null = null;
+  if (kind === 'mean') {
+    for (let k = 0; k < rows.length; k++) keep.push(k);
+  } else {
+    // benchmark value per original row, after the NaN policy applied as for a simulation
+    const bench = C.benchmarkSeries(obsRaw as unknown as number[], kind, ctx.datesMs);
+    const pb = applyNanPolicy(obsRaw, bench, ctx.nanPolicy);
+    const byRow = new Float64Array(Math.max(obsRaw.length, bench.length)).fill(NaN);
+    pb.index.forEach((row, k) => { byRow[row] = pb.sim[k]; });
+    const f = C.transformFn(ctx.transform, model.obsMean);
+    const vals: number[] = [];
+    for (let k = 0; k < rows.length; k++) {
+      const v = f(byRow[rows[k]]);
+      if (isFinite(v)) { keep.push(k); vals.push(v); }
+    }
+    bT = Float64Array.from(vals);
+  }
+  const o = Float64Array.from(keep, k => model.o[k]);
+  const s = Float64Array.from(keep, k => model.s[k]);
+  const b = bT ?? new Float64Array(o.length).fill(mean(o));
+  const logNa = ctx.transform === 'log' && C.LOCATION_DEPENDENT.has('kge2009');
+  const nseM = C.nse(o, s), nseB = C.nse(o, b);
+  const kgeM = logNa ? NaN : C.kge2009(o, s).value;
+  const kgeB = logNa ? NaN : C.benchmarkKge(o, b);
+  return {
+    n: o.length,
+    nse: nseM, kge: kgeM, nseBench: nseB, kgeBench: kgeB,
+    nseSkill: C.skill(nseM, nseB), kgeSkill: C.skill(kgeM, kgeB),
+  };
 }
 
 /** Bounded C2M display transform for unbounded-below efficiencies (§11.4). */

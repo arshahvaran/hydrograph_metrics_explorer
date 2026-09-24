@@ -1,13 +1,16 @@
 import { useMemo, useState } from 'react'
 import { useApp } from '../store/store'
-import { REGISTRY, PRESETS, GROUPS } from '../metrics/registry'
-import { benchmarkSeries, nse as nseFn, kge2009 as kgeFn, skill } from '../metrics/classical/catalogue'
-import { applyNanPolicy } from '../ingest/missing'
+import { REGISTRY, PRESETS, GROUPS, benchmarkSkill, type BenchmarkSkill, type ComputeOutput } from '../metrics/registry'
 import { useRunOutputs, bestIndex, frameFor, useBootstrapCIsAll, useComputeError } from './compute'
 import { csvLine, fmtNum, download } from './format'
 import { Eq } from './Eq'
 import { APP_VERSION } from '../version'
 import type { Dataset } from '../types'
+
+/** Benchmark skill per computed panel and setting: a panel object stands for
+ *  one (dataset, simulation, unit, NaN policy, transform) state, so its skill
+ *  rows are recomputed only when the benchmark or the panel changes. */
+const skillCache = new WeakMap<ComputeOutput, Map<string, BenchmarkSkill>>();
 
 
 export function MetricsTab() {
@@ -32,17 +35,22 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
   const selected = PRESETS[preset] === 'all' ? REGISTRY.map(m => m.id) : (PRESETS[preset] as string[]);
   const metricRows = REGISTRY.filter(m => selected.includes(m.id));
 
-  // benchmark skill (NSE & KGE vs the selected benchmark forecast)
-  const bench = useMemo(() => {
-    const b = benchmarkSeries(frame.obs as unknown as number[], ds.view.benchmark, frame.dates);
-    const pb = applyNanPolicy(frame.obs, b, ds.view.nanPolicy);
-    const nseB = nseFn(pb.obs, pb.sim), kgeB = kgeFn(pb.obs, pb.sim).value;
-    return runs.map((_r, i) => {
-      const o = outputs[i];
-      return o ? { nseSkill: skill(o.values.nse, nseB), kgeSkill: skill(o.values.kge2009, kgeB) }
-               : { nseSkill: NaN, kgeSkill: NaN };
-    });
-  }, [frame.key, runs.map(r => r.id).join(), ds.view.benchmark, ds.view.nanPolicy, ds.view.transform, JSON.stringify(ds.view.timingConfig), outputs]);
+  // benchmark skill (NSE & KGE vs the selected benchmark forecast), scored on
+  // the model's own pairs under the model's transform (design rule D4)
+  const bench = useMemo(() => runs.map((r, i) => {
+    const o = outputs[i];
+    if (!o) return { nseSkill: NaN, kgeSkill: NaN };
+    const key = `${ds.view.benchmark}|${ds.view.nanPolicy}|${ds.view.transform}`;
+    let perOut = skillCache.get(o);
+    if (!perOut) { perOut = new Map(); skillCache.set(o, perOut); }
+    let res = perOut.get(key);
+    if (!res) {
+      res = benchmarkSkill(frame.obs, frame.apply(r.values), ds.view.benchmark,
+        { nanPolicy: ds.view.nanPolicy, transform: ds.view.transform, datesMs: frame.dates });
+      perOut.set(key, res);
+    }
+    return { nseSkill: res.nseSkill, kgeSkill: res.kgeSkill };
+  }), [frame.key, runs.map(r => r.id).join(), ds.view.benchmark, ds.view.nanPolicy, ds.view.transform, outputs]);
 
   const display = (id: string, v: number) =>
     v;
@@ -108,7 +116,7 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
         </div>
         <p className="muted" aria-live="polite">
           Valid pairs per simulation (n): {runs.map((r, i) => `${r.name}: ${outputs[i]?.n ?? '…'}`).join(' · ')}.{busy && !computeError ? ' Computing in a background worker…' : ''}{frame.caption ? ` Subset: ${frame.caption}.` : ''}
-          {ds.view.transform !== 'none' && ' Metrics are computed on the transformed series.'}
+          {ds.view.transform !== 'none' && ' The error, correlation and efficiency metrics, the benchmark skill, DTW and XWT are computed on the transformed series; the notes below name the metrics that use untransformed flows.'}
           {' '}Rows tinted <span className="timingchip">⏱</span> are the timing and shape metrics: the shift-tolerant metrics, which are recommended as complements to the conventional ones, plus the lag at best fit and Diagnostic Efficiency. For datasets with multiple simulations, the better value in each row is underlined.
         </p>
         {computeError && <div className="error" role="alert">{computeError}</div>}
@@ -152,11 +160,11 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
                   })}
                   {g === 'Efficiencies' && (
                     <>
-                      <tr title="Skill of NSE relative to the selected benchmark: (NSE − NSE_bench)/(1 − NSE_bench)">
+                      <tr title="Skill of NSE relative to the selected benchmark: (NSE − NSE_bench)/(1 − NSE_bench). The model and the benchmark are scored on the same pairs (where the observation, the simulation and the benchmark are all valid) and under the same transform. The mean-flow benchmark is the mean of the observations on those pairs, so NSE_bench = 0.">
                         <td>NSE skill vs {ds.view.benchmark}</td><td className="muted">1</td>
                         {bench.map((b, i) => <td key={runs[i].id}>{fmtNum(b.nseSkill, 3)}</td>)}
                       </tr>
-                      <tr title="Skill of KGE relative to the selected benchmark">
+                      <tr title="Skill of KGE (2009) relative to the selected benchmark: (KGE − KGE_bench)/(1 − KGE_bench) (Knoben et al., 2019), with both scores on the same pairs and under the same transform. The mean-flow benchmark scores KGE_bench = 1 − √2 ≈ −0.41 (r taken as 0 for a constant series). n/a under the log transform, where KGE is n/a.">
                         <td>KGE skill vs {ds.view.benchmark}</td><td className="muted">1</td>
                         {bench.map((b, i) => <td key={runs[i].id}>{fmtNum(b.kgeSkill, 3)}</td>)}
                       </tr>

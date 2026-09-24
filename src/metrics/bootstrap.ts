@@ -83,7 +83,7 @@ export function bootstrapCIs(
       }
     }
     const { o, s } = applyTransform(ro, rs, ctx.transform);
-    const { values } = classicalValues(o, s);
+    const { values } = classicalValues(o, s, { o: ro, s: rs }, ctx.transform);
     for (const id in values) {
       let arr = samples.get(id);
       if (!arr) { arr = []; samples.set(id, arr); }

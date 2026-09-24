@@ -312,17 +312,54 @@ export const fmm = (o: Vec, s: Vec) => {
 
 // ---------- transforms (§11.2) ----------
 export type Transform = 'none' | 'log' | 'sqrt' | 'inverse';
-export function applyTransform(o: Vec, s: Vec, t: Transform): { o: Float64Array; s: Float64Array; note: string | null } {
+
+/** The pointwise transform of one record, fixed by the mean of its observed
+ *  flows (design rule D3). ε = 0.01·mean(obs). The log form is
+ *  ln((Q + ε)/mean(obs)): dividing by the observed mean makes every
+ *  transformed value, and so every dimensionless metric computed on it,
+ *  independent of the flow unit (ln(Q + ε) once added ln(c) to every value
+ *  when the unit was scaled by c; Santos et al., 2018). sqrt and inverse are
+ *  scale-equivariant already. A value outside the domain answers NaN. */
+export function transformFn(t: Transform, obsMean: number): (v: number) => number {
+  const eps = EPS_FRAC * obsMean;
+  if (t === 'none') return v => v;
+  if (t === 'sqrt') return v => (v < 0 ? NaN : Math.sqrt(v));
+  if (t === 'inverse') return v => 1 / (v + eps);
+  return v => {
+    const q = (v + eps) / obsMean;
+    return obsMean > 0 && q > 0 ? Math.log(q) : NaN;
+  };
+}
+
+export const TRANSFORM_NOTES: Record<Exclude<Transform, 'none'>, string> = {
+  log: 'log transform: ln((Q + ε)/mean(obs)), ε = 0.01·mean(obs); dividing by the observed mean makes the values independent of the flow unit',
+  sqrt: 'sqrt transform: √Q',
+  inverse: 'inverse transform: 1/(Q + ε), ε = 0.01·mean(obs)',
+};
+
+/** Apply transform `t` to a paired record. `obsMean` sets ε and the log
+ *  reference; it defaults to the mean of `o`, and a benchmark scored against
+ *  a model passes the model's value so both are transformed identically. */
+export function applyTransform(o: Vec, s: Vec, t: Transform, obsMean: number = mean(o)): { o: Float64Array; s: Float64Array; note: string | null } {
   if (t === 'none') return { o: Float64Array.from(o as ArrayLike<number>), s: Float64Array.from(s as ArrayLike<number>), note: null };
-  const eps = EPS_FRAC * mean(o);
-  const f = t === 'log' ? (v: number) => Math.log(v + eps)
-    : t === 'sqrt' ? (v: number) => (v < 0 ? NaN : Math.sqrt(v))
-      : (v: number) => 1 / (v + eps);
+  const f = transformFn(t, obsMean);
   const to = new Float64Array(o.length), ts = new Float64Array(s.length);
   for (let i = 0; i < o.length; i++) { to[i] = f(o[i]); ts[i] = f(s[i]); }
-  const note = t === 'sqrt' ? 'sqrt transform' : `${t} transform, ε = 0.01·mean(obs)`;
-  return { o: to, s: ts, note };
+  return { o: to, s: ts, note: TRANSFORM_NOTES[t] };
 }
+
+/** Metrics whose value changes when the same constant is added to O and S:
+ *  ratios to the level of the flows (NRMSE(mean), the percentage errors,
+ *  VE, PBIAS, NSE_rel, d_rel, the β and γ terms of KGE, KGE′ and KGEnp) and
+ *  the log-ratio family. On log flows, whose zero is an arbitrary reference
+ *  (Hyndman & Koehler, 2006; Santos et al., 2018), they have no meaning:
+ *  their denominators sit near zero or below it, VE exceeds its bound of 1
+ *  and PBIAS reverses its sign. They read n/a under the log transform. */
+export const LOCATION_DEPENDENT = new Set([
+  'nrmse_mean', 'mape', 'smape', 'maape', 'mapd', 'msle', 'mle', 'male', 'rmsle',
+  'drel', 'nse_rel', 'lognse', 'kge2009', 'kge2012', 'kgenp', 've', 'pbias',
+]);
+export const LOG_NA_NOTE = 'On log flows, NRMSE (mean), MAPE, sMAPE, MAAPE, MAPD, MSLE, MLE, MALE, RMSLE, d_rel, NSE_rel, logNSE, KGE (2009), KGE′, KGEnp, VE and PBIAS read n/a: log flows have no natural zero, so a ratio to their level is arbitrary (Santos et al., 2018). NSE, KGE″ and the difference-based metrics are computed on the log flows; use the sqrt or inverse transform for a transformed KGE.';
 
 // ---------- benchmarks & skill (§11.8) ----------
 export type BenchmarkKind = 'mean' | 'climatology' | 'persistence';
@@ -352,6 +389,20 @@ export function benchmarkSeries(obs: Vec, kind: BenchmarkKind, datesMs?: number[
   }
   return out;
 }
+/** KGE (2009) of a benchmark forecast `b`. A constant benchmark (the mean
+ *  flow) has σ_b = 0, so r is undefined; Knoben et al. (2019) take r = 0,
+ *  with α = 0, which gives KGE = 1 − √2 ≈ −0.41 for the mean of the
+ *  observations. Any other benchmark scores the ordinary KGE (2009). */
+export function benchmarkKge(o: Vec, b: Vec): number {
+  const mb = mean(b);
+  if (!constantObs(stdPop(b, mb), mb)) return kge2009(o, b).value;
+  const mo = mean(o);
+  if (sigmaObs(o, mo) === 0) return NaN;             // constant observations: KGE undefined
+  const beta = mb / mo;
+  const v = 1 - Math.sqrt(1 + 1 + (beta - 1) ** 2);
+  return isFinite(v) ? v : NaN;
+}
+
 /** Skill score of a bounded-above metric vs a benchmark: (M − M_b)/(opt − M_b), clamped at 1. */
 export function skill(metricModel: number, metricBench: number, optimum = 1): number {
   if (!isFinite(metricModel) || !isFinite(metricBench) || optimum === metricBench) return NaN;
