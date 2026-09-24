@@ -138,7 +138,9 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
                             <td key={runs[i].id} className={i === best ? 'best' : ''}>
                               {fmtNum(v, m.digits)}
                               {ciOn && (m.timing
-                                ? <span className="ci" title="Block resampling destroys the time axis that timing metrics measure, so a bootstrap CI would be meaningless here.">CI n/a</span>
+                                ? <span className="ci" title={m.id.startsWith('de')
+                                    ? 'Not bootstrapped: only the conventional block is resampled. DE depends on the flow-duration curve and r, not on time order, so a CI would be possible but is not computed in this version.'
+                                    : 'Block resampling destroys the time axis that timing metrics measure, so a bootstrap CI would be meaningless here.'}>CI n/a</span>
                                 : ci && isFinite(ci[0])
                                   ? <span className="ci">[{fmtNum(ci[0], m.digits)}, {fmtNum(ci[1], m.digits)}]</span>
                                   : res
