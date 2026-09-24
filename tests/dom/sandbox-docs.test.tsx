@@ -64,27 +64,32 @@ it('claims-07: the page says that the Map tab loads OpenStreetMap tiles', () => 
   expect(readFileSync('README.md', 'utf8')).toMatch(/OpenStreetMap basemap tiles/);
 });
 
-it('claims-07 (review): both outside requests are named wherever the page promises privacy', () => {
+it('claims-07 (review): the fonts are served with the app, and the Map-tab tiles are named wherever the page promises privacy', () => {
   const html = readFileSync('index.html', 'utf8');
   const readme = readFileSync('README.md', 'utf8').replace(/\r?\n\s*/g, ' ');
-  // the only third-party hosts the page loads from
+  // the page itself loads nothing from a third-party host (the fonts are bundled)
   const hosts = new Set((html.match(/https:\/\/[a-z0-9.-]+/g) ?? []).map(u => u.slice(8)));
   hosts.delete('arshahvaran.github.io');           // og:url, the app itself
-  expect([...hosts].sort()).toEqual(['fonts.googleapis.com', 'fonts.gstatic.com']);
-  // README: fonts on every load, tiles on the Map tab, and what the tiles reveal
-  expect(readme).not.toMatch(/The only outside requests are the Map tab/);
-  expect(readme).toMatch(/Google Fonts/);
-  expect(readme).toMatch(/every page load/);
+  expect([...hosts]).toEqual([]);
+  expect(readFileSync('src/fonts.ts', 'utf8')).toMatch(/@fontsource-variable\/fraunces/);
+  expect(readFileSync('src/main.tsx', 'utf8')).toMatch(/import '\.\/fonts'/);
+  for (const f of ['src/theme.css', 'src/App.tsx', 'src/ui/PlotHost.tsx']) {
+    expect(readFileSync(f, 'utf8')).not.toMatch(/fonts\.(googleapis|gstatic)\.com/);
+  }
+  // README: no font host, tiles on the Map tab, and what the tiles reveal
+  expect(readme).not.toMatch(/Google Fonts/);
+  expect(readme).toMatch(/typefaces are served with the app/);
   expect(readme).toMatch(/OpenStreetMap basemap tiles[^.]*station/);
   // og:description is qualified, not an unconditional promise
   const og = html.match(/property="og:description" content="([^"]*)"/)![1];
   expect(og).not.toMatch(/your data never leaves the page\.?$/);
-  expect(og).toMatch(/Google Fonts/);
+  expect(og).not.toMatch(/Google Fonts/);
   expect(og).toMatch(/OpenStreetMap/);
-  // the footer names both
+  // the footer names the tiles and says where the fonts come from
   render(<App />);
   const footer = document.querySelector('footer')!.textContent!;
-  expect(footer).toMatch(/Google Fonts/);
+  expect(footer).not.toMatch(/Google Fonts/);
+  expect(footer).toMatch(/fonts are served with the app/);
   expect(footer).toMatch(/OpenStreetMap/);
   // the Map tab does not call the station's area "not your data"
   const map = readFileSync('src/ui/MapTab.tsx', 'utf8');

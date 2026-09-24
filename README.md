@@ -26,11 +26,10 @@ term is a linear correlation, which responds to a lag without quantifying it.
 
 Everything (parsing, unit conversion, every metric, every plot, report generation) runs in
 your browser. **Your flow series never leave the page**; there is no server, no database, no
-account. The page makes two kinds of outside request. On every page load it fetches its
-typefaces from Google Fonts (fonts.googleapis.com and fonts.gstatic.com), which sees your IP
-address like any web-font host. On the Map tab it loads OpenStreetMap basemap tiles, which
-show the tile server the map area around the station, and so the station's approximate
-location.
+account. The typefaces are served with the app, not from a font host, so loading the page
+sends no request to a third party. The only outside requests are on the Map tab: it loads
+OpenStreetMap basemap tiles, which show the tile server the map area around the station, and
+so the station's approximate location.
 
 ## Contents
 

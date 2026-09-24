@@ -53,7 +53,7 @@ html[data-theme="dark"] {
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; height: 100%; }
 body {
-  font-family: "Hanken Grotesk", system-ui, -apple-system, sans-serif;
+  font-family: "Hanken Grotesk Variable", "Hanken Grotesk", system-ui, -apple-system, sans-serif;
   background: var(--bg);
   color: var(--ink);
   line-height: 1.5;
@@ -69,7 +69,7 @@ body {
 }
 .header h1 {
   margin: 0;
-  font-family: "Fraunces", Georgia, serif;
+  font-family: "Fraunces Variable", "Fraunces", Georgia, serif;
   font-weight: 600; font-size: 1.65rem; letter-spacing: -0.01em;
 }
 .tagline { margin: 0.15rem 0 0; color: var(--ink-soft); max-width: 62ch; font-size: 0.95rem; }
@@ -118,11 +118,11 @@ body {
 }
 .card h2 {
   margin: 0 0 0.55rem;
-  font-family: "Fraunces", Georgia, serif; font-weight: 600; font-size: 1.13rem;
+  font-family: "Fraunces Variable", "Fraunces", Georgia, serif; font-weight: 600; font-size: 1.13rem;
   letter-spacing: -0.01em;
 }
-.card h2 .muted { font-family: "Hanken Grotesk", sans-serif; font-weight: 400; }
-.card h3 { font-family: "Fraunces", Georgia, serif; font-weight: 600; font-size: 1rem; margin: 0.9rem 0 0.3rem; }
+.card h2 .muted { font-family: "Hanken Grotesk Variable", "Hanken Grotesk", sans-serif; font-weight: 400; }
+.card h3 { font-family: "Fraunces Variable", "Fraunces", Georgia, serif; font-weight: 600; font-size: 1rem; margin: 0.9rem 0 0.3rem; }
 
 /* ---------- controls ---------- */
 .controls { display: flex; flex-wrap: wrap; gap: 0.6rem 1rem; align-items: center; margin: 0.5rem 0; }
@@ -165,7 +165,7 @@ html[data-theme="dark"] .dlg-backdrop { background: rgba(0, 0, 0, 0.6); }
   border-radius: var(--radius); box-shadow: var(--shadow);
   width: 100%; max-width: 34rem; padding: 1rem 1.2rem;
 }
-.dlg h2 { margin: 0 0 0.5rem; font-family: "Fraunces", Georgia, serif; font-weight: 600; font-size: 1.13rem; letter-spacing: -0.01em; }
+.dlg h2 { margin: 0 0 0.5rem; font-family: "Fraunces Variable", "Fraunces", Georgia, serif; font-weight: 600; font-size: 1.13rem; letter-spacing: -0.01em; }
 .dlg-body { font-size: 0.92rem; white-space: pre-line; }
 .dlg-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.9rem; }
 
@@ -182,9 +182,9 @@ table.kv td { padding: 0.2rem 0; }
 table.grid { border-collapse: collapse; width: 100%; margin: 0.6rem 0; }
 table.grid th, table.grid td { border: 1px solid var(--line); padding: 0.32rem 0.55rem; text-align: right; }
 table.grid td { font-family: "DM Mono", monospace; font-size: 0.84rem; }
-table.grid th:first-child, table.grid td:first-child { text-align: left; font-family: "Hanken Grotesk", sans-serif; font-size: 0.9rem; }
+table.grid th:first-child, table.grid td:first-child { text-align: left; font-family: "Hanken Grotesk Variable", "Hanken Grotesk", sans-serif; font-size: 0.9rem; }
 table.grid thead th { background: var(--panel-2); font-weight: 600; font-size: 0.88rem; }
-.grouprow td { background: var(--panel-2) !important; font-family: "Fraunces", Georgia, serif !important; font-weight: 600; font-size: 0.95rem !important; text-align: left !important; }
+.grouprow td { background: var(--panel-2) !important; font-family: "Fraunces Variable", "Fraunces", Georgia, serif !important; font-weight: 600; font-size: 0.95rem !important; text-align: left !important; }
 .timingrow { background: var(--timing-bg); }
 .timingchip { background: var(--timing-bg); border: 1px solid var(--timing-line); border-radius: 5px; padding: 0 0.3rem; }
 td.best { font-weight: inherit; color: inherit; text-decoration: underline; text-underline-offset: 3px; }
@@ -193,7 +193,7 @@ td.best { font-weight: inherit; color: inherit; text-decoration: underline; text
 /* reference table */
 .reftable td, .reftable th { text-align: left !important; vertical-align: top; }
 .reftable .eqcell { min-width: 230px; max-width: 430px; font-family: inherit !important; }
-.reftable .blurbcell { max-width: 36ch; font-size: 0.83rem; font-family: "Hanken Grotesk", sans-serif !important; }
+.reftable .blurbcell { max-width: 36ch; font-size: 0.83rem; font-family: "Hanken Grotesk Variable", "Hanken Grotesk", sans-serif !important; }
 .eq .katex { font-size: 0.98em; color: var(--ink); }
 
 /* ---------- layout helpers ---------- */
