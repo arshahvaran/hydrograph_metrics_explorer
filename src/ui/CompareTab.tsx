@@ -2,7 +2,7 @@ import { useApp } from '../store/store'
 import type { Dataset } from '../types'
 import { useRunOutputs, frameFor, useComputeError } from './compute'
 import { rankRuns, DEFAULT_PRIORITIES, SHIFT_TOLERANT_IDS } from '../metrics/rank'
-import { REGISTRY, byId } from '../metrics/registry'
+import { REGISTRY, byId, transformNotes, rankingOmissionNote } from '../metrics/registry'
 import { fmtNum } from './format'
 
 /** Priority candidates: the previous shortlist restricted to metrics that are in
@@ -57,6 +57,10 @@ function CompareTabInner({ ds }: { ds: Dataset }) {
     .slice(0, 2)
     .map(c => byId.get(c.id)?.label ?? c.id);
   const hasShiftTolerant = activePriorities.some(p => SHIFT_TOLERANT_IDS.has(p.id));
+  // the metrics the composite actually averages: one that no simulation has
+  // (KGE on log flows) is left out, and the notes below say so (tb-rev-03)
+  const ranked = activePriorities.filter(p => rows.some(r => isFinite(r.perMetric[p.id])));
+  const omission = rankingOmissionNote(priorities, runs.map((_, i) => outputs[i]!.values), ds.view.transform);
 
   const setWeight = (id: string, weight: number) => {
     updateView({ priorityMetrics: priorities.map(p => (p.id === id ? { ...p, weight } : p)) });
@@ -111,6 +115,8 @@ function CompareTabInner({ ds }: { ds: Dataset }) {
 
       <section className="card">
         <h2>Ranking</h2>
+        {transformNotes(ds.view.transform).map(n => <div key={n} className="warning">{n}</div>)}
+        {omission && <div className="warning" role="note">{omission}</div>}
         {activePriorities.length === 0 ? (
           <p className="muted">All weights are zero; give at least one metric a weight above zero to rank the simulations.</p>
         ) : (<>
@@ -142,7 +148,7 @@ function CompareTabInner({ ds }: { ds: Dataset }) {
           {leaders.length > 1
             ? <strong>Tie between {leaders.map(i => runs[i].name).join(' and ')}</strong>
             : <strong>Recommended simulation: <span style={{ color: winnerRun.color }}>{winner.runName}</span></strong>}
-          {' '}· composite {winner.composite.toFixed(3)} across {activePriorities.length} priority metrics
+          {' '}· composite {winner.composite.toFixed(3)} across {ranked.length} priority metric{ranked.length === 1 ? '' : 's'}
           {leaders.length === 1 && contributors.length ? <>; strongest on {contributors.join(' and ')}</> : null}.
           {hasShiftTolerant
             ? ' Shift-tolerant timing metrics are included, so this ranking rewards getting events at a more proper time, not just a more proper average.'

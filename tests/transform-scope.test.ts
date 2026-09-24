@@ -177,3 +177,46 @@ describe('D2: FDC signatures, DE and W1/W2 use untransformed flows (fdc-03, de-s
     expect(computeAll(obs, sim, ctx('none')).notes.join('\n')).not.toMatch(/untransformed/)
   })
 })
+
+describe('tb-rev-04: the inverse transform drops flows outside its domain, as sqrt and log do', () => {
+  // the reviewer's record: one simulated value of -1 (eps = 0.12, so Q + eps < 0)
+  const n = 365
+  const o = Float64Array.from({ length: n }, (_, i) => 10 + 30 * Math.exp(-(((i % 40) - 15) ** 2) / 10))
+  const s = Float64Array.from({ length: n }, (_, i) => 9 + 28 * Math.exp(-(((i % 40) - 16) ** 2) / 10))
+  const bad = Float64Array.from(s); bad[200] = -1
+
+  it('a simulated flow of -1 is dropped with a note under inverse, sqrt and log alike', () => {
+    for (const tr of ['inverse', 'sqrt', 'log'] as const) {
+      const out = computeAll(o, bad, { ...ctx(tr, n), heavy: false })
+      expect(out.n, tr).toBe(n - 1)
+      expect(out.pairedIndex, tr).not.toContain(200)
+      expect(out.notes, tr).toContain(`1 pair was excluded because it is not positive under the ${tr} transform.`)
+    }
+  })
+
+  it('inverse: the scores equal those of the record without that pair (NSE once fell from 0.771 to -6.275)', () => {
+    const keep = Array.from({ length: n }, (_, i) => i).filter(i => i !== 200)
+    const eps = 0.01 * (o.reduce((a, b) => a + b, 0) / n)       // eps from the NaN-policy pairs, as the view does
+    const f = (v: number) => 1 / (v + eps)
+    const to = keep.map(i => f(o[i])), ts = keep.map(i => f(bad[i]))
+    const m = to.reduce((a, b) => a + b, 0) / to.length
+    let num = 0, den = 0
+    to.forEach((v, k) => { num += (ts[k] - v) ** 2; den += (v - m) ** 2 })
+    const out = computeAll(o, bad, { ...ctx('inverse', n), heavy: false })
+    expect(out.values.nse).toBeCloseTo(1 - num / den, 12)
+    expect(out.values.nse).toBeGreaterThan(0.7)
+  })
+
+  it('the inverse domain is Q + eps > 0, like log: monotone there, NaN outside', () => {
+    const t = applyTransform([10, 0, -0.05, -0.1, -0.2, -1], [10, 10, 10, 10, 10, 10], 'inverse', 10)
+    const eps = 0.1
+    expect(t.o[0]).toBeCloseTo(1 / 10.1, 14)
+    expect(t.o[1]).toBeCloseTo(1 / eps, 12)                     // zero flow: finite through eps
+    expect(t.o[2]).toBeCloseTo(1 / 0.05, 12)                    // -eps < Q < 0: kept, above 1/eps (monotone)
+    expect(t.o[3]).toBeNaN()                                    // Q + eps = 0
+    expect(t.o[4]).toBeNaN()
+    expect(t.o[5]).toBeNaN()
+    const tl = applyTransform([10, 0, -0.05, -0.1, -0.2, -1], [10, 10, 10, 10, 10, 10], 'log', 10)
+    expect(Array.from(t.o, Number.isFinite)).toEqual(Array.from(tl.o, Number.isFinite))
+  })
+})

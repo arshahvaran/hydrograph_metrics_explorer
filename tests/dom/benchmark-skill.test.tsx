@@ -7,7 +7,13 @@
  *    while the model was scored on inverse flows (compute-05, eff-02,
  *    report-01, samples-e2e-04);
  *  - climatology with a simulation that has gaps: the benchmark was scored on
- *    every observed step, the model on its pairs only (compute-09, eff-03).
+ *    every observed step, the model on its pairs only (compute-09, eff-03);
+ *  - tb-rev-01: every benchmark is a flow series built from the observations
+ *    of the evaluated pairs and then transformed like the simulation (the
+ *    climatology once used every observation of the record, and the mean
+ *    benchmark the mean of the transformed observations);
+ *  - tb-rev-02: persistence has no forecast at the first step, which is
+ *    dropped from both scores.
  * Expected values come from plain loops in this file.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
@@ -72,16 +78,32 @@ describe('Metrics tab benchmark skill rows', () => {
     expect(cell(/^NSE skill vs mean$/)).toBe(fmtNum(nseRef(o, s), 3))
   }, 30000)
 
-  it('persistence + inverse transform: both scores on inverse flows', async () => {
+  it('persistence + inverse transform: both scores on inverse flows, from the second step on', async () => {
     commit(false)
     useApp.getState().updateView({ benchmark: 'persistence', transform: 'inverse' })
     render(<MetricsTab />)
     await settled()
     const o = Array.from({ length: N }, (_, i) => obsAt(i)), s = Array.from({ length: N }, (_, i) => simAt(i))
     const eps = 0.01 * avg(o), f = (v: number) => 1 / (v + eps)
-    const to = o.map(f), ts = s.map(f), tb = o.map((_, i) => f(o[Math.max(0, i - 1)]))
+    const to = o.slice(1).map(f), ts = s.slice(1).map(f), tb = o.slice(0, -1).map(f)
     expect(cell(/^NSE skill vs persistence$/)).toBe(fmtNum(skillRef(nseRef(to, ts), nseRef(to, tb)), 3))
     expect(cell(/^KGE skill vs persistence$/)).toBe(fmtNum(skillRef(kgeRef(to, ts), kgeRef(to, tb)), 3))
+  }, 30000)
+
+  it('mean + inverse transform: the benchmark is the transformed mean flow of the evaluated pairs', async () => {
+    commit(true)
+    useApp.getState().updateView({ transform: 'inverse' })
+    render(<MetricsTab />)
+    await settled()
+    const keep = Array.from({ length: N }, (_, i) => i).filter(i => !gap(i))
+    const eps = 0.01 * avg(keep.map(obsAt)), f = (v: number) => 1 / (v + eps)
+    const to = keep.map(i => f(obsAt(i))), ts = keep.map(i => f(simAt(i)))
+    const tb = to.map(() => f(avg(keep.map(obsAt))))
+    const nseB = nseRef(to, tb)
+    expect(nseB).toBeLessThan(0)
+    const kgeB = 1 - Math.sqrt(2 + (avg(tb) / avg(to) - 1) ** 2)
+    expect(cell(/^NSE skill vs mean$/)).toBe(fmtNum(skillRef(nseRef(to, ts), nseB), 3))
+    expect(cell(/^KGE skill vs mean$/)).toBe(fmtNum(skillRef(kgeRef(to, ts), kgeB), 3))
   }, 30000)
 
   it('climatology with a simulation that has gaps: the benchmark is scored on the model pairs', async () => {
@@ -91,8 +113,9 @@ describe('Metrics tab benchmark skill rows', () => {
     await settled()
     const rows = Array.from({ length: N }, (_, i) => i)
     const month = (i: number) => new Date(Date.UTC(2003, 0, 1) + i * DAY).getUTCMonth()
-    const clim = Array.from({ length: 12 }, (_, m) => avg(rows.filter(i => month(i) === m).map(obsAt)))
     const keep = rows.filter(i => !gap(i))
+    // monthly means of the evaluated observations only
+    const clim = Array.from({ length: 12 }, (_, m) => avg(keep.filter(i => month(i) === m).map(obsAt)))
     const o = keep.map(obsAt), s = keep.map(simAt), b = keep.map(i => clim[month(i)])
     expect(cell(/^NSE skill vs climatology$/)).toBe(fmtNum(skillRef(nseRef(o, s), nseRef(o, b)), 3))
     expect(cell(/^KGE skill vs climatology$/)).toBe(fmtNum(skillRef(kgeRef(o, s), kgeRef(o, b)), 3))
