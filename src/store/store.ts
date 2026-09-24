@@ -3,7 +3,7 @@ import { create } from 'zustand'
 import type { Dataset, Project, Run, UnitId, ViewState, TimingConfig, SandboxState, AreaUnitId } from '../types'
 import { defaultView, RUN_PALETTE, clampTimingConfig } from '../types'
 import { detectStep } from '../units/stepDetect'
-import { convertSeries } from '../units/convert'
+import { convertSeries, type ConvertContext } from '../units/convert'
 import { applySubset, isPerStepDepth, resampleAvailable } from '../metrics/subset'
 
 export interface CommitInput {
@@ -99,6 +99,20 @@ export function subsetView(v: ViewState, stepMs: number, n: number, resampled: b
   }
   view.activeTab = 'plots';
   return view;
+}
+
+/**
+ * A stored setting that is a value in the data unit (an absolute event
+ * threshold, a custom peak prominence, the sandbox offset and noise), converted
+ * with EXACTLY the arithmetic the data go through (convertSeries), never as
+ * value × factor: the two roundings differ in the last bit for a quarter to a
+ * half of whole-number flows, so a flow equal to the threshold could end up
+ * above it after a conversion and the strict ">" of the event detector then
+ * counted new events (audit units-03/timing-sandbox-04). Only meaningful when
+ * the factor is uniform through the record; element 0 of ctx is used.
+ */
+export function convertSetting(value: number, ctx: ConvertContext): number {
+  return convertSeries([value], ctx)[0];
 }
 
 const mutateActive = (s: AppState, fn: (d: Dataset) => Dataset) => {
@@ -232,6 +246,16 @@ export const useApp = create<AppState>((set, get) => ({
   // previous area; they are re-derived with the new one (back to their input
   // unit with the old area, forward with the new), so the data always match
   // the area on screen and in the report.
+  // The settings held in the data unit (an absolute event threshold, a custom
+  // peak prominence, the sandbox offset and noise) describe the observed
+  // series, so when it is re-derived they go through the SAME two conversions
+  // (audit units-07: they once stayed put, and after a depth round trip with
+  // an area change they had doubled and the event metrics read n/a). The
+  // factor is uniform even on monthly data (the step length cancels), so one
+  // value per setting is right; on a fixed step a setting equal to an observed
+  // value stays exactly equal to it (on monthly depth data the first month's
+  // length is used, so the last bit can differ in months of another length).
+  // When the observed series is not re-derived the settings are left alone.
   setArea: (value, unit) => set(s => mutateActive(s, d => {
     const area = { value, unit };
     const old = d.area;
@@ -245,9 +269,26 @@ export const useApp = create<AppState>((set, get) => ({
       return Array.from(convertSeries(input, { ...ctx, area, from, to: d.targetUnit }));
     };
     try {
+      const obsUnit = d.observed.inputUnit;
+      let view = d.view;
+      if (viaArea(obsUnit)) {
+        const cv = (x: number) => convertSetting(
+          convertSetting(x, { ...ctx, area: old!, from: d.targetUnit, to: obsUnit }),
+          { ...ctx, area, from: obsUnit, to: d.targetUnit });
+        const tc = view.timingConfig, sb = view.sandbox, et = tc.eventThreshold;
+        view = {
+          ...view,
+          timingConfig: {
+            ...tc,
+            eventThreshold: et.kind === 'absolute' && Number.isFinite(et.value) ? { ...et, value: cv(et.value) } : et,
+            peakProminence: typeof tc.peakProminence === 'number' ? cv(tc.peakProminence) : tc.peakProminence,
+          },
+          sandbox: { ...sb, offset: cv(sb.offset), noiseAmp: cv(sb.noiseAmp) },
+        };
+      }
       return {
-        ...d, area,
-        observed: { ...d.observed, values: rederive(d.observed.values, d.observed.inputUnit) as number[] },
+        ...d, area, view,
+        observed: { ...d.observed, values: rederive(d.observed.values, obsUnit) as number[] },
         runs: d.runs.map(r => ({ ...r, values: rederive(r.values, r.inputUnit) as number[] })),
       };
     } catch {
@@ -284,14 +325,16 @@ export const useApp = create<AppState>((set, get) => ({
       const tc = view.timingConfig, sb = view.sandbox;
       const et = tc.eventThreshold;
       if (uniform) {
+        // the data's own arithmetic, so a flow equal to the threshold stays equal
+        const cv = (x: number) => convertSetting(x, { ...ctx, from: ds.targetUnit, to });
         view = {
           ...view,
           timingConfig: {
             ...tc,
-            eventThreshold: et.kind === 'absolute' && Number.isFinite(et.value) ? { ...et, value: et.value * lo } : et,
-            peakProminence: typeof tc.peakProminence === 'number' ? tc.peakProminence * lo : tc.peakProminence,
+            eventThreshold: et.kind === 'absolute' && Number.isFinite(et.value) ? { ...et, value: cv(et.value) } : et,
+            peakProminence: typeof tc.peakProminence === 'number' ? cv(tc.peakProminence) : tc.peakProminence,
           },
-          sandbox: { ...sb, offset: sb.offset * lo, noiseAmp: sb.noiseAmp * lo },
+          sandbox: { ...sb, offset: cv(sb.offset), noiseAmp: cv(sb.noiseAmp) },
         };
       } else {
         let eventThreshold = et;

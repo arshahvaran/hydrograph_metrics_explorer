@@ -7,7 +7,7 @@
  * projects saved by older versions).
  */
 import type { Project, Dataset, ViewState, UnitId, AreaUnitId, SandboxState } from '../types'
-import { PRESETS } from '../metrics/registry'
+import { PRESETS, byId } from '../metrics/registry'
 import { defaultView, RUN_PALETTE, clampTimingConfig, migrateDtwBand } from '../types'
 import { UNITS } from '../units/registry'
 import { alignByDate } from './store'
@@ -25,11 +25,20 @@ const unitId = (v: unknown): UnitId => (typeof v === 'string' && Object.prototyp
 
 const TABS: ViewState['activeTab'][] = ['data', 'metrics', 'plots', 'timing', 'sandbox', 'compare', 'map', 'report'];
 const BENCHMARKS: ViewState['benchmark'][] = ['mean', 'climatology', 'persistence'];
-/** Saved ids are kept when they are plain, unique strings, so references between
- *  saved fields (activeDatasetId, the sandbox's targetRunId) still resolve. */
-const idOk = (v: unknown, used: Set<string>): v is string =>
-  typeof v === 'string' && /^[\w.-]{1,120}$/.test(v) && !used.has(v);
-const usedIds = new Set<string>();
+/** A user string quoted in a warning, cut short so a hostile file cannot flood the notice. */
+const quote = (s: string) => JSON.stringify(s.length > 60 ? `${s.slice(0, 60)}…` : s);
+
+/*
+ * Ids. Every loaded dataset and run gets a FRESH id (nid), never the saved one.
+ * The compute caches (frames, panels, CIs, Sandbox) are keyed by dataset and
+ * run id, not by the values, so two files that share saved ids (a script that
+ * writes .hme.json files with fixed ids, or a copy with one value corrected by
+ * hand) once showed the first file's metrics under the second file's name.
+ * References between saved fields (activeDatasetId, the sandbox's targetRunId)
+ * are resolved through an old-to-new id map instead. When a saved id repeats,
+ * the FIRST occurrence wins, as runs.find / datasets.find do in the app, and
+ * the file is told about it.
+ */
 
 /** Sandbox settings change the Sandbox's metric values, so they are restored
  *  field by field (each validated) instead of being dropped. */
@@ -99,8 +108,16 @@ function loadView(v: unknown, stepMs: number, n: number, warn: (msg: string) => 
       .filter((x): x is { id: string; weight: number } =>
         typeof x === 'object' && x !== null && typeof (x as any).id === 'string'
         && Number.isFinite((x as any).weight) && (x as any).weight >= 0)
-      .filter(x => (seen.has(x.id) ? false : (seen.add(x.id), true)));
+      .filter(x => (seen.has(x.id) ? false : (seen.add(x.id), true)))
+      // An id the registry does not know scores NaN for every run, so no
+      // composite and no recommendation could be computed (audit project-04).
+      .filter(x => {
+        if (byId.has(x.id)) return true;
+        warn(`the priority metric ${quote(x.id)} is unknown and was dropped`);
+        return false;
+      });
     if (pm.length) out.priorityMetrics = pm.map(x => ({ id: x.id, weight: x.weight }));
+    else if ((o.priorityMetrics as unknown[]).length) warn('no saved priority metric could be used; the default priorities are used');
   }
   if (typeof o.showBootstrapCIs === 'boolean') out.showBootstrapCIs = o.showBootstrapCIs;
   if (typeof o.activeTab === 'string' && (TABS as string[]).includes(o.activeTab)) out.activeTab = o.activeTab as ViewState['activeTab'];
@@ -132,7 +149,7 @@ function loadView(v: unknown, stepMs: number, n: number, warn: (msg: string) => 
   return out;
 }
 
-function loadDataset(raw: unknown, errors: string[]): Dataset | null {
+function loadDataset(raw: unknown, errors: string[], dsIds: Map<string, string>): Dataset | null {
   if (typeof raw !== 'object' || raw === null) { errors.push('a dataset entry is not an object'); return null; }
   const d = raw as Record<string, unknown>;
   const name = str(d.name, 'unnamed');
@@ -186,20 +203,39 @@ function loadDataset(raw: unknown, errors: string[]): Dataset | null {
   if (aligned.dates.length < 2) { errors.push(`dataset "${name}": fewer than 2 rows with valid dates`); return null; }
   const dup = dates.length - badDates - aligned.dates.length;
   if (dup > 0) errors.push(`dataset "${name}": ${dup} row${dup === 1 ? '' : 's'} repeating an earlier date ${dup === 1 ? 'was' : 'were'} dropped (the first row of each date is kept).`);
-  const dsId = idOk(d.id, usedIds) ? d.id : nid('ds');
-  usedIds.add(dsId);
+  const dsId = nid('ds');
+  if (typeof d.id === 'string') {
+    if (!dsIds.has(d.id)) dsIds.set(d.id, dsId);
+    else errors.push(`dataset "${name}": the dataset id ${quote(d.id)} is repeated in the file; the saved active dataset refers to the first dataset with that id.`);
+  }
+  // saved run id -> fresh id, first occurrence wins (the Sandbox target is
+  // resolved with runs.find, which takes the first run with a matching id)
   const runIds = new Map<string, string>();
-  const newRunIds = aligned.runs.map((_r, i) => {
+  const firstName = new Map<string, string>();
+  const repeated = new Set<string>();
+  const newRunIds = aligned.runs.map((r, i) => {
     const saved = runsIn[i]?.id;
-    const id = idOk(saved, usedIds) ? saved : nid('run');
-    usedIds.add(id);
-    if (typeof saved === 'string') runIds.set(saved, id);
+    const id = nid('run');
+    if (typeof saved === 'string') {
+      if (!runIds.has(saved)) { runIds.set(saved, id); firstName.set(saved, r.name); }
+      else if (!repeated.has(saved)) {
+        repeated.add(saved);
+        errors.push(`dataset "${name}": the simulation id ${quote(saved)} is repeated; references to it use the first simulation with that id (${quote(firstName.get(saved)!)}).`);
+      }
+    }
     return id;
   });
   const step = detectStep(aligned.dates);
-  const loc = (typeof d.location === 'object' && d.location !== null &&
-    typeof (d.location as any).lat === 'number' && typeof (d.location as any).lon === 'number')
-    ? { lat: (d.location as any).lat, lon: (d.location as any).lon } : null;
+  // Same bounds as the Map tab's Set button: an infinite or out-of-range
+  // coordinate once made Leaflet try to load an infinite number of tiles.
+  let loc: { lat: number; lon: number } | null = null;
+  if (d.location != null) {
+    const L = d.location as Record<string, unknown>;
+    const lat = typeof L === 'object' ? L.lat : undefined, lon = typeof L === 'object' ? L.lon : undefined;
+    if (typeof lat === 'number' && typeof lon === 'number' && Number.isFinite(lat) && Number.isFinite(lon)
+      && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) loc = { lat, lon };
+    else errors.push(`dataset "${name}": the station location is not a valid latitude and longitude (|lat| ≤ 90°, |lon| ≤ 180°) and was dropped.`);
+  }
 
   return {
     id: dsId,
@@ -233,13 +269,12 @@ export function parseProjectFile(text: string): { project: Project; warnings: st
   if (!Array.isArray(p.datasets)) throw new Error('Not an HME project file (no datasets array).');
 
   const errors: string[] = [];
-  usedIds.clear();
-  const datasets = p.datasets.map(d => loadDataset(d, errors)).filter((d): d is Dataset => d !== null);
+  const dsIds = new Map<string, string>();   // saved dataset id -> fresh id
+  const datasets = p.datasets.map(d => loadDataset(d, errors, dsIds)).filter((d): d is Dataset => d !== null);
   if (p.datasets.length > 0 && datasets.length === 0) {
     throw new Error(`No dataset in the file could be loaded:\n- ${errors.join('\n- ')}`);
   }
-  const activeDatasetId = datasets.some(d => d.id === p.activeDatasetId)
-    ? p.activeDatasetId as string
-    : (datasets[0]?.id ?? null);
+  const activeDatasetId = (typeof p.activeDatasetId === 'string' ? dsIds.get(p.activeDatasetId) : undefined)
+    ?? (datasets[0]?.id ?? null);
   return { project: { schemaVersion: 1, datasets, activeDatasetId }, warnings: errors };
 }

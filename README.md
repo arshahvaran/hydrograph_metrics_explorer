@@ -11,8 +11,8 @@
 </p>
 
 **A browser-based evaluation tool that computes shift-tolerant hydrograph metrics
-alongside conventional ones such as NSE and KGE, updating every metric live as users shift,
-scale, or offset their flow series.**
+alongside conventional ones such as NSE and KGE, updating a panel of conventional and
+shift-tolerant metrics live as users shift, scale, or offset their flow series.**
 
 **Live app:** https://arshahvaran.github.io/hydrograph_metrics_explorer/
 
@@ -25,9 +25,12 @@ computed too, although the review places it with the conventional metrics: its t
 term is a linear correlation, which responds to a lag without quantifying it.
 
 Everything (parsing, unit conversion, every metric, every plot, report generation) runs in
-your browser. **No uploaded data ever leaves the page**; there is no server, no database, no
-account. The only outside requests are the Map tab's OpenStreetMap basemap tiles, which show
-the tile server the map area around the station.
+your browser. **Your flow series never leave the page**; there is no server, no database, no
+account. The page makes two kinds of outside request. On every page load it fetches its
+typefaces from Google Fonts (fonts.googleapis.com and fonts.gstatic.com), which sees your IP
+address like any web-font host. On the Map tab it loads OpenStreetMap basemap tiles, which
+show the tile server the map area around the station, and so the station's approximate
+location.
 
 ## Contents
 

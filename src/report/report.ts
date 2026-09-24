@@ -13,7 +13,7 @@ import { rankRuns, DEFAULT_PRIORITIES, type RankRow } from '../metrics/rank'
 import { fmtNum, fmtStamp } from '../ui/format'
 import { decimateMinMax } from '../ui/decimate'
 import { UNITS } from '../units/registry'
-import { exportTemplate } from '../ui/PlotHost'
+import { exportTemplate, plotSafeTraces, plotSafeLayout } from '../ui/PlotHost'
 import { APP_VERSION } from '../version'
 import type { Dataset, Run } from '../types'
 import type { EventReport, EventError } from '../metrics/timing/events'
@@ -78,7 +78,8 @@ async function plotPng(traces: unknown[], layout: Record<string, unknown>, opts:
       margin: { t: 40, r: 16, l: 60, b: 48 },
       legend: { orientation: 'h', y: 1.14 },
     };
-    await P.newPlot(host, traces, { ...base, ...layout, ...(opts.square ? { width: px.w, height: px.h, autosize: false } : {}) }, { staticPlot: true });
+    // run and dataset names are escaped: Plotly renders markup in them (links included)
+    await P.newPlot(host, plotSafeTraces(traces), plotSafeLayout({ ...base, ...layout, ...(opts.square ? { width: px.w, height: px.h, autosize: false } : {}) }), { staticPlot: true });
     const dataUrl: string = await P.toImage(host, { format: 'png', width: px.w, height: px.h, scale: 2 });
     return opts.square ? { dataUrl, w: 320, h: 320 } : { dataUrl, w: 620, h: 290 };
   } finally {
@@ -149,13 +150,21 @@ export function summaryPairs(ds: Dataset, frame: Frame): [string, string][] {
     ['Unit', UNITS[ds.targetUnit].label + (ds.area ? ` · area ${ds.area.value} ${ds.area.unit}` : '')],
     ['Location', ds.location ? `${ds.location.lat.toFixed(4)}, ${ds.location.lon.toFixed(4)} (WGS84)` : 'n/a'],
     ['NaN policy / transform / benchmark', `${v.nanPolicy} / ${v.transform} / ${v.benchmark}`],
-    ['Timing config', `events ≥ ${v.timingConfig.eventThreshold.kind === 'absolute' ? `${v.timingConfig.eventThreshold.value} ${UNITS[ds.targetUnit].label}` : `P${v.timingConfig.eventThreshold.value} of observed flow`}, min event gap ${v.timingConfig.eventMinDistance}, peak window ±${v.timingConfig.peakMatchTolerance}, peak separation ${v.timingConfig.peakMinDistance}, DTW band ±${v.timingConfig.dtwBand} steps`],
+    // strictly above: detectEvents counts x[i] > threshold
+    ['Timing config', `events > ${v.timingConfig.eventThreshold.kind === 'absolute' ? `${v.timingConfig.eventThreshold.value} ${UNITS[ds.targetUnit].label}` : `P${v.timingConfig.eventThreshold.value} of observed flow`}, min event gap ${v.timingConfig.eventMinDistance}, peak window ±${v.timingConfig.peakMatchTolerance}, peak separation ${v.timingConfig.peakMinDistance}, DTW band ±${v.timingConfig.dtwBand} steps`],
     // Every other setting that changes a reported value (audit report-05).
     ['Event warm-up / peak prominence', `${v.timingConfig.eventWarmup} steps / ${v.timingConfig.peakProminence === 'auto' ? 'auto (standard deviation of the observed flow)' : `${v.timingConfig.peakProminence} ${UNITS[ds.targetUnit].label}`}`],
     ['Wavelet scales', String(v.timingConfig.waveletScales)],
     ['Input units (converted)', [`${ds.observed.name || 'observed'}: ${UNITS[ds.observed.inputUnit]?.label ?? ds.observed.inputUnit}`, ...ds.runs.filter(r => r.visible).map(r => `${r.name}: ${UNITS[r.inputUnit]?.label ?? r.inputUnit}`)].join('; ')],
-    ['Bootstrap CIs', v.showBootstrapCIs ? 'shown (block bootstrap, seeded)' : 'not computed'],
+    // the report itself carries no intervals; the row says where they are
+    ['Bootstrap CIs', v.showBootstrapCIs ? 'shown in the Metrics tab (block bootstrap, seeded); not included in this report' : 'off in the Metrics tab; not included in this report'],
   ];
+}
+
+/** The ranking's priority metrics as columns: a zero weight takes no part in
+ *  the composite (rankRuns skips it), so it is not listed as a column of n/a. */
+function rankPriorities(ds: Dataset): { id: string; weight: number }[] {
+  return (ds.view.priorityMetrics.length ? ds.view.priorityMetrics : DEFAULT_PRIORITIES).filter(p => p.weight > 0);
 }
 
 // ------------------------------------------------------------------- docx --
@@ -169,9 +178,28 @@ export function chunkIndices(n: number, per: number): number[][] {
 }
 /** Text that came from user files (dataset, run and column names, notes) can hold
  *  characters XML 1.0 forbids (C0 controls, U+FFFE/U+FFFF, lone surrogates); one of
- *  them in word/document.xml makes Word refuse the whole report, so drop them. */
-export const xmlSafe = (s: string): string =>
-  s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '');
+ *  them in word/document.xml makes Word refuse the whole report, so drop them.
+ *  A loop over UTF-16 code units, not a regex: the lookbehind a regex needs for a
+ *  lone low surrogate is a syntax error on Safari 14.0 to 16.3 (esbuild turns the
+ *  literal into new RegExp, which threw at the first call and failed every Word
+ *  report there). A high surrogate followed by a low one is a pair and is kept. */
+const XML_SUSPECT = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uD800-\uDFFF\uFFFE\uFFFF]/;
+export function xmlSafe(s: string): string {
+  if (!XML_SUSPECT.test(s)) return s;
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c >= 0xD800 && c <= 0xDBFF) {
+      const d = i + 1 < s.length ? s.charCodeAt(i + 1) : 0;
+      if (d >= 0xDC00 && d <= 0xDFFF) { out += s.slice(i, i + 2); i++; }
+      continue;                                  // a pair is kept; a lone high surrogate is dropped
+    }
+    if (c >= 0xDC00 && c <= 0xDFFF) continue;    // lone low surrogate
+    if ((c < 0x20 && c !== 0x09 && c !== 0x0A && c !== 0x0D) || c === 0xFFFE || c === 0xFFFF) continue;
+    out += s[i];
+  }
+  return out;
+}
 const cellP = (text: string, opts: { bold?: boolean; mono?: boolean; color?: string } = {}) =>
   new Paragraph({ children: [new TextRun({ text: xmlSafe(text), bold: opts.bold, color: opts.color, font: opts.mono ? 'Consolas' : undefined, size: opts.mono ? 16 : 18 })] });
 
@@ -315,7 +343,7 @@ export async function buildDocx(p: ReportPayload): Promise<Blob> {
   if (sections.ranking && runs.length >= 2) {
     H('5. Simulation ranking and recommendation');
     writeNotes();
-    const priorities = ds.view.priorityMetrics.length ? ds.view.priorityMetrics : DEFAULT_PRIORITIES;
+    const priorities = rankPriorities(ds);
     const rows: RankRow[] = rankRuns(runs.map((r, i) => ({ runName: r.name, values: outputs[i].values })), priorities);
     const order = rows.map((_, i) => i).sort((a, b) => rows[a].rank - rows[b].rank);
     const w0 = 900, wn = 2600;
@@ -326,7 +354,7 @@ export async function buildDocx(p: ReportPayload): Promise<Blob> {
         cells: [String(rows[i].rank), rows[i].runName,
           ...priorities.map(pr => (isFinite(rows[i].perMetric[pr.id]) ? rows[i].perMetric[pr.id].toFixed(2) : 'n/a')),
           isFinite(rows[i].composite) ? rows[i].composite.toFixed(3) : 'n/a'],
-        shaded: rows[i].rank === 1, boldFirst: true,
+        shaded: rows[i].rank === 1 && isFinite(rows[i].composite), boldFirst: true,   // no composite, no winner
       })),
       [w0, wn, ...priorities.map(() => wm), 1400],
     ));
@@ -407,7 +435,7 @@ export function openPrintReport(p: ReportPayload): void {
     });
   }
   if (sections.ranking && runs.length >= 2) {
-    const priorities = ds.view.priorityMetrics.length ? ds.view.priorityMetrics : DEFAULT_PRIORITIES;
+    const priorities = rankPriorities(ds);
     const rows = rankRuns(runs.map((r, i) => ({ runName: r.name, values: outputs[i].values })), priorities);
     const order = rows.map((_, i) => i).sort((a, b) => rows[a].rank - rows[b].rank);
     const omitted = rankingOmissionNote(priorities, outputs.map(o => o.values), ds.view.transform);
