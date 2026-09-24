@@ -5,8 +5,10 @@
  *    day of year, and a monthly resample keeps every year of the record on
  *    the heatmap (the old full-record indexing collapsed it into January of
  *    the first year).
- *  - Threshold line: data units on a linear y axis, log10 units on a log y
- *    axis, suppressed for non-positive thresholds on log.
+ *  - Threshold line: data units on linear AND log y axes (plotly.js shape
+ *    positions are data values on a log axis; the old log10 value drew a
+ *    100 m3/s threshold at 2, audit plots-03), suppressed for non-positive
+ *    thresholds on log.
  *  - Sub-daily records keep their time part on the x axis (Plots tab and
  *    report figures); daily records keep the date-only stamps.
  */
@@ -52,7 +54,7 @@ const commit = (csv: string) => useApp.getState().commitDataset(stage(parseDelim
 const lastLayout = (): any => vi.mocked(Plotly.react).mock.calls.at(-1)?.[2];
 
 describe('threshold line on linear and log y axes, round 12', () => {
-  it('linear passes data units, log passes log10, non-positive on log suppresses', async () => {
+  it('linear and log both pass data units, non-positive on log suppresses', async () => {
     commit(dailyCsv(90));
     render(<App />);
     fireEvent.click(screen.getByRole('tab', { name: 'Plots' }));
@@ -68,8 +70,8 @@ describe('threshold line on linear and log y axes, round 12', () => {
     await waitFor(() => {
       const L = lastLayout();
       expect(L?.yaxis?.type).toBe('log');
-      expect(L?.shapes?.[0]?.y0).toBe(2);
-      expect(L?.shapes?.[0]?.y1).toBe(2);
+      expect(L?.shapes?.[0]?.y0).toBe(100);
+      expect(L?.shapes?.[0]?.y1).toBe(100);
     });
     fireEvent.change(thr, { target: { value: '-5' } });
     await waitFor(() => {
@@ -96,7 +98,7 @@ describe('subset-frame binning on the Plots tab, round 12', () => {
     const med = (call[1] as any[]).find((t: any) => /^observed \(median\)$/.test(t.name ?? ''));
     const xs = med.x as number[];
     expect(Math.min(...xs)).toBe(41);   // 2003-02-10 is DOY 41, not DOY 1
-    expect(Math.max(...xs)).toBe(90);   // 2003-03-31 is DOY 90
+    expect(Math.max(...xs)).toBe(91);   // 2003-03-31 is calendar day 91 (Mar 1 = 61)
     expect(xs.length).toBe(50);         // 19 February + 31 March days
     // the value plotted on DOY 41 is the sample of 2003-02-10 (record row 40)
     expect(med.y[0]).toBeCloseTo(6 + 4 * Math.sin(40 / 7), 2);

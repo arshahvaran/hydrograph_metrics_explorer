@@ -62,15 +62,64 @@ function themeTemplate(): any {
   };
 }
 
-function tracesToCsv(traces: any[]): string {
-  const lines = ['trace,x,y'];
-  for (const tr of traces) {
-    const xs = tr.x ?? [], ys = tr.y ?? tr.r ?? [];
-    const name = String(tr.name ?? 'series');
-    for (let i = 0; i < Math.min(xs.length ?? 0, ys.length ?? 0); i++) {
-      lines.push(csvLine([name, xs[i], ys[i]]));
+type TraceKind = 'xy' | 'heatmap' | 'polar';
+const traceKind = (tr: any): TraceKind =>
+  Array.isArray(tr.z) ? 'heatmap'
+    : (tr.r !== undefined || tr.theta !== undefined || /polar/.test(String(tr.type ?? ''))) ? 'polar'
+      : 'xy';
+const arr = (v: unknown): any[] | null => (Array.isArray(v) || ArrayBuffer.isView(v) ? Array.from(v as ArrayLike<unknown>) : null);
+const titleText = (t: any): string | null => (typeof t === 'string' ? t : typeof t?.text === 'string' ? t.text : null);
+
+/**
+ * The plotted data as CSV, one row per plotted point:
+ *  - x/y traces: trace, x, y (a null y is a gap in the line, kept as an empty cell);
+ *  - heatmaps: trace, x, y, z, one row per non-empty cell (z is the plotted value);
+ *  - polar traces: trace, r, theta_deg;
+ *  - a per-point marker colour array (a colour scale) adds a column named
+ *    after its colour-bar title.
+ * The trace column is meta.csvName, else the trace name, else the point's
+ * text label (the DE polar labels each point with its simulation).
+ * Exported for tests.
+ */
+export function tracesToCsv(traces: any[]): string {
+  const kinds = traces.map(traceKind);
+  const hasXY = kinds.some(k => k !== 'polar'), hasZ = kinds.includes('heatmap'), hasPolar = kinds.includes('polar');
+  const colourTr = traces.find(tr => arr(tr.marker?.color) && traceKind(tr) !== 'heatmap');
+  const colourCol = colourTr ? (titleText(colourTr.marker.colorbar?.title) ?? 'marker_color') : null;
+  const header = ['trace', ...(hasXY ? ['x', 'y'] : []), ...(hasZ ? ['z'] : []), ...(hasPolar ? ['r', 'theta_deg'] : []), ...(colourCol ? [colourCol] : [])];
+  const lines = [csvLine(header)];
+  traces.forEach((tr, t) => {
+    const kind = kinds[t];
+    const text = arr(tr.text);
+    const label = (i: number) => String(tr.meta?.csvName ?? tr.name ?? (text && text[i] != null ? text[i] : 'series'));
+    const colours = arr(tr.marker?.color);
+    const row = (i: number, cells: { x?: unknown; y?: unknown; z?: unknown; r?: unknown; theta?: unknown }) => {
+      lines.push(csvLine([
+        label(i),
+        ...(hasXY ? [cells.x, cells.y] : []), ...(hasZ ? [cells.z] : []), ...(hasPolar ? [cells.r, cells.theta] : []),
+        ...(colourCol ? [colours && kind !== 'heatmap' ? colours[i] : ''] : []),
+      ]));
+    };
+    if (kind === 'heatmap') {
+      const xs = arr(tr.x), ys = arr(tr.y);
+      (tr.z as any[]).forEach((zrow, i) => {
+        (arr(zrow) ?? []).forEach((v, j) => {
+          if (v === null || v === undefined || !Number.isFinite(v)) return;
+          row(i, { x: xs ? xs[j] : j, y: ys ? ys[i] : i, z: v });
+        });
+      });
+    } else if (kind === 'polar') {
+      const rs = arr(tr.r) ?? [], th = arr(tr.theta) ?? [];
+      const toDeg = tr.thetaunit === 'radians' ? 180 / Math.PI : 1;
+      for (let i = 0; i < Math.min(rs.length, th.length); i++) {
+        row(i, { r: rs[i], theta: typeof th[i] === 'number' ? th[i] * toDeg : th[i] });
+      }
+    } else {
+      const xs = arr(tr.x), ys = arr(tr.y) ?? [];
+      // a trace without x is drawn against 0, 1, 2, ... by Plotly
+      for (let i = 0; i < (xs ? Math.min(xs.length, ys.length) : ys.length); i++) row(i, { x: xs ? xs[i] : i, y: ys[i] });
     }
-  }
+  });
   return lines.join('\n');
 }
 
