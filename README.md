@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://arshahvaran.github.io/hydrograph_metrics_explorer/"><img src="https://img.shields.io/badge/Live%20app-arshahvaran.github.io-0b6e99" alt="Live app"></a>
-  <a href="https://github.com/arshahvaran/hydrograph_metrics_explorer/tags"><img src="https://img.shields.io/badge/version-1.13-informational" alt="Version"></a>
+  <a href="https://github.com/arshahvaran/hydrograph_metrics_explorer/tags"><img src="https://img.shields.io/badge/version-1.14-informational" alt="Version"></a>
   <a href="https://creativecommons.org/licenses/by-nc/4.0/"><img src="https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg" alt="CC BY-NC 4.0"></a>
 </p>
 
@@ -172,6 +172,9 @@ This work is licensed under a
 [Creative Commons Attribution-NonCommercial 4.0 International License][cc-by-nc].
 
 [![CC BY-NC 4.0][cc-by-nc-image]][cc-by-nc]
+
+The typefaces bundled with the app (Fraunces, Hanken Grotesk, DM Mono and STIX Two Text,
+packaged by Fontsource) are under the SIL Open Font License 1.1.
 
 [cc-by-nc]: https://creativecommons.org/licenses/by-nc/4.0/
 [cc-by-nc-image]: https://licensebuttons.net/l/by-nc/4.0/88x31.png
