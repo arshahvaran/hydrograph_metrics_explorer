@@ -109,12 +109,12 @@ describe('dtw-wass-02: W1, W2^2 and DTW on the time axis, not the compacted pair
     for (let t = 150; t < 155; t++) aGap[t] = NaN
     const clean = computeAll(a, b, ctx(n, { dtwBand: 15 })), gap = computeAll(aGap, b, ctx(n, { dtwBand: 15 }))
     expect(Math.abs(gap.values.dtw_warp - clean.values.dtw_warp)).toBeLessThan(0.02 * clean.values.dtw_warp)
-    expect(gap.notes.some(t => /longer than the DTW band/.test(t))).toBe(false)
+    expect(gap.notes.some(t => /blocks the DTW band/.test(t))).toBe(false)
     // a gap longer than the band pins the alignment, and the notes say so
     const aLong = a.slice()
     for (let t = 150; t < 170; t++) aLong[t] = NaN
     expect(computeAll(aLong, b, ctx(n, { dtwBand: 15 })).notes).toContain(
-      '1 gap is longer than the DTW band (±15 steps); the DTW alignment cannot warp across it, so the pairs at its edges are aligned with zero warp.')
+      '1 gap of 15 or more missing steps blocks the DTW band (±15 steps): the DTW alignment cannot warp across it, so the pairs at its edges are aligned with zero warp.')
   })
 
   it('dtw() with a time axis: the band and the warp are differences of times, not of positions', () => {
@@ -267,27 +267,42 @@ describe('dtw() keeps its contract', () => {
 })
 
 describe('dtw-wass-01: block-average fallback above the cell budget', () => {
+  // A budget of 10,000 cells for 4,000 pairs leaves no full-resolution pass
+  // (not even a band of ±1), so the block-mean result stands (mode 'blocks').
+  // With 20,000 cells DTW stays at full resolution within a band of ±2 steps
+  // (dtw-wass repair 7).
   const n = 4000
   const o = Array.from({ length: n }, (_, i) => 20 + 10 * Math.sin(i / 11) + 30 * Math.exp(-(((i % 90) - 45) ** 2) / 20))
   const t = Array.from({ length: n }, (_, i) => i)
   it('averages blocks, never point-samples: a simulation wrong on every other step still counts', () => {
     const s = o.map((v, i) => (i % 2 === 1 ? v + 25 : v))
-    const r = dtwOnTimeAxis(o, s, t, 10, 20_000)
+    const r = dtwOnTimeAxis(o, s, t, 10, 10_000)
+    expect(r.mode).toBe('blocks')
     expect(r.decim).toBeGreaterThan(1)
     expect(r.normalized).toBeGreaterThan(5)
+    const fr = dtwOnTimeAxis(o, s, t, 10, 20_000)
+    expect(fr.decim).toBe(1)
+    expect(fr.normalized).toBeGreaterThan(5)
   })
   it('a pure shift keeps its warp in native steps, to the block resolution', () => {
     const k = 6
     const f = (i: number) => 20 + 10 * Math.sin(i / 11) + 30 * Math.exp(-(((i % 90) - 45) ** 2) / 20)
     const a = t.map(f), b = t.map(i => f(i - k))
     const full = dtwOnTimeAxis(a, b, t, 10)
-    const blk = dtwOnTimeAxis(a, b, t, 10, 20_000)
+    const blk = dtwOnTimeAxis(a, b, t, 10, 10_000)
     expect(full.decim).toBe(1)
-    expect(blk.decim).toBe(3)             // 1,334 blocks x 9 cells fit 20,000; blocks of 2 do not
+    expect(blk.mode).toBe('blocks')
+    expect(blk.decim).toBe(4)             // 1,000 blocks x 8 cells fit 10,000; blocks of 3 do not
     expect(blk.bandSteps).toBe(12)        // the band rounded up to whole blocks
     expect(blk.band * blk.decim).toBe(blk.bandSteps)
     expect(Math.abs(blk.meanAbsWarp - full.meanAbsWarp)).toBeLessThanOrEqual(blk.decim / 2)
     expect(full.meanAbsWarp).toBeGreaterThan(k - 0.5)
+    // with room for a full-resolution pass (±7 steps, or a corridor around
+    // means of 2 pairs) the one-pass value comes back
+    const two = dtwOnTimeAxis(a, b, t, 10, 60_000)
+    expect(two.mode).not.toBe('full')
+    expect(two.decim).toBe(1)
+    expect(two.meanAbsWarp).toBeCloseTo(full.meanAbsWarp, 9)
   })
 })
 

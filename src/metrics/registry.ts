@@ -9,6 +9,7 @@ import { dtwOnTimeAxis, wasserstein1, wasserstein2sq, massIssue, DTW_CELL_BUDGET
 import { diagnosticEfficiency, seriesDistance, SD_EXACT_MAX_EVENTS } from './timing/deSd'
 import { xwtLag } from './timing/xwt'
 import { timeAxisInfo } from './timing/timeAxis'
+import { detectStep } from '../units/stepDetect'
 import type { TimingConfig } from '../types'
 
 export type Direction = 'max' | 'min' | 'zero' | 'one';
@@ -100,10 +101,10 @@ export const REGISTRY: MetricMeta[] = [
   M({ id: 'sd_occ', label: 'SD occurrence', group: 'Timing & shape', optimum: '1', direction: 'max', range: '[0,1]', timing: true, unitful: false, digits: 3, blurb: 'Series Distance event threat score (Ehret & Zehe, 2011).', equation: '\\frac{\\text{hits}}{\\text{hits}+\\text{misses}+\\text{false}}\\ \\text{(matched events)}' }),
   M({ id: 'sd_amp', label: 'SD amplitude err', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞)', timing: true, unitful: true, digits: 3, blurb: 'Mean amplitude offset S − O on matched rise/recession segments, in flow units (Ehret & Zehe, 2011); + = simulation high. Events are windows above the observed-flow threshold on both series, so a constant bias widens the simulated windows and shows partly as timing error.', equation: '\\overline{S(u)-O(u)}\\ \\text{over segment positions }u' }),
   M({ id: 'sd_time', label: 'SD timing err', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'Mean timing offset on matched segments; + = sim late. Time-synchronous scores fold this offset invisibly into amplitude error.', equation: '\\overline{t_S(u)-t_O(u)}\\ \\text{over segment positions }u' }),
-  M({ id: 'dtw_warp', label: 'DTW mean |warp|', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'Mean time offset |tᵢ−tⱼ|, in steps of the record, along the optimal alignment inside a Sakoe–Chiba band of ±w steps (Timing tab; default = the peak window). It includes warping that only hides amplitude error, up to the band. Among equally cheap alignments it takes the one with the fewest warping moves, then the least total warp, so the value does not depend on the direction of time.', equation: '\\frac{1}{|\\pi^*|}\\sum_{(i,j)\\in\\pi^*}|t_i-t_j|,\\quad \\pi^*=\\arg\\min_{\\pi}\\textstyle\\sum|O_i-S_j|,\\ |t_i-t_j|\\le w' }),
+  M({ id: 'dtw_warp', label: 'DTW mean |warp|', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'Mean time offset |tᵢ−tⱼ|, in steps of the record, along the optimal alignment inside a Sakoe–Chiba band of ±w steps (Timing tab; default = the peak window). It cannot exceed w: a lag longer than the band reads as w or less, and a note says when the alignment runs along the band limit (widen the band on the Timing tab). It includes warping that only hides amplitude error, up to the band. Among equally cheap alignments (costs compared exactly, on a grid of 2⁻³⁰ of the data range) it takes the one with the fewest warping moves, then the least total warp, so, when DTW runs in one pass, the value does not depend on the direction of time.', equation: '\\frac{1}{|\\pi^*|}\\sum_{(i,j)\\in\\pi^*}|t_i-t_j|,\\quad \\pi^*=\\arg\\min_{\\pi}\\textstyle\\sum|O_i-S_j|,\\ |t_i-t_j|\\le w' }),
   M({ id: 'dtw_dist', label: 'DTW distance (per step)', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞)', timing: true, unitful: true, digits: 3, blurb: 'Amplitude mismatch left after optimal warping within the band (±w steps): mean |O−S| per matched pair.', equation: '\\frac{1}{|\\pi^*|}\\sum_{(i,j)\\in\\pi^*}|O_i-S_j|' }),
-  M({ id: 'w1', label: 'Wasserstein W₁', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'Earth-mover distance, in steps, between the hydrographs treated as unit masses over time (Magyar & Sambridge, 2023). A pure shift reads the lag only for an event with zero flow at both ends of the record; with baseflow, or flow at the record ends, it reads less (about lag × the share of the mass that moves). Blind to proportional (multiplicative) volume error only: an additive bias moves mass toward low flows and registers as timing. Needs non-negative flow.', equation: '\\sum_t\\big|F_O(t)-F_S(t)\\big|\\,\\Delta t' }),
-  M({ id: 'w2sq', label: 'Wasserstein W₂²', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞) steps²', timing: true, unitful: false, digits: 2, blurb: 'Squared form featured in the paper (Magyar & Sambridge, 2023): equals the squared lag for a pure shift of an event with zero flow at both ends of the record, less with baseflow; smooth and convex in the shift where NSE collapses. Same conditions as W₁.', equation: '\\int_0^1\\big(F_O^{-1}(u)-F_S^{-1}(u)\\big)^2\\,du' }),
+  M({ id: 'w1', label: 'Wasserstein W₁', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'Earth-mover distance, in steps, between the hydrographs treated as unit masses over time (Magyar & Sambridge, 2023). Under a pure shift it equals the lag only for an event with zero flow at both ends of the record; otherwise it can be smaller or larger than the lag (an event on steady baseflow reads about lag × the share of the mass that moves; flow entering or leaving at the ends of the record can make it several times the lag). Blind to proportional (multiplicative) volume error only: an additive bias moves mass toward low flows and registers as timing. Needs non-negative flow.', equation: '\\sum_t\\big|F_O(t)-F_S(t)\\big|\\,\\Delta t' }),
+  M({ id: 'w2sq', label: 'Wasserstein W₂²', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞) steps²', timing: true, unitful: false, digits: 2, blurb: 'Squared form featured in the paper (Magyar & Sambridge, 2023): equals the squared lag for a pure shift of an event with zero flow at both ends of the record, and otherwise can be smaller or larger, as W₁; smooth and convex in the shift where NSE collapses. Same conditions as W₁.', equation: '\\int_0^1\\big(F_O^{-1}(u)-F_S^{-1}(u)\\big)^2\\,du' }),
   M({ id: 'xwt_lag', label: 'XWT phase lag', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'The single lag most consistent with the cross-wavelet phases of all red-noise-significant, phase-coherent, in-cone scales (Morlet; Torrence & Compo, 1998; Grinsted et al., 2004). A phase fixes a lag only to within one period, so each scale alone identifies |lag| up to half its period; combining scales resolves longer lags. n/a when no scale has a coherent phase. Scale-resolved curve on the Timing tab.', equation: '\\arg\\max_L\\sum_s w_s\\cos\\big(\\phi_s-2\\pi L/T_s\\big)' }),
 ];
 
@@ -130,6 +131,9 @@ export interface ComputeContext {
   nanPolicy: NanPolicy;
   transform: C.Transform;
   timing: TimingConfig;
+  /** Timestamps (epoch ms) of the rows of obsRaw/simRaw; with them the time
+   *  axis of DTW, W₁, W₂² and Series Distance counts absent date rows too
+   *  (pairTimeAxis). */
   datesMs?: number[];
   heavy?: boolean;           // include DTW / XWT / SD / DE / events (default true)
 }
@@ -151,10 +155,13 @@ export interface ComputeOutput {
     peaks?: ReturnType<typeof peakTiming>;
     events?: ReturnType<typeof eventErrors>;
     sd?: ReturnType<typeof seriesDistance>;
-    /** decim: 1 at full resolution. Above the cell budget DTW runs on block
-     *  means of `decim` consecutive pairs: `path` and `band` are then in
-     *  blocks (multiply by decim for compacted-pair indices and steps).
-     *  meanAbsWarp and bandSteps are always in steps of the record. */
+    /** decim: 1 when `path` indexes compacted pairs (every mode but
+     *  'blocks'). In the 'blocks' fallback DTW runs on block means of
+     *  `decim` consecutive pairs: `path` and `band` are then in blocks
+     *  (multiply by decim for compacted-pair indices and steps).
+     *  meanAbsWarp and bandSteps are always in steps of the record. `path`
+     *  is thinned to at most DTW_PATH_KEEP nodes; pathLength, distance,
+     *  meanAbsWarp and edgeShare describe the whole path. */
     dtw?: DtwRecordResult;
     xwt?: ReturnType<typeof xwtLag>;
     sweep?: ReturnType<typeof lagSweep>;
@@ -300,6 +307,90 @@ export function rankingOmissionNote(priorities: { id: string; weight: number }[]
   return text;
 }
 
+const DAY_MS = 86_400_000;
+const monthIndex = (ms: number): number => { const d = new Date(ms); return d.getUTCFullYear() * 12 + d.getUTCMonth(); };
+
+/** Calendar-monthly dates: detectStep says so, or every date sits on the
+ *  same day of the month and time of day (or on the last day of its month)
+ *  with no two dates less than 28 days apart. The second form catches a
+ *  monthly record with many absent months, which detectStep's 90 % rule
+ *  misses. */
+function calendarMonthly(dates: ArrayLike<number>, stepMonthly: boolean): boolean {
+  if (stepMonthly) return true;
+  const first = new Date(dates[0]);
+  const dayKey = (d: Date) => d.getUTCDate() * DAY_MS + (((d.getTime() % DAY_MS) + DAY_MS) % DAY_MS);
+  const k0 = dayKey(first);
+  const isLast = (d: Date) => new Date(d.getTime() + DAY_MS).getUTCDate() === 1;
+  let sameDay = true, lastDay = true;
+  for (let i = 0; i < dates.length; i++) {
+    const d = new Date(dates[i]);
+    if (i > 0 && dates[i] - dates[i - 1] < 28 * DAY_MS) return false;
+    if (dayKey(d) !== k0) sameDay = false;
+    if (!isLast(d)) lastDay = false;
+    if (!sameDay && !lastDay) return false;
+  }
+  return true;
+}
+
+/**
+ * Time of each surviving pair in steps of the record (design rule D1), for
+ * DTW, W₁, W₂² and Series Distance. `index` is the original row of each pair
+ * (Paired.index). With the frame's dates, the time is the timestamp minus the
+ * first one, divided by the detected step (calendar months for monthly data),
+ * so a date row that is absent from the file counts as time just as a blank
+ * value does; with complete, regular dates it equals `index`. A date that
+ * falls between the steps of the grid keeps its fractional time and is
+ * counted in `offGrid`. Without usable dates (none, wrong length, not
+ * strictly ascending) the row index is the time.
+ */
+export function pairTimeAxis(index: ArrayLike<number>, datesMs?: ArrayLike<number>): { t: ArrayLike<number>; offGrid: number; stepLabel: string | null } {
+  const plain = { t: index, offGrid: 0, stepLabel: null };
+  if (!datesMs || datesMs.length < 2 || index.length === 0) return plain;
+  for (let i = 0; i < datesMs.length; i++) {
+    if (!Number.isFinite(datesMs[i]) || (i > 0 && !(datesMs[i] > datesMs[i - 1]))) return plain;
+  }
+  for (let k = 0; k < index.length; k++) {
+    const r = index[k];
+    if (!Number.isInteger(r) || r < 0 || r >= datesMs.length) return plain;
+  }
+  const step = detectStep(Array.from(datesMs));
+  const t = new Float64Array(index.length);
+  if (calendarMonthly(datesMs, step.monthly)) {
+    const m0 = monthIndex(datesMs[0]);
+    for (let k = 0; k < index.length; k++) t[k] = monthIndex(datesMs[index[k]]) - m0;
+    return { t, offGrid: 0, stepLabel: '1mo' };
+  }
+  if (!(step.ms > 0)) return plain;
+  const d0 = datesMs[0];
+  let offGrid = 0;
+  for (let k = 0; k < index.length; k++) {
+    const x = (datesMs[index[k]] - d0) / step.ms;
+    const r = Math.round(x);
+    if (Math.abs(x - r) <= 1e-6) t[k] = r;
+    else { t[k] = x; offGrid++; }
+  }
+  return { t, offGrid, stepLabel: step.label };
+}
+
+/** Note on how DTW was computed when the band was too wide for one
+ *  full-resolution pass (design rule D6); null for a one-pass alignment. */
+export function dtwResolutionNote(r: DtwRecordResult): string | null {
+  if (r.mode === 'full') return null;
+  const tooBig = `A full-resolution DTW alignment within ±${r.requestedBand} steps would need more than ${Math.round(DTW_CELL_BUDGET / 1e6)} million cells`;
+  const coarse = `an alignment of means of ${r.coarseBlock} consecutive pairs`;
+  if (r.mode === 'corridor') {
+    return `${tooBig}, so DTW ran at full resolution ${r.narrowBand ? `twice, within ±${r.narrowBand} steps and within about ${r.coarseBlock} steps of ${coarse}, and reports the cheaper alignment (the second)` : `within about ${r.coarseBlock} steps of ${coarse}`}. DTW distance and mean |warp| are exact when the optimal alignment lies inside the region used; otherwise the distance is too high.`;
+  }
+  if (r.mode === 'narrow') {
+    return `${tooBig}, so the reported alignment is the exact one within ±${r.narrowBand} steps${r.coarseBlock ? ` (the one found around ${coarse} was not cheaper)` : ''}. DTW mean |warp| cannot exceed ${r.narrowBand} steps here; for a wider band, analyse a shorter window of the record.`;
+  }
+  return `${tooBig}, even within a narrower band or a corridor, so DTW was computed on means of ${r.decim} consecutive pairs: lags shorter than ${r.decim} steps are not resolved (they read partly as amplitude error, so DTW distance is too high and mean |warp| too low), and DTW values are approximate. The band was rounded up to ${r.bandSteps} steps.`;
+}
+
+/** Share of the DTW path at the band limit from which computeAll says that
+ *  mean |warp| is held down by the band. */
+export const DTW_EDGE_NOTE_SHARE = 0.2;
+
 export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>, ctx: ComputeContext): ComputeOutput {
   const pairs = pairForMetrics(obsRaw, simRaw, ctx);
   const { o, s, raw, notes } = pairs;
@@ -307,8 +398,8 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
   // from the dates when rows are absent from the file.
   const axis = timeAxisInfo(ctx.datesMs, Math.min(obsRaw.length, simRaw.length));
   const rowPos = axis.pos;
-  if (axis.irregular) notes.push('The dates are irregular (more than 5 % of the intervals are off the detected time step), so the timing metrics count rows, not time steps: a lag across missing or unevenly spaced rows may be under- or over-stated.');
-  else if (axis.subStepRows > 0) notes.push(`${axis.subStepRows} row${axis.subStepRows === 1 ? ' is' : 's are'} closer to the previous row than one time step; each still counts as one step in the timing metrics.`);
+  if (axis.irregular) notes.push('The dates are irregular (more than 5 % of the intervals are off the detected time step), so the peak, event, Series Distance and lag-sweep metrics count rows, not time steps: a lag across missing or unevenly spaced rows may be under- or over-stated.');
+  else if (axis.subStepRows > 0) notes.push(`${axis.subStepRows} row${axis.subStepRows === 1 ? ' is' : 's are'} closer to the previous row than one time step; each still counts as one step in the peak, event, Series Distance and lag-sweep metrics.`);
   const heavy = ctx.heavy !== false;
   if (ctx.transform !== 'none') notes.push(transformScopeNote(ctx.transform));
   if (ctx.transform === 'log') notes.push(C.LOG_NA_NOTE);
@@ -366,19 +457,30 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
     if (sd.greedyEvents > 0) {
       notes.push(`Series Distance paired ${sd.greedyEvents} events that form overlapping groups of more than ${SD_EXACT_MAX_EVENTS} events greedily, nearest peaks first, instead of by the exact matching (most hits, then least total peak distance); its occurrence and timing may differ slightly from the optimum there.`);
     }
-    // D1: the time axis of DTW, W1 and W2^2 is the original step index of each
-    // surviving pair, so a gap never shortens a warp or a transport distance.
-    const tAxis = raw.index;
-    // D6: band in steps, full resolution with banded storage; block means
-    // (never point samples) only above the cell budget.
-    const dtwRes = dtwOnTimeAxis(o, s, tAxis, t.dtwBand);
-    if (dtwRes.decim > 1) {
-      notes.push(`DTW was computed on means of ${dtwRes.decim} consecutive pairs because the full-resolution alignment would need more than ${Math.round(DTW_CELL_BUDGET / 1e6)} million cells; DTW distance and mean |warp| are approximate, with a resolution of about ${dtwRes.decim} steps, and the band was rounded up to ${dtwRes.bandSteps} steps.`);
+    // D1: the time axis of DTW, W1 and W2^2 is the time of
+    // each surviving pair in steps: its original row, or, with the frame's
+    // dates, its timestamp over the detected step, so neither a blank value
+    // nor a date row absent from the file shortens a lag, a warp or a
+    // transport distance.
+    const pAxis = ctx.datesMs && ctx.datesMs.length === obsRaw.length ? pairTimeAxis(raw.index, ctx.datesMs) : pairTimeAxis(raw.index);
+    const tAxis = pAxis.t;
+    if (pAxis.offGrid > 0) {
+      const one = pAxis.offGrid === 1;
+      notes.push(`${pAxis.offGrid} pair${one ? ' falls' : 's fall'} between the steps of the ${pAxis.stepLabel} grid (irregular dates); DTW, W₁ and W₂² place ${one ? 'it at its' : 'them at their'} own time, in fractional steps.`);
     }
+    // D6: band in steps, full resolution with banded storage; above the cell
+    // budget a coarse pass on block means (never point samples) guides a
+    // full-resolution pass in a corridor, or stands alone with a note.
+    const dtwRes = dtwOnTimeAxis(o, s, tAxis, t.dtwBand);
+    const resNote = dtwResolutionNote(dtwRes);
+    if (resNote) notes.push(resNote);
+    // pairs more than w steps apart cannot be matched, so a gap of w or more
+    // missing steps pins the alignment
     let longGaps = 0;
-    for (let k = 1; k < tAxis.length; k++) if (tAxis[k] - tAxis[k - 1] - 1 > dtwRes.bandSteps) longGaps++;
+    for (let k = 1; k < tAxis.length; k++) if (tAxis[k] - tAxis[k - 1] > dtwRes.bandSteps) longGaps++;
     if (longGaps > 0) {
-      notes.push(`${longGaps} gap${longGaps === 1 ? ' is' : 's are'} longer than the DTW band (±${dtwRes.bandSteps} steps); the DTW alignment cannot warp across ${longGaps === 1 ? 'it' : 'them'}, so the pairs at ${longGaps === 1 ? 'its edges' : 'their edges'} are aligned with zero warp.`);
+      const one = longGaps === 1;
+      notes.push(`${longGaps} gap${one ? '' : 's'} of ${dtwRes.bandSteps} or more missing steps ${one ? 'blocks' : 'block'} the DTW band (±${dtwRes.bandSteps} steps): the DTW alignment cannot warp across ${one ? 'it' : 'them'}, so the pairs at ${one ? 'its edges' : 'their edges'} are aligned with zero warp.`);
     }
     const xw = xwtLag(o, s, t.waveletScales);
     if (xw.droppedScales.length) notes.push(`Wavelet scale${xw.droppedScales.length === 1 ? '' : 's'} ${xw.droppedScales.join(', ')} could not be used (below 2 steps of the ${xw.decimation > 1 ? 'block-averaged ' : ''}series, or above half its length)${Number.isFinite(xw.headlineLag) ? '' : '; with no usable scale left, the XWT lag is n/a'}.`);
@@ -389,6 +491,20 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
     const sweep = ctx.nanPolicy === 'pairwise'
       ? lagSweep(obsRaw, simRaw, -LAG_SWEEP_RANGE, LAG_SWEEP_RANGE, rowPos)
       : (() => { const p0 = applyNanPolicy(obsRaw, simRaw, ctx.nanPolicy); return lagSweep(p0.obs, p0.sim, -LAG_SWEEP_RANGE, LAG_SWEEP_RANGE, rowPos); })();
+    // DTW mean |warp| cannot exceed the band: say so when the alignment runs
+    // along the band limit, or when the lag sweep finds a longer lag
+    const edge = dtwRes.edgeShare;
+    const beyond = Number.isFinite(sweep.bestLag) && Math.abs(sweep.bestLag) > dtwRes.bandSteps;
+    if (edge >= DTW_EDGE_NOTE_SHARE || beyond) {
+      const w = dtwRes.bandSteps;
+      const where = edge >= 0.005
+        ? `DTW warp reached the band limit (±${w} steps) on ${Math.round(edge * 100)}% of the alignment${beyond ? `, and the best-fit lag of the lag sweep is ${sweep.bestLag} steps` : ''}.`
+        : `The best-fit lag of the lag sweep (${sweep.bestLag} steps) is longer than the DTW band (±${w} steps).`;
+      const advice = w < dtwRes.requestedBand
+        ? 'this record is too long for a wider full-resolution band (see the note on the DTW alignment)'
+        : 'widen the band on the Timing tab if longer lags are credible';
+      notes.push(`${where} DTW mean |warp| cannot exceed the band, so the timing offset may be larger than it reads: ${advice}. Amplitude error alone can also push the warp to the band limit.`);
+    }
 
     if (peaks.unresolved > 0) {
       notes.push(`${peaks.unresolved} observed peak(s) had no resolvable simulated peak within ±${t.peakMatchTolerance} steps; those pairs are excluded from the peak-timing means. Widen the peak-match tolerance if lags may exceed it.`);

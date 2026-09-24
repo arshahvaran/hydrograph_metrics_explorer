@@ -1,8 +1,10 @@
 // Tie segments for the DTW alignment plot.
 // The DTW path indexes the arrays the metric engine actually aligned: pairwise
-// NaN compaction first (missing.ts), then 1/decim decimation for long records
-// (registry.ts). Both mappings must be undone before drawing, or the grey ties
-// connect the wrong dates and values. Regression-pinned in tests/alignment.test.ts.
+// NaN compaction first (missing.ts), then, only in DTW's block-only fallback,
+// means of `decim` consecutive pairs (dtwWasserstein.ts). Both mappings must be
+// undone before drawing, or the grey ties connect the wrong dates and values.
+// The path in a result is already thinned to at most DTW_PATH_KEEP nodes.
+// Regression-pinned in tests/alignment.test.ts.
 
 import type { ComputeOutput } from '../metrics/registry'
 
@@ -36,7 +38,7 @@ export function dtwTies(
   let ties = 0;
   for (let k = 0; k < path.length; k += step) {
     const [pi, pj] = path[k];
-    // decimated space -> compacted-pair space -> original frame rows
+    // block space (decim > 1 only) -> compacted-pair space -> original frame rows
     const io = idx ? idx[pi * decim] : pi * decim;
     const jo = idx ? idx[pj * decim] : pj * decim;
     if (io === undefined || jo === undefined) continue;

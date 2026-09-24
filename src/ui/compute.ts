@@ -250,11 +250,18 @@ const errors = new Map<string, string>();
 const listeners = new Set<() => void>();
 const notify = () => listeners.forEach(fn => fn());
 
-function ctxFor(ds: Dataset, frame: Frame): ComputeCtx {
+/** Compute context of a dataset on a frame. The DTW band is a count of the
+ *  dataset's steps (design rule D6); on a resampled Plots-tab frame it is
+ *  converted to the frame's step (±24 hourly steps are ±1 daily step, not
+ *  ±24 days), at least 1 step. */
+export function ctxFor(ds: Dataset, frame: Frame): ComputeCtx {
+  const timing = ds.view.timingConfig;
+  const stepRatio = ds.step.ms > 0 && frame.step.ms > 0 ? ds.step.ms / frame.step.ms : 1;
+  const dtwBand = stepRatio === 1 ? timing.dtwBand : Math.max(1, Math.round(timing.dtwBand * stepRatio));
   return {
     nanPolicy: ds.view.nanPolicy,
     transform: ds.view.transform,
-    timing: ds.view.timingConfig,
+    timing: dtwBand === timing.dtwBand ? timing : { ...timing, dtwBand },
     datesMs: frame.dates,
   };
 }
