@@ -1,6 +1,9 @@
 // Classical metric catalogue (spec §11 / App. A; paper Table 1–2).
-// Implemented from the published equations; verified value-for-value against
-// executed HydroErr 2.0.0 / hydroeval 0.1.0 outputs in tests/classical.test.ts.
+// Implemented from the published equations. The metrics that have an executed
+// reference are compared with HydroErr 2.0.0 / hydroeval 0.1.0 outputs in
+// tests/classical.test.ts; the exceptions (log-error family, KGEnp with tied
+// flows, MAAPE at O = S = 0) and the metrics with no executed reference are
+// listed in README "Technical validation".
 // All functions assume the (obs, sim) pair has already been NaN-paired.
 
 import { arrMin, mean, stdPop, sum, median, quantile, pearson, ranksAverage, ranksOrdinal, sortedAsc, type Vec } from '../support/stats'
@@ -63,8 +66,15 @@ export const smape = (o: Vec, s: Vec) => {
   }
   return 100 * sum / o.length;
 };
-/** MAAPE ∈ [0, π/2] (Kim & Kim, 2016). */
-export const maape = (o: Vec, s: Vec) => mean(Array.from({ length: o.length }, (_, i) => Math.atan(Math.abs((s[i] - o[i]) / o[i]))));
+/** MAAPE ∈ [0, π/2] (Kim & Kim, 2016), defined at zero flow: a step with
+ *  O = 0 and S ≠ 0 scores atan(∞) = π/2, and a step with O = S = 0 (a correct
+ *  zero-flow day) scores 0, the limit, as in sMAPE. The bare formula gives 0/0
+ *  there, which once made MAAPE n/a for any intermittent record (audit
+ *  norms-03). HydroErr returns NaN for such a record; elsewhere HME matches it. */
+export const maape = (o: Vec, s: Vec) => mean(Array.from({ length: o.length }, (_, i) => {
+  const diff = Math.abs(s[i] - o[i]);
+  return diff === 0 ? 0 : Math.atan(diff / Math.abs(o[i]));
+}));
 
 /** QA-010: degenerate denominators answer NaN ("n/a"), never ±Infinity. */
 const over = (num: number, den: number) => {
@@ -270,7 +280,17 @@ export const alphaRatio = (o: Vec, s: Vec) => over(stdPop(s), sigmaObs(o));
 export const c2m = (e: number) => e / (2 - e);
 
 // ---------- FDC signatures (Yilmaz et al., 2008) ----------
+// FLV, FMS and FMM take the plain natural log of each flow, as published: no
+// ε shift. So a uniform scaling S = c·O scores exactly 0 for FLV and FMS, and
+// no value depends on the flow unit. The log of a flow ≤ 0 is undefined, so a
+// signature whose logged flows include one is NaN (n/a); fdcLogNote says which
+// signature and why (zero flows of an intermittent river, or a simulation that
+// dries out). An ε = 0.01·mean(O) shift once kept these finite, but it changed
+// FLV by up to a factor of 5 against the published equation and gave a
+// non-zero FLV/FMS for S = c·O (audit fdc-01).
 const descending = (a: Vec) => Float64Array.from(a as ArrayLike<number>).sort().reverse();
+/** Start index of the low-flow segment (lowest `frac` of the flows) in an FDC sorted high to low. */
+const lowStart = (n: number, frac: number) => Math.floor((1 - frac) * n);
 
 /** %BiasFHV: bias over the top `frac` of flows (default top 2 %). */
 export const fhv = (o: Vec, s: Vec, frac = 0.02) => {
@@ -280,35 +300,69 @@ export const fhv = (o: Vec, s: Vec, frac = 0.02) => {
   for (let i = 0; i < k; i++) { num += ss[i] - os[i]; den += os[i]; }
   return over(100 * num, den);
 };
-/** %BiasFLV: low-flow bias in log space over the bottom `frac` (default 30 %). */
+/** %BiasFLV (Yilmaz et al., 2008): log-space shape of the lowest `frac`
+ *  (default 30 %) of the FDC, each segment measured above its own minimum
+ *  (index L). Yilmaz sign: positive = the simulated low segment is flatter,
+ *  its lowest flows too high (e.g. over-estimated baseflow); negative = it is
+ *  steeper, its lowest flows too low. n/a when the segment holds a flow ≤ 0. */
 export const flv = (o: Vec, s: Vec, frac = 0.3) => {
   const os = descending(o), ss = descending(s);
-  const n = os.length;
-  const start = Math.floor((1 - frac) * n);
-  const eps = EPS_FRAC * mean(o);
-  const lo = Array.from(os.slice(start), v => Math.log(v + eps));
-  const ls = Array.from(ss.slice(start), v => Math.log(v + eps));
+  const lo: number[] = [], ls: number[] = [];
+  for (let i = lowStart(os.length, frac); i < os.length; i++) {
+    if (!(os[i] > 0) || !(ss[i] > 0)) return NaN;   // ln of a flow ≤ 0 is undefined
+    lo.push(Math.log(os[i])); ls.push(Math.log(ss[i]));
+  }
+  if (lo.length === 0) return NaN;
   const minLo = arrMin(lo), minLs = arrMin(ls);
   let num = 0, den = 0;
   for (let i = 0; i < lo.length; i++) {
     num += (ls[i] - minLs) - (lo[i] - minLo);
     den += lo[i] - minLo;
   }
-  return over(-100 * num, den); // Yilmaz sign: positive = simulated low flows too low
+  return over(-100 * num, den);
 };
-/** %BiasFMS: mid-segment FDC slope bias between exceedance 20 % and 70 %. */
+/** Flow at exceedance probability p (quantile 1 − p, NumPy 'linear'). */
+const exceed = (a: Vec, p: number) => quantile(a, 1 - p);
+/** %BiasFMS: mid-segment FDC slope bias between exceedance 20 % and 70 %, in
+ *  log space; positive = simulated mid-segment steeper (flashier). n/a when a
+ *  flow at either exceedance is ≤ 0. */
 export const fms = (o: Vec, s: Vec, p1 = 0.2, p2 = 0.7) => {
-  const eps = EPS_FRAC * mean(o);
-  const at = (a: Vec, p: number) => quantile(a, 1 - p); // exceedance p ↔ quantile 1−p
-  const so1 = Math.log(at(o, p1) + eps), so2 = Math.log(at(o, p2) + eps);
-  const ss1 = Math.log(at(s, p1) + eps), ss2 = Math.log(at(s, p2) + eps);
-  return over(100 * ((ss1 - ss2) - (so1 - so2)), so1 - so2);
+  const qo1 = exceed(o, p1), qo2 = exceed(o, p2), qs1 = exceed(s, p1), qs2 = exceed(s, p2);
+  if (!(qo1 > 0 && qo2 > 0 && qs1 > 0 && qs2 > 0)) return NaN;
+  const so = Math.log(qo1) - Math.log(qo2), ss = Math.log(qs1) - Math.log(qs2);
+  return over(100 * (ss - so), so);
 };
-/** Median (FMM) bias in log space. */
+/** %BiasFMM: median-flow bias as the unit-free log ratio 100·ln(S̃/Õ);
+ *  positive = simulated median too high. Yilmaz et al. (2008) divide
+ *  ln S̃ − ln Õ by ln Õ; that value changes with the flow unit and changes
+ *  sign when Õ < 1 in the loaded unit (audit fdc-02), so HME reports the log
+ *  ratio. n/a when either median is ≤ 0. */
 export const fmm = (o: Vec, s: Vec) => {
-  const eps = EPS_FRAC * mean(o);
-  return over(100 * (Math.log(median(s) + eps) - Math.log(median(o) + eps)), Math.log(median(o) + eps));
+  const mo = median(o), ms = median(s);
+  if (!(mo > 0) || !(ms > 0)) return NaN;
+  return 100 * Math.log(ms / mo);
 };
+
+/** Panel note for FLV, FMS and FMM when they are n/a because a flow they take
+ *  the log of is ≤ 0. Call it with the same arrays as flv/fms/fmm. Returns
+ *  null when all three are inside their domain. */
+export function fdcLogNote(o: Vec, s: Vec, frac = 0.3, p2 = 0.7): string | null {
+  const who = (bo: boolean, bs: boolean) => (bo && bs ? 'observed and simulated' : bo ? 'observed' : 'simulated');
+  const parts: string[] = [];
+  const os = descending(o), ss = descending(s);
+  let zo = 0, zs = 0;
+  for (let i = lowStart(os.length, frac); i < os.length; i++) { if (!(os[i] > 0)) zo++; if (!(ss[i] > 0)) zs++; }
+  if (zo + zs > 0) {
+    const counts = [zo ? `${zo} observed` : '', zs ? `${zs} simulated` : ''].filter(Boolean).join(' and ');
+    parts.push(`%BiasFLV (the lowest ${Math.round(frac * 100)} % of flows include ${counts} value${zo + zs === 1 ? '' : 's'} ≤ 0)`);
+  }
+  const fo = !(exceed(o, p2) > 0), fs = !(exceed(s, p2) > 0);
+  if (fo || fs) parts.push(`%BiasFMS (the ${who(fo, fs)} flow exceeded ${Math.round(p2 * 100)} % of the time is ≤ 0)`);
+  const mo = !(median(o) > 0), ms = !(median(s) > 0);
+  if (mo || ms) parts.push(`%BiasFMM (the ${who(mo, ms)} median flow is ≤ 0)`);
+  if (parts.length === 0) return null;
+  return `n/a: ${parts.join('; ')}. These FDC signatures take the natural log of each flow (Yilmaz et al., 2008), and the log of a flow ≤ 0 is undefined.`;
+}
 
 // ---------- transforms (§11.2) ----------
 export type Transform = 'none' | 'log' | 'sqrt' | 'inverse';
