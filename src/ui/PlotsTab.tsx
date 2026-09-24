@@ -92,7 +92,10 @@ export function timeSeriesYTitle(mode: Mode, unit: string): string {
   return `Q [${unit}]`;
 }
 
-const DOY_AXIS_TITLE = 'Day of year (366-day calendar, Mar 1 = 61)';
+const DOY_AXIS_TITLE = 'Calendar day (ticks at the 1st of each month)';
+// Month ticks on the 366-day calendar of plotBins (Feb 29 = 60, Mar 1 = 61), so the
+// axis reads as dates and is not confused with the 365-day season numbers.
+const DOY_TICKS = { tickvals: [1, 32, 61, 92, 122, 153, 183, 214, 245, 275, 306, 336], ticktext: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] };
 
 /** Largest moving-average window; the loop is O(n x w) on every render. */
 export const MOVING_AVG_MAX = 90;
@@ -244,7 +247,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
       });
       return {
         traces: t,
-        layout: { xaxis: { title: DOY_AXIS_TITLE, showline: false }, yaxis: { title: yTitle, type: logY ? 'log' : 'linear', zeroline: true } },
+        layout: { xaxis: { title: DOY_AXIS_TITLE, ...DOY_TICKS, showline: false }, yaxis: { title: yTitle, type: logY ? 'log' : 'linear', zeroline: true } },
         note: 'Medians by day of year; shaded band = observed interquartile range (IQR)'
           + (subDaily ? '; each day is the daily mean of the sub-daily values' : '')
           + `; ${pairNote(groups, policy)}`,
@@ -260,7 +263,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
       if (plot === 'heatmap') {
         return {
           traces: [{ name: s.name, z: years.map(y => byYear.get(y)!), x: Array.from({ length: 366 }, (_, i) => i + 1), y: years, type: 'heatmap', colorscale: 'Rainbow', colorbar: { title: { text: unit, side: 'right' }, lenmode: 'pixels', len: 370, y: 0.5, yanchor: 'middle', thickness: 14, outlinewidth: 0 } }],
-          layout: { xaxis: { title: DOY_AXIS_TITLE }, yaxis: { title: 'Year', dtick: 1 }, hovermode: 'closest' },
+          layout: { xaxis: { title: DOY_AXIS_TITLE, ...DOY_TICKS }, yaxis: { title: 'Year', dtick: 1 }, hovermode: 'closest' },
           note: `Annual regime of ${s.name}${dailyNote}`,
         };
       }
@@ -268,7 +271,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
         x: Array.from({ length: 366 }, (_, k) => k + 1), y: byYear.get(y)!, name: String(y), type: 'scatter', mode: 'lines',
         line: { color: i === years.length - 1 ? s.color : 'rgba(120,130,140,0.45)', width: i === years.length - 1 ? 2 : 1 },
       }));
-      return { traces: t, layout: { xaxis: { title: DOY_AXIS_TITLE, showline: false }, yaxis: { title: yTitle, type: logY ? 'log' : 'linear', zeroline: true }, hovermode: 'closest' }, note: `One line per year of ${s.name}; latest year highlighted in color${dailyNote}` };
+      return { traces: t, layout: { xaxis: { title: DOY_AXIS_TITLE, ...DOY_TICKS, showline: false }, yaxis: { title: yTitle, type: logY ? 'log' : 'linear', zeroline: true }, hovermode: 'closest' }, note: `One line per year of ${s.name}; latest year highlighted in color${dailyNote}` };
     }
 
     // alignment
