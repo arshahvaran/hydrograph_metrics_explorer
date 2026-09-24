@@ -194,7 +194,7 @@ describe('extreme inputs through the Data tab', () => {
     expect(screen.getByText('Use this data →')).toBeDisabled();
     fireEvent.change(screen.getByLabelText('Role for column sim61'), { target: { value: 'ignore' } });
     await waitFor(() => expect(screen.getByText('Use this data →')).toBeEnabled());
-  });
+  }, 20_000);   // 61 role selects in jsdom: about 3 s on an idle machine, over 5 s under load
 
   it('a constant observed series warns at import and reads n/a, never an exponent, on Metrics', async () => {
     render(<App />);
