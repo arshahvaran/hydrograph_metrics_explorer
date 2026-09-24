@@ -53,7 +53,7 @@ const seq = (n: number, f: (i: number) => number) => Float64Array.from({ length:
 describe('ingest limits: cheap shape pass', () => {
   it('counts data rows and header columns with a sniffed delimiter, tolerating CRLF and blank lines', () => {
     expect(inspectDelimited('a,b,c\r\n1,2,3\r\n\r\n4,5,6\r\n')).toEqual({ rows: 2, columns: 3 });
-    expect(inspectDelimited('﻿a;b\n1;2\n3;4\n5;6')).toEqual({ rows: 3, columns: 2 });
+    expect(inspectDelimited('\uFEFFa;b\n1;2\n3;4\n5;6')).toEqual({ rows: 3, columns: 2 });
     expect(inspectDelimited('a\tb\tc\td\n1\t2\t3\t4')).toEqual({ rows: 1, columns: 4 });
     expect(inspectDelimited('')).toEqual({ rows: 0, columns: 0 });
     expect(inspectDelimited('only a header')).toEqual({ rows: 0, columns: 1 });

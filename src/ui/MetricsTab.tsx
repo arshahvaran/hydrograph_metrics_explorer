@@ -71,7 +71,7 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
     }
     // A UTF-8 byte-order mark makes Excel read the labels (R², KGE′, d₁) as UTF-8.
     download(`${ds!.name.replace(/[^\w-]+/g, '_')}_metrics.csv`,
-      '﻿' + lines.join('\n'), sep === ',' ? 'text/csv' : 'text/tab-separated-values');
+      '\uFEFF' + lines.join('\n'), sep === ',' ? 'text/csv' : 'text/tab-separated-values');
   }
 
   return (

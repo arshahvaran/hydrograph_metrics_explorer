@@ -250,7 +250,7 @@ export function sniffWorkbook(buf: ArrayBuffer): { kind: WorkbookContent; text?:
     // Decoded as the upload of a .csv file is (File.text(): UTF-8).
     text = new TextDecoder('utf-8').decode(b);
   }
-  const head = text.replace(/^﻿/, '').trimStart().slice(0, 64);
+  const head = text.replace(/^\uFEFF/, '').trimStart().slice(0, 64);
   if (head.startsWith('{\\rtf')) return { kind: 'rtf' };
   if (head.startsWith('<') || /^MIME-Version:/i.test(head) || head.startsWith('ID;P') || /^TABLE\r?\n0,1/.test(head)) return { kind: 'markup' };
   return { kind: 'text', text };
