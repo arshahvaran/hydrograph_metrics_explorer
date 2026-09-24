@@ -11,7 +11,7 @@
 
 import { computeAll, type ComputeOutput, type ComputeCtx } from '../metrics/registry'
 import { bootstrapCIs, type BootstrapResult } from '../metrics/bootstrap'
-import { applySubset } from '../metrics/subset'
+import { makeSubsetter, isPerStepDepth } from '../metrics/subset'
 import { mulberry32, gaussian, mean } from '../metrics/support/stats'
 import { useEffect, useState } from 'react'
 import type { Dataset, Run, SandboxState } from '../types'
@@ -22,7 +22,10 @@ export interface Frame {
   obs: Float64Array;
   step: { ms: number; label: string };
   caption: string;
-  /** Map any native-index series through the same window/season/resample. */
+  /** Steps (or resampled bins) in the selection; out-of-season gaps excluded. */
+  shown: number;
+  /** Map any native-index series through the same window/season/resample
+   *  (resampled over the steps the observed bins cover, DESIGN D5). */
   apply: (values: ArrayLike<number>) => Float64Array;
   key: string;
 }
@@ -43,6 +46,7 @@ export function frameFor(ds: Dataset): Frame {
     obs: Float64Array.from(ds.observed.values as ArrayLike<number>),
     step: { ms: ds.step.ms, label: ds.step.label },
     caption: '',
+    shown: ds.dates.length,
     key,
     apply: (values) => Float64Array.from(values as ArrayLike<number>),
   };
@@ -59,10 +63,12 @@ export function subsetFrameFor(ds: Dataset): Frame {
   const key = ['subset', ds.id, ds.dates.length, ds.targetUnit, JSON.stringify(v.window), JSON.stringify(v.season), v.resample].join('|');
   const hit = frameCache.get(key);
   if (hit) return hit;
-  const base = applySubset(ds.dates, [ds.observed.values], v, ds.step);
+  // One subsetter per selection: simulations are resampled over the steps the
+  // observed bins cover, and depths per step are summed (DESIGN D5).
+  const sub = makeSubsetter(ds.dates, ds.observed.values, v, ds.step, { perStepDepth: isPerStepDepth(ds.targetUnit) });
   const frame: Frame = {
-    dates: base.dates, obs: base.obs, step: base.step, caption: base.caption, key,
-    apply: (values) => applySubset(ds.dates, [values], v, ds.step).obs,
+    dates: sub.dates, obs: sub.obs, step: sub.step, caption: sub.caption, shown: sub.shown, key,
+    apply: sub.apply,
   };
   if (frameCache.size > 40) frameCache.clear();
   frameCache.set(key, frame);
