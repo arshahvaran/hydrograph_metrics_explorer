@@ -59,8 +59,8 @@ banded DTW; Wasserstein W1/W2; cross-wavelet phase lag), and Diagnostic Efficien
 companion paper.
 
 **Diagnostics and plots.** Eight linked plots (time series, 1:1 scatter, flow duration,
-Q-Q, day-of-year climatology, annual heatmap, spaghetti, DTW alignment) with PNG/SVG/CSV
-export; an analysis window, wrap-aware seasonal filter, and resampling; a Timing tab with
+Q-Q, day-of-year climatology, annual heatmap, spaghetti, DTW alignment) with PNG, SVG, JPG
+and CSV export; an analysis window, wrap-aware seasonal filter, and resampling; a Timing tab with
 lag sweep, cross-wavelet curve, diagnostic-efficiency polar, and an event table.
 
 **Perturbation sandbox.** Shift, offset, scale, dampen, and seeded-noise perturbations with
@@ -93,7 +93,7 @@ Deployed to GitHub Pages from the `gh-pages` branch (`dist/` contents).
 
 ## Input data
 
-One date column plus one observed and any number of simulated discharge columns, in CSV,
+One date column plus one observed and up to 60 simulated discharge columns, in CSV,
 TXT, or XLSX (or pasted directly). Column roles are assigned explicitly at import. Empty
 cells and the texts NA, NaN, null, n/a, -, --, ---, none and missing are read as missing;
 any other no-data value (e.g. -999) is declared in the "Missing value" box, and cells that
@@ -116,9 +116,9 @@ unit the tool does not know gives a note. Everything runs inside one browser tab
 inputs are bounded: delimited files up to 200 MB, workbooks up to
 25 MB, project files up to 100 MB, tables up to 1,000,000 rows,
 100 columns and 30 million cells, and up to 60 simulated columns per dataset. Tables above
-250,000 rows ask for confirmation before loading and are plotted at reduced resolution
-(every point still counts in the metrics); bootstrap intervals need between 30 and
-100,000 valid pairs.
+250,000 rows or 5 million cells ask for confirmation before loading. Series longer than
+50,000 steps are plotted at reduced resolution (every point still counts in the metrics).
+Bootstrap intervals need between 30 and 100,000 valid pairs.
 
 ## Technical validation
 
