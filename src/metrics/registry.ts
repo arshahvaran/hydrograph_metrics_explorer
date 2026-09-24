@@ -54,7 +54,7 @@ export const REGISTRY: MetricMeta[] = [
   M({ id: 'rmsle', label: 'RMSLE', group: 'Error norms', optimum: '0', direction: 'min', range: '[0,∞)', timing: false, unitful: false, digits: 4, blurb: 'Root mean squared log-ratio error.', equation: '\\sqrt{\\mathrm{MSLE}}' }),
   M({ id: 'mde', label: 'MdE (median error)', group: 'Error norms', optimum: '0', direction: 'zero', range: '(−∞,∞)', timing: false, unitful: true, digits: 3, blurb: 'Median signed error; outlier-robust bias indicator.', equation: '\\operatorname{med}(S_i-O_i)' }),
   M({ id: 'mdse', label: 'MdSE', group: 'Error norms', optimum: '0', direction: 'min', range: '[0,∞)', timing: false, unitful: true, digits: 3, blurb: 'Median squared error; outlier-robust companion to MSE.', equation: '\\operatorname{med}\\big((S_i-O_i)^2\\big)' }),
-  M({ id: 'mase', label: 'MASE', group: 'Error norms', optimum: '0', direction: 'min', range: '[0,∞)', timing: false, unitful: false, digits: 3, blurb: 'Error scaled by naive persistence (Hyndman & Koehler, 2006); <1 beats persistence.', equation: '\\frac{\\frac{1}{n}\\sum|S_i-O_i|}{\\frac{1}{n-1}\\sum_{i=2}^{n}|O_i-O_{i-1}|}' }),
+  M({ id: 'mase', label: 'MASE', group: 'Error norms', optimum: '0', direction: 'min', range: '[0,∞)', timing: false, unitful: false, digits: 3, blurb: 'Error scaled by naive persistence (Hyndman & Koehler, 2006); <1 beats persistence. The naive scale is the mean |Oᵢ − Oᵢ₋₁| over the pairs that the NaN policy keeps, as in HydroErr: across a gap it compares the values on its two sides.', equation: '\\frac{\\frac{1}{n}\\sum|S_i-O_i|}{\\frac{1}{n-1}\\sum_{i=2}^{n}|O_i-O_{i-1}|}' }),
 
   // ----- correlation & agreement -----
   M({ id: 'r', label: 'r (Pearson)', group: 'Correlation & agreement', optimum: '1', direction: 'max', range: '[−1,1]', timing: false, unitful: false, digits: 3, blurb: 'Linear association. Completely blind to bias and to amplitude scaling.', equation: '\\frac{\\sum(O_i-\\bar{O})(S_i-\\bar{S})}{\\sqrt{\\sum(O_i-\\bar{O})^2\\sum(S_i-\\bar{S})^2}}' }),
@@ -90,7 +90,7 @@ export const REGISTRY: MetricMeta[] = [
   // ----- timing & shape -----
   M({ id: 'peak_lag_abs', label: 'Peak timing |lag|', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'Mean |lag| of matched hydrograph peaks (Gauch et al., 2021): observed peaks with prominence above σ of the observed flow and at least the peak separation apart (Gauch: 100 steps), each matched to the largest simulated value within ±the peak window. Directly answers "how late are my floods?"; invisible to NSE/KGE.', equation: '\\frac{1}{P}\\sum_{p=1}^{P}\\big|t^{S}_{p}-t^{O}_{p}\\big|' }),
   M({ id: 'peak_lag_signed', label: 'Peak timing bias', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'Mean signed peak lag; + = simulated peaks late. Cancels mixed early/late errors; read with |lag|.', equation: '\\frac{1}{P}\\sum_{p}\\big(t^{S}_{p}-t^{O}_{p}\\big)' }),
-  M({ id: 'event_threat', label: 'Event occurrence (threat)', group: 'Timing & shape', optimum: '1', direction: 'max', range: '[0,1]', timing: true, unitful: false, digits: 3, blurb: 'Hits/(hits+misses+false alarms) of threshold events; did the model produce the flood at all?', equation: '\\frac{\\text{hits}}{\\text{hits}+\\text{misses}+\\text{false}}' }),
+  M({ id: 'event_threat', label: 'Event occurrence (threat)', group: 'Timing & shape', optimum: '1', direction: 'max', range: '[0,1]', timing: true, unitful: false, digits: 3, blurb: 'Hits/(hits+misses+false alarms) of threshold events; did the model produce the flood at all? Events are paired one to one by window overlap (± the peak window): the most hits, then the nearest peaks, the same pairs as Series Distance.', equation: '\\frac{\\text{hits}}{\\text{hits}+\\text{misses}+\\text{false}}' }),
   M({ id: 'event_peak', label: 'Event peak err %', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞)', timing: true, unitful: false, digits: 1, blurb: 'Mean signed peak-height error over matched events (misses and unresolved peaks left out); the per-event peak component of Table 2.', equation: '\\overline{100\\,(S_{pk}-O_{pk})/O_{pk}}' }),
   M({ id: 'event_vol', label: 'Event volume err %', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞)', timing: true, unitful: false, digits: 2, blurb: 'Mean per-event volume error over the windows of matched observed events; + = over-estimation.', equation: '\\overline{100\\,(V_S-V_O)/V_O}\\ \\text{per event}' }),
   M({ id: 'event_lag', label: 'Event peak lag (median)', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'Median peak lag over matched events (unresolved peaks left out); + = late.', equation: '\\operatorname{med}_e\\big(t^{S}_{e}-t^{O}_{e}\\big)' }),
@@ -98,7 +98,7 @@ export const REGISTRY: MetricMeta[] = [
   M({ id: 'de', label: 'DE (diagnostic eff.)', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞)', timing: true, unitful: false, digits: 3, blurb: 'Schwemmle et al. (2021): √(constant² + dynamic² + (r−1)²); decomposes into the polar plot on the Timing tab. Needs perennial flow. Not shift-tolerant: its timing term is the linear correlation r, which responds to a lag without quantifying it.', equation: '\\sqrt{\\bar{B}_{rel}^{\\,2}+|B_{area}|^2+(r-1)^2}' }),
   M({ id: 'de_const', label: 'DE constant (B̄rel)', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞)', timing: true, unitful: false, digits: 3, blurb: 'Mean relative FDC bias; the constant error share. Built from the flow-duration curve, so blind to timing.', equation: '\\bar{B}_{rel}=\\overline{(S^{FDC}-O^{FDC})/O^{FDC}}' }),
   M({ id: 'de_dyn', label: 'DE dynamic (|B|area)', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞)', timing: true, unitful: false, digits: 3, blurb: 'Area of residual FDC bias; high-vs-low-flow error trade. Built from the flow-duration curve, so blind to timing.', equation: '\\int_0^1\\big|B_{rel}(i)-\\bar{B}_{rel}\\big|\\,di' }),
-  M({ id: 'sd_occ', label: 'SD occurrence', group: 'Timing & shape', optimum: '1', direction: 'max', range: '[0,1]', timing: true, unitful: false, digits: 3, blurb: 'Series Distance event threat score (Ehret & Zehe, 2011).', equation: '\\frac{\\text{hits}}{\\text{hits}+\\text{misses}+\\text{false}}\\ \\text{(matched events)}' }),
+  M({ id: 'sd_occ', label: 'SD occurrence', group: 'Timing & shape', optimum: '1', direction: 'max', range: '[0,1]', timing: true, unitful: false, digits: 3, blurb: 'Series Distance event threat score (Ehret & Zehe, 2011); the same event pairs as the event metrics, so it equals Event occurrence.', equation: '\\frac{\\text{hits}}{\\text{hits}+\\text{misses}+\\text{false}}\\ \\text{(matched events)}' }),
   M({ id: 'sd_amp', label: 'SD amplitude err', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞)', timing: true, unitful: true, digits: 3, blurb: 'Mean amplitude offset S − O on matched rise/recession segments, in flow units (Ehret & Zehe, 2011); + = simulation high. Events are windows above the observed-flow threshold on both series, so a constant bias widens the simulated windows and shows partly as timing error.', equation: '\\overline{S(u)-O(u)}\\ \\text{over segment positions }u' }),
   M({ id: 'sd_time', label: 'SD timing err', group: 'Timing & shape', optimum: '0', direction: 'zero', range: '(−∞,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'Mean timing offset on matched segments; + = sim late. Time-synchronous scores fold this offset invisibly into amplitude error.', equation: '\\overline{t_S(u)-t_O(u)}\\ \\text{over segment positions }u' }),
   M({ id: 'dtw_warp', label: 'DTW mean |warp|', group: 'Timing & shape', optimum: '0', direction: 'min', range: '[0,∞) steps', timing: true, unitful: false, digits: 2, blurb: 'Mean time offset |tᵢ−tⱼ|, in steps of the record, along the optimal alignment inside a Sakoe–Chiba band of ±w steps (Timing tab; default = the peak window). It cannot exceed w: a lag longer than the band reads as w or less, and a note says when the alignment runs along the band limit (widen the band on the Timing tab). It includes warping that only hides amplitude error, up to the band. Among equally cheap alignments (costs compared exactly, on a grid of 2⁻³⁰ of the data range) it takes the one with the fewest warping moves, then the least total warp, so, when DTW runs in one pass, the value does not depend on the direction of time.', equation: '\\frac{1}{|\\pi^*|}\\sum_{(i,j)\\in\\pi^*}|t_i-t_j|,\\quad \\pi^*=\\arg\\min_{\\pi}\\textstyle\\sum|O_i-S_j|,\\ |t_i-t_j|\\le w' }),
@@ -391,6 +391,51 @@ export function dtwResolutionNote(r: DtwRecordResult): string | null {
  *  mean |warp| is held down by the band. */
 export const DTW_EDGE_NOTE_SHARE = 0.2;
 
+/** True for a panel note that concerns the timing and shape metrics (or the
+ *  transform), which the Timing tab shows; false for the notes that concern
+ *  only the classical metrics (the FDC signatures, the metrics that read n/a
+ *  on log flows), which the Metrics tab shows. The Timing tab once kept only
+ *  notes that matched a list of words and so hid, among others, "No events at
+ *  the current threshold; raise/lower it on the Timing tab". */
+export function isTimingNote(note: string): boolean {
+  return note !== C.LOG_NA_NOTE && !note.startsWith('n/a: %Bias');
+}
+
+/** Longest run of missing steps that the cross-wavelet transform fills by
+ *  linear interpolation in time; a longer gap is joined. */
+export const XWT_FILL_MAX = 3;
+
+/**
+ * The pairs on the record's time grid for the cross-wavelet transform, which
+ * needs evenly spaced values (design rule D1). `t` is the time of each pair
+ * in steps (pairTimeAxis). A gap of up to XWT_FILL_MAX missing steps is
+ * filled in both series by linear interpolation in time; a longer gap (a
+ * season join, a long outage) is joined, so the values on its two sides are
+ * treated as adjacent. Pairs at fractional times (irregular dates) are kept
+ * as they are.
+ */
+export function xwtGrid(o: ArrayLike<number>, s: ArrayLike<number>, t: ArrayLike<number>): {
+  o: Float64Array; s: Float64Array; filledGaps: number; filledSteps: number; joinedGaps: number; joinedSteps: number;
+} {
+  const oo: number[] = [], ss: number[] = [];
+  let filledGaps = 0, filledSteps = 0, joinedGaps = 0, joinedSteps = 0;
+  for (let k = 0; k < o.length; k++) {
+    if (k > 0 && Number.isInteger(t[k]) && Number.isInteger(t[k - 1])) {
+      const miss = t[k] - t[k - 1] - 1;
+      if (miss >= 1 && miss <= XWT_FILL_MAX) {
+        for (let j = 1; j <= miss; j++) {
+          const w = j / (miss + 1);
+          oo.push(o[k - 1] + w * (o[k] - o[k - 1]));
+          ss.push(s[k - 1] + w * (s[k] - s[k - 1]));
+        }
+        filledGaps++; filledSteps += miss;
+      } else if (miss > XWT_FILL_MAX) { joinedGaps++; joinedSteps += miss; }
+    }
+    oo.push(o[k]); ss.push(s[k]);
+  }
+  return { o: Float64Array.from(oo), s: Float64Array.from(ss), filledGaps, filledSteps, joinedGaps, joinedSteps };
+}
+
 export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>, ctx: ComputeContext): ComputeOutput {
   const pairs = pairForMetrics(obsRaw, simRaw, ctx);
   const { o, s, raw, notes } = pairs;
@@ -482,7 +527,18 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
       const one = longGaps === 1;
       notes.push(`${longGaps} gap${one ? '' : 's'} of ${dtwRes.bandSteps} or more missing steps ${one ? 'blocks' : 'block'} the DTW band (±${dtwRes.bandSteps} steps): the DTW alignment cannot warp across ${one ? 'it' : 'them'}, so the pairs at ${one ? 'its edges' : 'their edges'} are aligned with zero warp.`);
     }
-    const xw = xwtLag(o, s, t.waveletScales);
+    // D1: the wavelet transform runs on the time grid, with short gaps filled
+    // and long ones joined (xwtGrid), not on the compacted pairs.
+    const xg = xwtGrid(o, s, tAxis);
+    if (xg.filledGaps > 0) {
+      const one = xg.filledGaps === 1;
+      notes.push(`Cross-wavelet analysis: ${xg.filledGaps} gap${one ? '' : 's'} of up to ${XWT_FILL_MAX} missing steps (${xg.filledSteps} step${xg.filledSteps === 1 ? '' : 's'} in all) ${one ? 'was' : 'were'} filled by linear interpolation in time, because the wavelet transform needs evenly spaced values.`);
+    }
+    if (xg.joinedGaps > 0) {
+      const one = xg.joinedGaps === 1;
+      notes.push(`Cross-wavelet analysis: ${xg.joinedGaps} gap${one ? '' : 's'} of more than ${XWT_FILL_MAX} missing steps (${xg.joinedSteps} steps in all) ${one ? 'was' : 'were'} joined, so the values on ${one ? 'its' : 'their'} two sides are treated as adjacent; the XWT lag is not resolved across ${one ? 'it' : 'them'}.`);
+    }
+    const xw = xwtLag(xg.o, xg.s, t.waveletScales);
     if (xw.droppedScales.length) notes.push(`Wavelet scale${xw.droppedScales.length === 1 ? '' : 's'} ${xw.droppedScales.join(', ')} could not be used (below 2 steps of the ${xw.decimation > 1 ? 'block-averaged ' : ''}series, or above half its length)${Number.isFinite(xw.headlineLag) ? '' : '; with no usable scale left, the XWT lag is n/a'}.`);
     if (xw.decimation > 1) notes.push(`Cross-wavelet analysis computed on a 1/${xw.decimation} block-mean of the record for tractability; its lags keep a resolution of about ${xw.decimation} steps.`);
     // The sweep pairs obs at step p with sim at step p + L on the record's own
