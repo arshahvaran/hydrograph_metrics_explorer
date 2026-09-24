@@ -18,7 +18,9 @@ export function MetricsTab() {
 
 function MetricsTabInner({ ds }: { ds: Dataset }) {
   const updateView = useApp(s => s.updateView);
-  const [preset, setPreset] = useState<string>('essentials');
+  // The preset lives in the dataset's view so it is saved with the project.
+  const preset = PRESETS[ds.view.metricPreset] ? ds.view.metricPreset : 'essentials';
+  const setPreset = (p: string) => updateView({ metricPreset: p });
   const [refQuery, setRefQuery] = useState('');
 
   const runs = ds.runs.filter(r => r.visible);

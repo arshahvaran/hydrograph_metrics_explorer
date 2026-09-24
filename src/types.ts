@@ -64,7 +64,8 @@ export interface ViewState {
   nanPolicy: 'pairwise' | 'zero' | 'mean';
   transform: 'none' | 'log' | 'sqrt' | 'inverse';
   benchmark: 'mean' | 'climatology' | 'persistence';
-  selectedMetrics: string[];
+  /** Metrics tab preset (a key of PRESETS); saved so the chosen metrics reload. */
+  metricPreset: string;
   priorityMetrics: { id: string; weight: number }[];
   boundedDisplay: boolean;       // C2M display toggle
   showBootstrapCIs: boolean;     // v1.1
@@ -192,7 +193,7 @@ export function defaultView(stepMs: number, n: number): ViewState {
     nanPolicy: 'pairwise',
     transform: 'none',
     benchmark: 'mean',
-    selectedMetrics: ['nse', 'kge2009', 'rmse', 'pbias', 'r'],
+    metricPreset: 'essentials',
     priorityMetrics: [
       { id: 'nse', weight: 1 },
       { id: 'kge2009', weight: 1 },
