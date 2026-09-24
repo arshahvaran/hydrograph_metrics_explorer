@@ -1,16 +1,18 @@
 /**
  * Round 11 regressions: DTW alignment tie mapping.
  * The DTW path indexes the arrays the engine actually aligned (pairwise NaN
- * compaction, then 1/decim decimation for long records). dtwTies must map
+ * compaction, then block means in DTW's block-only fallback). dtwTies must map
  * every path node back to original frame rows so the grey ties in the Plots
- * tab join the true dates and values: under a pure shift, with gaps, with
- * decimation, and with an active analysis window.
+ * tab join the true dates and values: under a pure shift, with gaps, in the
+ * two-pass and block-only modes, and with an active analysis window. The
+ * stored path is thinned to at most DTW_PATH_KEEP nodes (dtw-wass repair 4).
  */
 import { describe, it, expect } from 'vitest'
 import { computeAll } from '../src/metrics/registry'
 import { applySubset } from '../src/metrics/subset'
 import { defaultView } from '../src/types'
 import { dtwTies } from '../src/ui/alignment'
+import { dtwOnTimeAxis, DTW_PATH_KEEP } from '../src/metrics/timing/dtwWasserstein'
 
 const DAY = 86_400_000
 // The shifts below (K = 3, 4 days) exceed the default daily DTW band of 3
@@ -100,44 +102,79 @@ describe('DTW alignment ties: n > 6000 runs at full resolution (dtw-wass-01)', (
   const dstr = mkDates(N).map(iso)
   const out = computeAll(o, s, ctx(N))
   const trip = triples(dtwTies(out, dstr, Array.from(o), Array.from(s), Number.MAX_SAFE_INTEGER))
-  it('no decimation below the cell budget', () => {
-    expect(out.extras.dtw!.decim).toBe(1)
+  it('no decimation below the cell budget; the stored path is thinned (dtw-wass repair 4)', () => {
+    const d = out.extras.dtw!
+    expect(d.decim).toBe(1)
+    expect(d.pathLength).toBeGreaterThanOrEqual(N)
+    expect(d.path.length).toBe(DTW_PATH_KEEP)
+    expect(trip.length).toBe(DTW_PATH_KEEP)
+    expect(trip[0].xo).toBe(dstr[0])
     expect(trip[trip.length - 1].xo).toBe(dstr[N - 1])
   })
-  it('every observed peak ties to the simulated peak K days later', () => {
-    for (let p = 20; p + K < N; p += 40) {
-      expect(trip.find(tt => tt.xo === dstr[p] && tt.xs === dstr[p + K]), `peak at ${p}`).toBeTruthy()
+  it('every drawn tie from an observed peak lands on the simulated peak K days later', () => {
+    let hits = 0
+    for (const { xo, xs, yo, ys } of trip) {
+      const i = dstr.indexOf(xo), j = dstr.indexOf(xs)
+      expect(yo).toBe(o[i])
+      expect(ys).toBe(s[j])
+      if (i % 40 === 20 && i + K < N) { expect(j, `peak at ${i}`).toBe(i + K); hits++ }
     }
+    expect(hits).toBeGreaterThan(20)
   })
 })
 
-describe('DTW alignment ties: above the cell budget (block-mean path rescaled to full resolution)', () => {
-  // a band of 10 % of n (2,000 steps) needs 7.6e7 cells at full resolution,
-  // above the 5e7 budget, so DTW runs on means of 2 consecutive pairs
+describe('DTW alignment ties: above the cell budget (full resolution in a narrower band or a corridor)', () => {
+  // a band of 10 % of n (2,000 steps) needs 8e7 cells in one pass, above the
+  // 5e7 budget: DTW aligns at full resolution within ±1,249 steps and around
+  // an alignment of means of 2 consecutive pairs (dtw-wass repair 7)
   const N = 20_000, K = 4
   const o = hydro(N), s = hydro(N, K)
   const dstr = mkDates(N).map(iso)
   const out = computeAll(o, s, ctx(N, 2000))
   const trip = triples(dtwTies(out, dstr, Array.from(o), Array.from(s), Number.MAX_SAFE_INTEGER))
-  it('reports the block size and says so in a note', () => {
-    expect(out.extras.dtw!.decim).toBe(2)
-    expect(out.notes.some(n => /DTW was computed on means of 2 consecutive pairs/.test(n))).toBe(true)
+  it('stays at full resolution and says so in a note', () => {
+    const d = out.extras.dtw!
+    expect(d.decim).toBe(1)
+    expect(d.mode).not.toBe('blocks')
+    expect(d.coarseBlock).toBe(2)
+    expect(d.narrowBand).toBe(1249)
+    expect(out.notes.some(n => /^A full-resolution DTW alignment within ±2000 steps would need more than 50 million cells/.test(n) && /means of 2 consecutive pairs/.test(n))).toBe(true)
   })
-  it('ties span the whole record, on the block grid, with true values', () => {
-    // the old unscaled indices compressed every tie into the first half
-    const last = trip[trip.length - 1]
-    expect(last.xo).toBe(dstr[(Math.floor(N / 2) - 1) * 2])
+  it('ties span the whole record at full resolution, with true values', () => {
+    expect(trip[trip.length - 1].xo).toBe(dstr[N - 1])
+    let hits = 0
     for (const { xo, xs, yo, ys } of trip) {
       const i = dstr.indexOf(xo), j = dstr.indexOf(xs)
-      expect(i % 2).toBe(0)
-      expect(j % 2).toBe(0)
+      expect(yo).toBe(o[i])
+      expect(ys).toBe(s[j])
+      if (i % 40 === 20 && i + K < N) { expect(j, `peak at ${i}`).toBe(i + K); hits++ }
+    }
+    expect(hits).toBeGreaterThan(20)
+  })
+})
+
+describe('DTW alignment ties: block-only fallback (the corridor does not fit either)', () => {
+  // dtwTies must undo the block mapping when the path indexes block means
+  const N = 20_000, K = 4
+  const o = hydro(N), s = hydro(N, K)
+  const dstr = mkDates(N).map(iso)
+  const t = Array.from({ length: N }, (_, i) => i)
+  const res = dtwOnTimeAxis(o, s, t, 2000, 5e4)
+  const out = { extras: { dtw: res }, pairedIndex: t } as any
+  const trip = triples(dtwTies(out, dstr, Array.from(o), Array.from(s), Number.MAX_SAFE_INTEGER))
+  it('ties span the whole record, on the block grid, with true values', () => {
+    const B = res.decim
+    expect(B).toBeGreaterThan(1)
+    expect(res.mode).toBe('blocks')
+    const last = trip[trip.length - 1]
+    expect(last.xo).toBe(dstr[(Math.ceil(N / B) - 1) * B])
+    for (const { xo, xs, yo, ys } of trip) {
+      const i = dstr.indexOf(xo), j = dstr.indexOf(xs)
+      expect(i % B).toBe(0)
+      expect(j % B).toBe(0)
       expect(yo).toBe(o[i])
       expect(ys).toBe(s[j])
     }
-  })
-  it('a grid-aligned observed peak ties to the simulated peak K days later', () => {
-    const hit = trip.find(tt => tt.xo === dstr[2020] && tt.xs === dstr[2020 + K])
-    expect(hit).toBeTruthy()
   })
 })
 

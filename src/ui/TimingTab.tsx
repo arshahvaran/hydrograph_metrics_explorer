@@ -161,7 +161,7 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
               <NumField value={t.peakProminence} min={0} max={Number.MAX_VALUE} style={{ width: '5em' }}
                 label="Prominence" onClamp={setClampNote} onCommit={v => updateTiming({ peakProminence: v })} />}
           </label>
-          <label title="Sakoe–Chiba band: the largest time offset DTW may use, in steps; set it to the largest credible lag (catchment response or routing time). Default = the peak window.">DTW band ± <NumField value={t.dtwBand} min={TIMING_RANGES.dtwBand[0]} max={dtwBandMax(n)} integer unit="steps" style={{ width: '4em' }}
+          <label title="Sakoe–Chiba band: the largest time offset DTW may use, in steps. DTW mean |warp| cannot exceed it, so a lag longer than the band reads as the band or less (a note says when the alignment runs along the band limit). Set it to the largest credible lag (catchment response or routing time). Default = the peak window.">DTW band ± <NumField value={t.dtwBand} min={TIMING_RANGES.dtwBand[0]} max={dtwBandMax(n)} integer unit="steps" style={{ width: '4em' }}
             label="DTW band" onClamp={setClampNote} onCommit={v => updateTiming({ dtwBand: v })} /> steps</label>
         </div>
         </fieldset>
@@ -170,7 +170,7 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
 
       <section className="card">
         <h2>Timing summary <span className="muted">(lags in steps of {stepLabel})</span></h2>
-        {outputs.flatMap(o => o.notes).filter((v, i, a) => a.indexOf(v) === i && /transform|flat|resolvable/.test(v)).map(nn => <div key={nn} className="warning">{nn}</div>)}
+        {outputs.flatMap(o => o.notes).filter((v, i, a) => a.indexOf(v) === i && /transform|flat|resolvable|cannot exceed the band/.test(v)).map(nn => <div key={nn} className="warning">{nn}</div>)}
         <div className="mapscroll"><table className="grid" aria-label="Timing summary per simulation">
           <thead><tr><th>Metric</th><th>Optimum</th>{runs.map(r => <th key={r.id} style={{ color: r.color }}>{r.name}</th>)}</tr></thead>
           <tbody>

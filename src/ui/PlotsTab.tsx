@@ -192,8 +192,10 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
     // dtwTies maps every path node back through decimation and the pairwise
     // NaN compaction, so ties land on the true dates and values.
     const tie = dtwTies(alignOut, dates, paired.o, paired.s ?? [], 160);
-    const decim = alignOut.extras.dtw?.decim ?? 1;
-    const band = (alignOut.extras.dtw?.band ?? 0) * decim;
+    const res = alignOut.extras.dtw;
+    const decim = res?.decim ?? 1;
+    // in steps of THIS frame: ctxFor converts the band when the view is resampled
+    const band = res?.bandSteps ?? 0;
     const transform = ds.view.transform;
     // the two series are display-decimated like the time series; the ties
     // index the full frame and are drawn as they are (at most 160 of them)
@@ -206,8 +208,10 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
         { x: tie.x, y: tie.y, name: 'DTW alignment', type: 'scatter', mode: 'lines', line: { color: 'rgba(150,150,160,0.5)', width: 1 }, hoverinfo: 'skip' },
       ],
       layout: { xaxis: { rangeslider: { visible: true }, title: 'Time', showline: false }, yaxis: { title: yTitle, zeroline: true } },
-      note: `Optimal Sakoe-Chiba alignment (band ${band} steps); mean |warp| ${fmtNum(alignOut.values.dtw_warp, 2)} steps; grey ties connect matched points`
-        + (decim > 1 ? `; path computed on a 1/${decim} decimation of the record` : '')
+      note: `Optimal Sakoe-Chiba alignment (band ±${band} step${band === 1 ? '' : 's'} of ${frame.step.label}); mean |warp| ${fmtNum(alignOut.values.dtw_warp, 2)} steps; grey ties connect matched points`
+        + (res?.mode === 'blocks' ? `; path computed on means of ${decim} consecutive pairs`
+          : res?.mode === 'corridor' ? `; path computed at full resolution around an alignment of means of ${res.coarseBlock} pairs`
+          : res?.mode === 'narrow' ? `; the record is too long for a full-resolution band of ±${res.requestedBand} steps` : '')
         + (transform !== 'none' ? `; alignment computed on ${transform}-transformed flows` : '')
         + (factor > 1 ? `; ${decimationNote(factor)}` : ''),
     };
