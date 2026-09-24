@@ -11,7 +11,7 @@
 
 import { computeAll, type ComputeOutput, type ComputeCtx } from '../metrics/registry'
 import { bootstrapCIs, type BootstrapResult } from '../metrics/bootstrap'
-import { makeSubsetter, isPerStepDepth } from '../metrics/subset'
+import { makeSubsetter, isPerStepDepth, type BinCounts } from '../metrics/subset'
 import { mulberry32, gaussian, mean } from '../metrics/support/stats'
 import { useEffect, useState } from 'react'
 import type { Dataset, Run, SandboxState } from '../types'
@@ -22,10 +22,12 @@ export interface Frame {
   obs: Float64Array;
   step: { ms: number; label: string };
   caption: string;
-  /** Steps (or resampled bins) in the selection; out-of-season gaps excluded. */
+  /** Steps (or resampled bins) in the selection. */
   shown: number;
+  /** Kept, partial and empty bins of a resample; null otherwise. */
+  bins: BinCounts | null;
   /** Map any native-index series through the same window/season/resample
-   *  (resampled over the steps the observed bins cover, DESIGN D5). */
+   *  (resampled over the steps valid in every series, DESIGN D5). */
   apply: (values: ArrayLike<number>) => Float64Array;
   key: string;
 }
@@ -49,6 +51,7 @@ export function frameFor(ds: Dataset): Frame {
     step: { ms: ds.step.ms, label: ds.step.label },
     caption: '',
     shown: ds.dates.length,
+    bins: null,
     key,
     apply: (values) => Float64Array.from(values as ArrayLike<number>),
   };
@@ -57,19 +60,24 @@ export function frameFor(ds: Dataset): Frame {
   return frame;
 }
 
-/** Subset preview for the Plots tab only (window / season / resample). */
+/** Subset preview for the Plots tab only (window / season / resample). It
+ *  holds exactly the rows that "Use this data" commits (commitSubsetDataset
+ *  runs the same subsetter on the same series), so the preview's plots and
+ *  its DTW panel see what the new dataset will hold: no out-of-season rows
+ *  and no empty bins for a NaN policy to fill. */
 export function subsetFrameFor(ds: Dataset): Frame {
   const v = ds.view;
   // The dataset id sits second in every frame key (after the frame kind) so
   // the cache eviction below can tell which dataset a cached panel belongs to.
-  const key = ['subset', ds.id, ds.dates.length, ds.targetUnit, areaKey(ds), JSON.stringify(v.window), JSON.stringify(v.season), v.resample].join('|');
+  const key = ['subset', ds.id, ds.dates.length, ds.runs.length, ds.targetUnit, areaKey(ds), JSON.stringify(v.window), JSON.stringify(v.season), v.resample].join('|');
   const hit = frameCache.get(key);
   if (hit) return hit;
-  // One subsetter per selection: simulations are resampled over the steps the
-  // observed bins cover, and depths per step are summed (DESIGN D5).
-  const sub = makeSubsetter(ds.dates, ds.observed.values, v, ds.step, { perStepDepth: isPerStepDepth(ds.targetUnit) });
+  // One subsetter per selection: the observed series and every simulation
+  // are resampled over the same steps (those valid in all of them), and
+  // depths per step are summed (DESIGN D5).
+  const sub = makeSubsetter(ds.dates, [ds.observed.values, ...ds.runs.map(r => r.values)], v, ds.step, { perStepDepth: isPerStepDepth(ds.targetUnit) });
   const frame: Frame = {
-    dates: sub.dates, obs: sub.obs, step: sub.step, caption: sub.caption, shown: sub.shown, key,
+    dates: sub.dates, obs: sub.obs, step: sub.step, caption: sub.caption, shown: sub.shown, bins: sub.bins, key,
     apply: sub.apply,
   };
   if (frameCache.size > 40) frameCache.clear();

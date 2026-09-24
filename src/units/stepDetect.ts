@@ -4,41 +4,87 @@ const DAY = 24 * HOUR;
 export interface StepInfo {
   ms: number;            // modal step (representative; 30·DAY for monthly)
   label: string;         // e.g. '1h', '6h', '1d', '1mo'
-  irregular: boolean;    // true if a meaningful share of diffs disagree with the mode
+  irregular: boolean;    // true if intervals fall off the step grid, or the sampling step changes
   monthly: boolean;
 }
 
-/** A run of this many identical off-mode differences in a row is a second
- *  sampling regime (e.g. daily rows followed by hourly rows), not a gap. */
-const REGIME_RUN = 3;
+/** A run of at least this many identical off-mode intervals in a row is a
+ *  second sampling regime (e.g. daily rows followed by hourly rows), not a
+ *  few missing readings (audit units-08; three alternate missing hours once
+ *  flagged a whole hourly record irregular). */
+const REGIME_RUN = 24;
 
-const daysInMonthUTC = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+/** Monthly data keep their place in the month. Two consecutive dates are
+ *  whole calendar months apart when their month numbers differ by k >= 1
+ *  and they sit at the same place in their months: the same day and time
+ *  within one day, the same distance from the month end within one day
+ *  (month ends, and a 30th clipped to 28 February), or the same fraction of
+ *  the month within PAIR_FRACTION (CF mid-month stamps, which alternate
+ *  between 12:00 and 00:00). */
+const PAIR_FRACTION = 0.05;
+/** ...and more than 90 % of the dates lie within this fraction of a month
+ *  (about 3 days) of the record's mean place in the month, so a fixed 31-day
+ *  step, which drifts through the month, is not monthly. */
+const DRIFT_FRACTION = 0.1;
+
+interface MonthPos { m: number; s: number; e: number; p: number }
+
+/** Month number (year * 12 + month), days since the month start, days to the
+ *  next month start, and the fraction of the month elapsed. */
+function monthPos(t: number): MonthPos {
+  const d = new Date(t);
+  const y = d.getUTCFullYear(), mo = d.getUTCMonth();
+  const a = Date.UTC(y, mo, 1), b = Date.UTC(y, mo + 1, 1);
+  return { m: y * 12 + mo, s: (t - a) / DAY, e: (b - t) / DAY, p: (t - a) / (b - a) };
+}
+
+/** Circular distance between two fractions of a month. */
+const circ = (a: number, b: number) => { const x = Math.abs(a - b) % 1; return Math.min(x, 1 - x); };
+
+const samePlace = (a: MonthPos, b: MonthPos) =>
+  Math.abs(a.s - b.s) <= 1 || Math.abs(a.e - b.e) <= 1 || circ(a.p, b.p) <= PAIR_FRACTION;
 
 /**
- * Whole calendar months from a to b (k >= 1), or 0 when b is not k whole
- * months after a. Whole months keep the day of the month and the time of
- * day; month ends count as the same day (31 Jan → 28 Feb → 31 Mar), and so
- * does a day that the shorter month had to clip (30 Jan → 28 Feb → 30 Mar).
+ * Calendar-monthly test: more than 90 % of the intervals are k >= 1 whole
+ * calendar months (see samePlace), whatever the day of the month; a k > 1 is
+ * k - 1 missing months. Two dates in the same month (k = 0), which a fixed
+ * 28- or 30-day step produces every few months, are not a whole month apart.
+ * The record is coarser than monthly (bimonthly, quarterly, annual) when at
+ * least 90 % of the k values are multiples of one g in 2..12.
  */
-function wholeMonthsApart(a: number, b: number): number {
-  if (b - a < 28 * DAY) return 0;            // the shortest whole month is 28 days
-  const da = new Date(a), db = new Date(b);
-  if (((a % DAY) + DAY) % DAY !== ((b % DAY) + DAY) % DAY) return 0;
-  const k = (db.getUTCFullYear() - da.getUTCFullYear()) * 12 + (db.getUTCMonth() - da.getUTCMonth());
-  if (k < 1) return 0;
-  const x = da.getUTCDate(), y = db.getUTCDate();
-  const endA = x === daysInMonthUTC(da), endB = y === daysInMonthUTC(db);
-  return x === y || (endA && y >= x) || (endB && x >= y) ? k : 0;
+function calendarMonthly(dates: number[]): { monthly: boolean; offGrid: number } {
+  const n = dates.length;
+  const pos = dates.map(monthPos);
+  let sx = 0, sy = 0;
+  for (const q of pos) { const a = 2 * Math.PI * q.p; sx += Math.cos(a); sy += Math.sin(a); }
+  const ref = ((Math.atan2(sy, sx) / (2 * Math.PI)) % 1 + 1) % 1;
+  if (Math.hypot(sx, sy) < 1e-9 * n || pos.filter(q => circ(q.p, ref) <= DRIFT_FRACTION).length <= 0.9 * n) {
+    return { monthly: false, offGrid: n - 1 };
+  }
+  const ks: number[] = [];
+  for (let i = 1; i < n; i++) {
+    const k = pos[i].m - pos[i - 1].m;
+    if (k >= 1 && samePlace(pos[i - 1], pos[i])) ks.push(k);
+  }
+  const offGrid = n - 1 - ks.length;
+  if (ks.length <= 0.9 * (n - 1)) return { monthly: false, offGrid };
+  for (let g = 2; g <= 12; g++) {
+    if (ks.filter(k => k % g === 0).length >= 0.9 * ks.length) return { monthly: false, offGrid };
+  }
+  return { monthly: true, offGrid };
 }
 
 /**
  * Detect the sampling step as the mode of consecutive differences (§6.0).
- * Calendar-monthly data are recognised as '1mo' by calendar arithmetic:
- * nearly all consecutive dates are whole calendar months apart, mostly one
- * month (a jump of k months is k - 1 missing rows, as for fixed steps).
- * A fixed 28- or 30-day step is therefore '28d' / '30d', not a month.
- * Gaps are tolerated: they simply don't win the mode. A sustained run of a
- * coarser spacing (a change of sampling resolution) is flagged irregular.
+ * Calendar-monthly data are recognised as '1mo' by their place in the month
+ * (see calendarMonthly), so stamps on the 1st, the 15th, the 28th, month
+ * ends and CF mid-month stamps are all monthly, and missing months are
+ * missing rows. A fixed 28- or 30-day step is '28d' / '30d'.
+ *
+ * Irregular means that intervals fall off the step grid (more than 5 % of
+ * them are not whole multiples of the step) or that the sampling step
+ * changes (a run of REGIME_RUN identical coarser intervals). Missing steps
+ * alone never make a record irregular.
  */
 export function detectStep(datesMs: number[]): StepInfo {
   if (datesMs.length < 2) return { ms: DAY, label: '1d', irregular: false, monthly: false };
@@ -46,17 +92,11 @@ export function detectStep(datesMs: number[]): StepInfo {
   const diffs: number[] = [];
   for (let i = 1; i < datesMs.length; i++) diffs.push(datesMs[i] - datesMs[i - 1]);
 
-  // Monthly check first, on the calendar: > 90% of the differences are whole
-  // months, and at least half of those are exactly one month (annual or
-  // quarterly records are whole months apart too, but are not monthly).
-  let whole = 0, one = 0;
-  for (let i = 1; i < datesMs.length; i++) {
-    const k = wholeMonthsApart(datesMs[i - 1], datesMs[i]);
-    if (k >= 1) whole++;
-    if (k === 1) one++;
-  }
-  if (whole / diffs.length > 0.9 && one >= 0.5 * whole) {
-    return { ms: 30 * DAY, label: '1mo', irregular: (diffs.length - whole) / diffs.length > 0.05, monthly: true };
+  // Monthly check first, on the calendar (only when nearly every interval is
+  // at least 20 days, so long sub-daily records skip the calendar work).
+  if (diffs.filter(d => d >= 20 * DAY).length > 0.9 * diffs.length) {
+    const m = calendarMonthly(datesMs);
+    if (m.monthly) return { ms: 30 * DAY, label: '1mo', irregular: m.offGrid / diffs.length > 0.05, monthly: true };
   }
 
   const counts = new Map<number, number>();
@@ -64,10 +104,9 @@ export function detectStep(datesMs: number[]): StepInfo {
   let mode = diffs[0], best = 0;
   for (const [d, c] of counts) if (c > best || (c === best && d < mode)) { mode = d; best = c; }
 
-  const offMode = diffs.filter(d => d !== mode).length;
-  // Gaps that are exact multiples of the mode are missing rows, not irregularity.
-  const trueIrregular = diffs.filter(d => d !== mode && d % mode !== 0).length;
-  // ...unless the same off-mode multiple repeats row after row: that is a
+  // Intervals that are whole multiples of the mode are missing rows, not irregularity.
+  const offGrid = diffs.filter(d => d % mode !== 0).length;
+  // ...unless the same coarser interval repeats row after row: that is a
   // stretch sampled at a coarser step (200 daily rows before 2400 hourly
   // rows once passed as a regular '1h' record, and a depth-per-interval
   // conversion then divided the daily depths by one hour).
@@ -86,7 +125,7 @@ export function detectStep(datesMs: number[]): StepInfo {
   return {
     ms: mode,
     label,
-    irregular: regime || trueIrregular / diffs.length > 0.05 || offMode / diffs.length > 0.5,
+    irregular: regime || offGrid / diffs.length > 0.05,
     monthly: false,
   };
 }

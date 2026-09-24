@@ -1,7 +1,9 @@
 /**
  * AnalysisBar audit fixes: subset-03 (the end date is a whole day),
  * subset-06 (clearing one field never rewrites the other bound) and
- * subset-08 (resample options that cannot aggregate are disabled).
+ * subset-08 (resample options that cannot aggregate are disabled), and
+ * the review repairs (subset-04 season note, subset-07 step note, the
+ * resample coverage rule in the caption).
  */
 import { describe, it, expect, beforeEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
@@ -113,5 +115,43 @@ describe('subset-08: resample options', () => {
     render(<AnalysisBar />);
     expect(opt('daily').textContent).toBe('daily totals');
     expect(opt('monthly').textContent).toBe('monthly totals');
+  });
+});
+
+describe('review repairs: what the bar says before "Use this data"', () => {
+  const note = () => Array.from(document.querySelectorAll('.analysisbar p.muted')).map(p => p.textContent ?? '').join(' | ');
+
+  it('a season under the zero policy: out-of-season steps are not rows, so no NaN policy fills them (subset-04)', () => {
+    load(Array.from({ length: 730 }, (_, i) => Date.UTC(2001, 0, 1) + i * DAY));
+    S().updateView({ nanPolicy: 'zero' });
+    render(<AnalysisBar />);
+    fireEvent.change(screen.getByLabelText('season start day-of-year'), { target: { value: '335' } });
+    fireEvent.change(screen.getByLabelText('season end day-of-year'), { target: { value: '59' } });
+    expect(note()).toContain('Out-of-season steps are not part of the plots or of the new dataset, so no NaN policy fills them');
+    expect(note()).not.toContain('pairwise deletion');
+    expect(status()).toContain('180 steps shown');
+    S().commitSubsetDataset();
+    expect(active().dates.length).toBe(180);
+    expect(active().view.nanPolicy).toBe('zero');
+  });
+
+  it('a window over the daily part of a daily-then-hourly record announces the new step (subset-07)', () => {
+    const dly = Array.from({ length: 200 }, (_, i) => Date.UTC(2001, 0, 1) + i * DAY);
+    const t0 = dly[dly.length - 1] + DAY;
+    load([...dly, ...Array.from({ length: 2400 }, (_, i) => t0 + i * H)]);
+    render(<AnalysisBar />);
+    fireEvent.change(screen.getByLabelText('window start'), { target: { value: '2001-01-01' } });
+    fireEvent.change(screen.getByLabelText('window end'), { target: { value: '2001-05-31' } });
+    expect(note()).toContain('Its time step is 1d, not 1h');
+  });
+
+  it('a resample states the coverage rule and the empty and partial bins (compute-02, subset-02)', () => {
+    load(Array.from({ length: 24 * 40 }, (_, i) => Date.UTC(2001, 0, 1) + i * H), 'mm_step');
+    render(<AnalysisBar />);
+    fireEvent.change(screen.getByLabelText('Resample'), { target: { value: 'monthly' } });
+    expect(status()).toContain('monthly totals of the steps valid in every series (a month needs at least half of its steps, and a month with missing steps is scaled to the whole month; 1 left empty)');
+    expect(status()).toContain('1 steps shown');
+    expect(note()).toContain('Days or months left empty are not part of the plots or of the new dataset');
+    expect((screen.getByLabelText('Resample') as HTMLSelectElement).title).toContain('at least half of its steps');
   });
 });
