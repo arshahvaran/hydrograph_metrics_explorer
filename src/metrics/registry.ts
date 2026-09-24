@@ -6,7 +6,7 @@ import { applyNanPolicy, type NanPolicy, type Paired } from '../ingest/missing'
 import { mean } from './support/stats'
 import { peakTiming, eventErrors, lagSweep, type EventOptions } from './timing/events'
 import { dtwOnTimeAxis, wasserstein1, wasserstein2sq, massIssue, DTW_CELL_BUDGET, type DtwRecordResult } from './timing/dtwWasserstein'
-import { diagnosticEfficiency, seriesDistance } from './timing/deSd'
+import { diagnosticEfficiency, seriesDistance, SD_EXACT_MAX_EVENTS } from './timing/deSd'
 import { xwtLag } from './timing/xwt'
 import { timePositions } from './timing/timeAxis'
 import type { TimingConfig } from '../types'
@@ -298,7 +298,18 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
     // event gap only merges threshold events.
     const peaks = peakTiming(ro, rs, { prominence: t.peakProminence, minDistance: t.peakMinDistance, window: t.peakMatchTolerance }, pos);
     const events = eventErrors(ro, rs, evOpt, t.peakMatchTolerance, pos);
+    // Series Distance detects its events on the same time positions as the
+    // event metrics, so both use one event set (a gap ends an event there too).
     const sd = seriesDistance(ro, rs, evOpt, t.peakMatchTolerance, 20, pos);
+    if (sd.gapEdges > 0) {
+      notes.push(`${sd.gapEdges} event${sd.gapEdges === 1 ? '' : 's'} (observed or simulated) start or end at missing values, so that edge is the gap and not a threshold crossing. The event metrics and Series Distance use the same events: the parts of a flood on the two sides of a gap count as separate events unless they are closer than the min event gap (${t.eventMinDistance} steps).`);
+    }
+    if (sd.gapSpans > 0) {
+      notes.push(`Series Distance: ${sd.gapSpans} matched event${sd.gapSpans === 1 ? ' contains' : 's contain'} missing steps; ${sd.gapSpans === 1 ? 'its' : 'their'} rise and recession are interpolated linearly in time across the gap.`);
+    }
+    if (sd.greedyEvents > 0) {
+      notes.push(`Series Distance paired ${sd.greedyEvents} events that form overlapping groups of more than ${SD_EXACT_MAX_EVENTS} events greedily, nearest peaks first, instead of by the exact matching (most hits, then least total peak distance); its occurrence and timing may differ slightly from the optimum there.`);
+    }
     // D1: the time axis of DTW, W1 and W2^2 is the original step index of each
     // surviving pair, so a gap never shortens a warp or a transport distance.
     const tAxis = raw.index;
