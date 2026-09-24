@@ -2,7 +2,7 @@ import Papa from 'papaparse'
 import { parseDates, type DateFormat, type ParsedDates } from './dateParse'
 import { parseColumn, readBoth, resolveDecimalMark, scanDecimalMarks, undecidedReason, type ColumnParse, type ColumnScan, type DecimalMark } from './missing'
 import { validateDataset, type ValidationResult } from './validate'
-import { runsMessage, tableShapeMessage, usedRange } from './limits'
+import { inspectDelimited, runsMessage, tableShapeMessage, usedRange } from './limits'
 import { UNITS } from '../units/registry'
 import type { UnitId } from '../types'
 import type { CommitInput } from '../store/store'
@@ -229,10 +229,54 @@ function readGuarded<T>(read: () => T): T {
   return out as T;
 }
 
+/** What a file with a workbook name (.xls, .xlsx) holds, from its bytes and
+ *  not from its name: a binary or zipped workbook (xls, xlsx, xlsb, ods, and
+ *  the older binary formats), markup that the spreadsheet reader parses
+ *  (SpreadsheetML or flat ODS XML, an HTML or MHT table, SYLK, DIF), an RTF
+ *  document, or plain delimited text (a CSV or TSV that was only renamed). */
+export type WorkbookContent = 'workbook' | 'markup' | 'rtf' | 'text';
+
+export function sniffWorkbook(buf: ArrayBuffer): { kind: WorkbookContent; text?: string } {
+  const b = new Uint8Array(buf);
+  if (b.length >= 2 && b[0] === 0x50 && b[1] === 0x4B) return { kind: 'workbook' };                     // ZIP: xlsx, xlsb, ods
+  if (b.length >= 4 && b[0] === 0xD0 && b[1] === 0xCF && b[2] === 0x11 && b[3] === 0xE0) return { kind: 'workbook' };   // OLE: xls
+  let text: string;
+  if (b.length >= 2 && b[0] === 0xFF && b[1] === 0xFE) text = new TextDecoder('utf-16le').decode(b.subarray(2));
+  else if (b.length >= 2 && b[0] === 0xFE && b[1] === 0xFF) text = new TextDecoder('utf-16be').decode(b.subarray(2));
+  else {
+    // A NUL byte near the start: another binary format (BIFF2-5, Lotus,
+    // dBASE, Quattro Pro), which only the spreadsheet reader knows.
+    if (b.subarray(0, 65536).indexOf(0) >= 0) return { kind: 'workbook' };
+    // Decoded as the upload of a .csv file is (File.text(): UTF-8).
+    text = new TextDecoder('utf-8').decode(b);
+  }
+  const head = text.replace(/^﻿/, '').trimStart().slice(0, 64);
+  if (head.startsWith('{\\rtf')) return { kind: 'rtf' };
+  if (head.startsWith('<') || /^MIME-Version:/i.test(head) || head.startsWith('ID;P') || /^TABLE\r?\n0,1/.test(head)) return { kind: 'markup' };
+  return { kind: 'text', text };
+}
+
 /** Read the first sheet with data of an XLSX/XLS file. Text cells stay text,
  *  numbers stay numbers, and date-formatted numbers become UTC date-time
  *  text (see excelSerialToMs). Text-based content (HTML, CSV) stays text. */
 export async function parseWorkbook(buf: ArrayBuffer): Promise<RawTable> {
+  const content = sniffWorkbook(buf);
+  // The spreadsheet reader's RTF reader rewrites numbers ("12,5" -> 125)
+  // whatever the options, and RTF is a word-processor format.
+  if (content.kind === 'rtf') {
+    throw new Error('This file is an RTF document (word-processor text), not a spreadsheet, so its numbers cannot be read safely. Copy the table into a spreadsheet and save it as CSV or XLSX, then upload that file.');
+  }
+  // A CSV or TSV that only has a workbook name is read by the tool's own
+  // text parser, as a .csv upload is, so every cue for the decimal mark (the
+  // ";" between cells among them) applies. Text that does not split into
+  // columns goes to the spreadsheet reader, as before.
+  if (content.kind === 'text') {
+    const text = content.text!;
+    const bad = tableShapeMessage(inspectDelimited(text));
+    if (bad) throw new Error(bad);
+    const t = parseDelimited(text);
+    if (t.header.length >= 2) return { ...t, note: 'The file has a workbook name (.xls or .xlsx) but holds plain text, so it was read as delimited text.' };
+  }
   let XLSX: typeof import('xlsx');
   try {
     // The spreadsheet reader is a lazily loaded chunk; if the deployed site
