@@ -605,9 +605,9 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
       }
       if (why.length) notes.push(`W₁ and W₂² are n/a: they treat flow as mass over time and need non-negative values with a positive total; ${why.join(' and ')}.`);
     }
-    if (de.nonPerennial) notes.push('DE: observed record is not strictly positive; diagnostic efficiency assumptions violated');
+    if (de.nonPerennial) notes.push('DE: the observed record has zero or negative flows, and Diagnostic Efficiency assumes perennial flow (Schwemmle et al., 2021), so read its value with care.');
     if (de.rUndefined) notes.push('DE: the correlation r is undefined for a constant series and is set to 0, as in diag-eff (Schwemmle et al., 2021).');
-    if (events.events.length === 0) notes.push('No events at the current threshold; raise/lower it on the Timing tab');
+    if (events.events.length === 0) notes.push('No observed events: no observed flow after the warm-up exceeds the event threshold. Lower the threshold or the warm-up on the Timing tab.');
 
     Object.assign(extras, { de, peaks, events, sd, dtw: dtwRes, xwt: xw, sweep });
   }

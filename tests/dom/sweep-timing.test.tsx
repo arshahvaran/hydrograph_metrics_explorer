@@ -1,7 +1,7 @@
 /**
  * Final sweep, timing (DOM): the Timing tab shows every timing note. It once
  * kept only notes with listed words, so notes such as the XWT gap note, the
- * DTW gap note and "No events at the current threshold" never showed there.
+ * DTW gap note and "No events at the current threshold" (now "No observed events") never showed there.
  */
 import { it, expect, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'

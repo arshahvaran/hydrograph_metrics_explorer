@@ -6,6 +6,7 @@ import { csvLine, fmtNum, download } from './format'
 import { Eq } from './Eq'
 import { APP_VERSION } from '../version'
 import type { Dataset } from '../types'
+import { RunName } from './RunName'
 
 /** Tooltip text shared by the two skill rows: how every benchmark is built. */
 const BENCHMARK_CONVENTION = 'The model and the benchmark are scored on the same pairs (where the observation, the simulation and the benchmark are all valid) and under the same transform. Each benchmark is a flow series built from the observations of those pairs: their mean flow, their monthly mean flow (climatology), or the observation at the previous step (persistence; none at the first step or after a missing observation, where the pair is dropped from both scores). The benchmark is then transformed like the simulation.';
@@ -120,7 +121,7 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
         {ciOn && boots.results.map((b, i) => (b?.reason ? <div key={runs[i].id} className="warning">CIs for {runs[i].name}: {b.reason}</div> : null))}
         <div className="mapscroll"><table className="grid metricstable" aria-label="Metric values per simulation">
           <thead>
-            <tr><th>Metric</th><th>Optimum</th>{runs.map(r => <th key={r.id} style={{ color: r.color }}>{r.name}</th>)}</tr>
+            <tr><th>Metric</th><th>Optimum</th>{runs.map(r => <th key={r.id}><RunName name={r.name} color={r.color} /></th>)}</tr>
           </thead>
           <tbody>
             {GROUPS.map(g => {

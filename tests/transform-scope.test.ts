@@ -152,7 +152,7 @@ describe('D2: FDC signatures, DE and W1/W2 use untransformed flows (fdc-03, de-s
     for (const k of [1, 1000]) {
       const out = computeAll(scale(o, k), scale(s, k), ctx('log'))
       for (const id of ['de', 'de_const', 'de_dyn']) expect(same(out.values[id], ref[id], 1e-9), `${id} x${k}`).toBe(true)
-      expect(out.notes.join('\n')).not.toMatch(/not strictly positive/)
+      expect(out.notes.join('\n')).not.toMatch(/has zero or negative flows/)
       expect(out.extras.de!.nonPerennial).toBe(false)
     }
   })

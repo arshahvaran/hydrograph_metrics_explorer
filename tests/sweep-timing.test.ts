@@ -104,9 +104,25 @@ describe('3. MASE tooltip', () => {
 
 describe('4. isTimingNote (Timing tab)', () => {
   it('keeps every timing note and leaves out only the classical-metric notes', () => {
-    expect(isTimingNote('No events at the current threshold; raise/lower it on the Timing tab')).toBe(true)
+    expect(isTimingNote('No observed events: no observed flow after the warm-up exceeds the event threshold. Lower the threshold or the warm-up on the Timing tab.')).toBe(true)
     expect(isTimingNote('Cross-wavelet analysis: 1 gap of more than 3 missing steps (10 steps in all) was joined, so the values on its two sides are treated as adjacent; the XWT lag is not resolved across it.')).toBe(true)
     expect(isTimingNote(C.LOG_NA_NOTE)).toBe(false)
     expect(isTimingNote(C.fdcLogNote([0, 0, 0, 1, 2, 3, 4, 5, 6, 7], [0, 0, 0, 1, 2, 3, 4, 5, 6, 7])!)).toBe(false)
+  })
+})
+
+describe('5. note wording', () => {
+  it('no observed events: the note says why and what to change', () => {
+    const n = 200
+    const obs = Array.from({ length: n }, () => 5), sim = Array.from({ length: n }, (_, i) => 5 + Math.sin(i))
+    const t = { ...defaultTimingConfig(DAY, n), eventThreshold: { kind: 'absolute' as const, value: 50 } }
+    const out = computeAll(obs, sim, { nanPolicy: 'pairwise', transform: 'none', timing: t })
+    expect(out.notes).toContain('No observed events: no observed flow after the warm-up exceeds the event threshold. Lower the threshold or the warm-up on the Timing tab.')
+  })
+  it('DE on a record with zero flows names the assumption it breaks', () => {
+    const n = 200
+    const obs = Array.from({ length: n }, (_, i) => (i % 10 === 0 ? 0 : 3 + Math.sin(i / 5))), sim = obs.map(v => v + 0.5)
+    const out = computeAll(obs, sim, { nanPolicy: 'pairwise', transform: 'none', timing: defaultTimingConfig(DAY, n) })
+    expect(out.notes).toContain('DE: the observed record has zero or negative flows, and Diagnostic Efficiency assumes perennial flow (Schwemmle et al., 2021), so read its value with care.')
   })
 })
