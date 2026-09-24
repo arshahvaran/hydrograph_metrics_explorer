@@ -9,6 +9,9 @@ export const fmtNum = (v: number | undefined | null, digits = 3): string => {
   // toFixed switches to exponent notation at 1e21 ("-7.7e+27"); a magnitude
   // that large is summation garbage on degenerate data, not a metric value.
   if (Math.abs(v) >= 1e21) return 'n/a';
+  // Below 1e-12 a value is floating-point residue (a scaled simulation's FLV
+  // came out as -2.0e-14), not a measurable error at any hydrological scale.
+  if (Math.abs(v) < 1e-12) v = 0;
   const a = Math.abs(v);
   if (a !== 0 && a < Math.max(0.1, 10 ** -digits)) {
     const sig = Math.max(2, digits);

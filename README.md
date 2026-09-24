@@ -149,10 +149,11 @@ values are near zero after cancellation: they agree to 1.3×10⁻¹⁵ absolute.
   non-negative flows. No fixture contains either case.
 
 The other 29 metrics have no executed reference: RSR, α, β-NSE, KGE″, wR², logNSE, the four
+logarithmic error norms (MLE, MALE, MSLE, RMSLE, which HydroErr computes with log1p), the four
 FDC signatures (FHV, FLV, FMS, FMM) and the 15 other timing and shape metrics (peak timing,
 event errors, best-fit lag, Series Distance, DTW, Wasserstein, cross-wavelet lag). They are
 checked against analytic identities (for example W₁ = k and W₂² = k² for a pure k-step
-shift, and FLV = FMS = 0 for S = c·O), hand-worked formulas, and independent NumPy
+shift of an event that starts and ends at zero flow, and FLV = FMS = 0 for S = c·O), hand-worked formulas, and independent NumPy
 implementations of the published equations (the log-error family and the FDC signatures).
 %BiasFMM is reported as the unit-free log ratio 100·ln(S̃/Õ); the ratio to ln Õ of Yilmaz
 et al. (2008) changes with the flow unit.

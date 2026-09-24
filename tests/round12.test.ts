@@ -133,9 +133,12 @@ describe('fmtStamp step-aware time stamps (round 12)', () => {
 // (exponent form below 1e-3), so it keeps its sign and never reads as "0.00".
 // The round-12 property still holds: no display is a signed zero.
 describe('fmtNum never shows a signed zero (round 12)', () => {
-  it('float round-off below display precision shows its true size, never "-0.00"', () => {
-    expect(fmtNum(-1e-16, 2)).toBe('-1.0e-16');
-    expect(fmtNum(-1e-16, 3)).toBe('-1.00e-16');
+  it('float round-off (below 1e-12) reads as zero, never "-0.00"', () => {
+    // floating-point residue below 1e-12 reads as zero (classical review); a real small value keeps its digits
+    expect(fmtNum(-1e-16, 2)).toBe('0.00');
+    expect(fmtNum(-1e-16, 3)).toBe('0.000');
+    expect(fmtNum(-2e-14, 2)).toBe('0.00');
+    expect(fmtNum(3.82e-4, 3)).toBe('3.82e-4');
     expect(fmtNum(-0, 2)).toBe('0.00');
   })
   it('a small negative keeps its sign with significant figures', () => {
