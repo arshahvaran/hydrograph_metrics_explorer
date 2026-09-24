@@ -37,11 +37,18 @@ export function MapTab() {
     if (!map) return;
     if (markerRef.current) { markerRef.current.remove(); markerRef.current = null; }
     if (ds?.location) {
+      // Built from text nodes: the dataset name comes from files and project
+      // files, so it must never be parsed as HTML (a name holding markup would
+      // otherwise run script in this page).
+      const popup = document.createElement('div');
+      popup.appendChild(document.createTextNode(ds.name));
+      popup.appendChild(document.createElement('br'));
+      popup.appendChild(document.createTextNode(`${ds.location.lat.toFixed(4)}, ${ds.location.lon.toFixed(4)}`));
       markerRef.current = L.circleMarker([ds.location.lat, ds.location.lon], {
         radius: 9, color: '#0b6e99', fillColor: '#56B4E9', fillOpacity: 0.85, weight: 2,
-      }).addTo(map).bindPopup(`${ds.name}<br>${ds.location.lat.toFixed(4)}, ${ds.location.lon.toFixed(4)}`);
+      }).addTo(map).bindPopup(popup);
     }
-  }, [ds?.location?.lat, ds?.location?.lon, ds?.id]);
+  }, [ds?.location?.lat, ds?.location?.lon, ds?.id, ds?.name]);
 
   if (!ds) return null;
 

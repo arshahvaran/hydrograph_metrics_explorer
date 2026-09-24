@@ -48,12 +48,16 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
     v;
 
   function exportCsv(sep: ',' | '\t') {
+    // Each comment line is written as ONE quoted cell: the dataset name, run
+    // names and settings come from user files, and a separator inside them
+    // would otherwise open a new cell that a spreadsheet may run as a formula.
+    const comment = (text: string) => csvLine([text], sep);
     const lines: string[] = [
-      `# Hydrograph Metrics Explorer v${APP_VERSION} · https://arshahvaran.github.io/hydrograph_metrics_explorer/`,
-      `# exported ${new Date().toISOString()}`,
-      `# dataset: ${ds!.name} (${ds!.dates.length} rows, step ${ds!.step.label}, unit ${ds!.targetUnit})`,
-      `# settings: nan=${ds!.view.nanPolicy}; transform=${ds!.view.transform}; benchmark=${ds!.view.benchmark}`,
-      `# timing config: ${JSON.stringify(ds!.view.timingConfig)}`,
+      comment(`# Hydrograph Metrics Explorer v${APP_VERSION} · https://arshahvaran.github.io/hydrograph_metrics_explorer/`),
+      comment(`# exported ${new Date().toISOString()}`),
+      comment(`# dataset: ${ds!.name} (${ds!.dates.length} rows, step ${ds!.step.label}, unit ${ds!.targetUnit})`),
+      comment(`# settings: nan=${ds!.view.nanPolicy}; transform=${ds!.view.transform}; benchmark=${ds!.view.benchmark}`),
+      comment(`# timing config: ${JSON.stringify(ds!.view.timingConfig)}`),
       csvLine(['metric', 'group', 'optimum', ...runs.flatMap(r => ciOn ? [r.name, `${r.name} ci95_lo`, `${r.name} ci95_hi`] : [r.name])], sep),
     ];
     for (const m of metricRows) {
@@ -65,8 +69,9 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
           return [v, ci ? ci[0] : '', ci ? ci[1] : ''];
         })], sep));
     }
+    // A UTF-8 byte-order mark makes Excel read the labels (R², KGE′, d₁) as UTF-8.
     download(`${ds!.name.replace(/[^\w-]+/g, '_')}_metrics.csv`,
-      lines.join('\n'), sep === ',' ? 'text/csv' : 'text/tab-separated-values');
+      '﻿' + lines.join('\n'), sep === ',' ? 'text/csv' : 'text/tab-separated-values');
   }
 
   return (
@@ -104,7 +109,7 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
             <input type="checkbox" checked={ciOn} onChange={e => updateView({ showBootstrapCIs: e.target.checked })} /> Calculate 95% CIs (block bootstrap)
           </label>
           {ciOn && boots.progress < 1 && <span className="muted" role="status" aria-live="polite">bootstrapping… {Math.round(boots.progress * 100)}%</span>}
-          <button className="primary" onClick={() => exportCsv(',')}>Export CSV</button>
+          <button className="primary" disabled={busy || (ciOn && boots.progress < 1)} title={busy || (ciOn && boots.progress < 1) ? 'Available when the metrics (and CIs) have finished computing' : undefined} onClick={() => exportCsv(',')}>Export CSV</button>
         </div>
         <p className="muted" aria-live="polite">
           Valid pairs per simulation (n): {runs.map((r, i) => `${r.name}: ${outputs[i]?.n ?? '…'}`).join(' · ')}.{busy && !computeError ? ' Computing in a background worker…' : ''}{frame.caption ? ` Subset: ${frame.caption}.` : ''}

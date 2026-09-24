@@ -162,8 +162,13 @@ export function chunkIndices(n: number, per: number): number[][] {
   for (let i = 0; i < n; i += per) out.push(Array.from({ length: Math.min(per, n - i) }, (_, k) => i + k));
   return out;
 }
+/** Text that came from user files (dataset, run and column names, notes) can hold
+ *  characters XML 1.0 forbids (C0 controls, U+FFFE/U+FFFF, lone surrogates); one of
+ *  them in word/document.xml makes Word refuse the whole report, so drop them. */
+export const xmlSafe = (s: string): string =>
+  s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '');
 const cellP = (text: string, opts: { bold?: boolean; mono?: boolean; color?: string } = {}) =>
-  new Paragraph({ children: [new TextRun({ text, bold: opts.bold, color: opts.color, font: opts.mono ? 'Consolas' : undefined, size: opts.mono ? 16 : 18 })] });
+  new Paragraph({ children: [new TextRun({ text: xmlSafe(text), bold: opts.bold, color: opts.color, font: opts.mono ? 'Consolas' : undefined, size: opts.mono ? 16 : 18 })] });
 
 function tableOf(headers: string[], rows: { cells: string[]; shaded?: boolean; boldFirst?: boolean }[], widths: number[]): Table {
   const mk = (texts: string[], head: boolean, shaded?: boolean, boldFirst?: boolean) =>
@@ -195,13 +200,13 @@ export async function buildDocx(p: ReportPayload): Promise<Blob> {
   const { ds, frame, runs, outputs, images, sections, notes } = p;
   const kids: (Paragraph | Table)[] = [];
   const H = (text: string, level: (typeof HeadingLevel)[keyof typeof HeadingLevel] = HeadingLevel.HEADING_1) =>
-    kids.push(new Paragraph({ heading: level, spacing: { before: 240, after: 100 }, children: [new TextRun(text)] }));
+    kids.push(new Paragraph({ heading: level, spacing: { before: 240, after: 100 }, children: [new TextRun(xmlSafe(text))] }));
   const Ptext = (text: string, opts: { italic?: boolean; mono?: boolean; size?: number } = {}) =>
-    kids.push(new Paragraph({ spacing: { after: 80 }, children: [new TextRun({ text, italics: opts.italic, font: opts.mono ? 'Consolas' : undefined, size: opts.size ?? (opts.mono ? 14 : 20) })] }));
+    kids.push(new Paragraph({ spacing: { after: 80 }, children: [new TextRun({ text: xmlSafe(text), italics: opts.italic, font: opts.mono ? 'Consolas' : undefined, size: opts.size ?? (opts.mono ? 14 : 20) })] }));
 
   kids.push(new Paragraph({
     heading: HeadingLevel.TITLE, alignment: AlignmentType.LEFT,
-    children: [new TextRun(`Model evaluation report: ${ds.name}`)],
+    children: [new TextRun(xmlSafe(`Model evaluation report: ${ds.name}`))],
   }));
   Ptext(`Generated ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC by Hydrograph Metrics Explorer v${APP_VERSION} (${TOOL_URL}).`, { italic: true });
 
@@ -246,7 +251,7 @@ export async function buildDocx(p: ReportPayload): Promise<Blob> {
         alignment: AlignmentType.CENTER, spacing: { before: 160, after: 40 },
         children: [new ImageRun({ type: 'png', data: await dataUrlBytes(img.dataUrl), transformation: { width: img.w, height: img.h } })],
       }));
-      kids.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 140 }, children: [new TextRun({ text: img.caption, italics: true, size: 18 })] }));
+      kids.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 140 }, children: [new TextRun({ text: xmlSafe(img.caption), italics: true, size: 18 })] }));
     }
   }
 
