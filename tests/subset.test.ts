@@ -21,13 +21,17 @@ describe('analysis subsetting (spec §6/§9)', () => {
     const dates = range('2001-01-01', 730); // two years
     const vals = dates.map(() => 1);
     const r = applySubset(dates, [vals], { window: null, season: { startDoy: 335, endDoy: 59 }, resample: 'native' }, step);
-    // every kept day is Dec (DOY>=335) or Jan–Feb (DOY<=59)
-    for (const ms of r.dates) {
+    // every kept (finite) day is Dec (DOY>=335) or Jan–Feb (DOY<=59); the
+    // out-of-season days stay in the frame as gaps (audit subset-04, D1)
+    const kept = r.dates.filter((_, i) => isFinite(r.obs[i]));
+    for (const ms of kept) {
       const d = doyUTC(ms);
       expect(d >= 335 || d <= 59).toBe(true);
     }
     // per non-leap year: Jan+Feb (59) + Dec (31) = 90; two full years = 180
-    expect(r.dates.length).toBe(180);
+    expect(kept.length).toBe(180);
+    expect(r.shown).toBe(180);
+    expect(r.dates.length).toBe(730);
   });
 
   it('window and season combine', () => {
