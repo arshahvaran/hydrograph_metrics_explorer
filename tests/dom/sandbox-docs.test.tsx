@@ -114,7 +114,7 @@ it('claims-11 (review): Python bytecode is neither committed nor left unignored'
 
 it('claims-11/claims-12: the generator writes into the repo; npm test builds before the bundle scan', () => {
   const script = readFileSync('scripts/generate_reference_vectors.py', 'utf8');
-  expect(script).not.toContain('/home/claude');
+  expect(script).not.toMatch(/["']\/home\/[^"']*["']/);   // no absolute home-directory path
   expect(script).toContain('"tests", "fixtures", "reference_vectors.json"');
   const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
   expect(pkg.scripts.test).toMatch(/vite build && vitest run/);
