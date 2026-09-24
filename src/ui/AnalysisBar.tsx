@@ -49,6 +49,9 @@ function AnalysisBarInner({ ds }: { ds: Dataset }) {
   const canDaily = resampleAvailable('daily', ds.step);
   const canMonthly = resampleAvailable('monthly', ds.step);
   const resampling = v.resample !== 'native' && resampleAvailable(v.resample, ds.step);
+  // The new dataset's step: the resample step, or the step detected on the
+  // selected span (a window over a daily stretch of an hourly record is daily).
+  const stepChanged = (!!v.window || !!v.season || resampling) && (frame.step.ms !== ds.step.ms || frame.step.label !== ds.step.label);
 
   return (
     <section className="card analysisbar">
@@ -92,8 +95,8 @@ function AnalysisBarInner({ ds }: { ds: Dataset }) {
         <label>Resample{' '}
           <select aria-label="Resample" value={v.resample}
             title={depth
-              ? 'Depths per interval are summed to depths per day or month. Each simulation uses the same steps as the observed series: steps where the observed value is missing are left out of both, and the total is scaled up from the mean of the remaining steps. A day or month where a simulation lacks one of those steps is left empty.'
-              : 'Each simulation is averaged over the same steps as the observed series: steps where the observed value is missing are left out of both. A day or month where a simulation lacks one of those steps is left empty.'}
+              ? 'Depths per interval are summed to depths per day or month. A step counts only where the observed series and every simulation all have a value, so every series uses the same steps. A day or month needs at least half of its steps; its total is the mean of those steps times the steps in the whole day or month, so a partial day or month (a gap, or the edge of the window or season) is scaled to the whole interval. A day or month with fewer steps is left out.'
+              : 'A step counts only where the observed series and every simulation all have a value, so every series is averaged over the same steps. A day or month needs at least half of its steps; one with fewer is left out.'}
             onChange={e => updateView({ resample: e.target.value as ViewState['resample'] })}>
             <option value="native">native ({ds.step.label})</option>
             <option value="daily" disabled={!canDaily}>daily {agg}</option>
@@ -108,11 +111,11 @@ function AnalysisBarInner({ ds }: { ds: Dataset }) {
           disabled={!v.window && !v.season && !resampling}
           onClick={() => commitSubsetDataset()}>Use this data →</button>
       </div>
-      {v.season && v.nanPolicy !== 'pairwise' && (
-        <p className="muted">Out-of-season steps stay as gaps. The new dataset uses pairwise deletion, so the “{v.nanPolicy}” NaN policy does not fill them.</p>
+      {(v.season || (frame.bins?.empty ?? 0) > 0) && (
+        <p className="muted">{v.season ? 'Out-of-season steps are' : 'Days or months left empty are'} not part of the plots or of the new dataset, so no NaN policy fills them. The dates keep the time between the steps kept: peak timing, events, Series Distance and the lag sweep count it as time.</p>
       )}
-      {resampling && (
-        <p className="muted">The new dataset keeps the analysis settings. Timing settings counted in steps (peak-match window, event spacing, warm-up, wavelet scales) take the defaults for the new step.{depth ? ' An absolute event threshold or peak prominence also takes its default, because the values become totals.' : ''}</p>
+      {stepChanged && (
+        <p className="muted">The new dataset keeps the analysis settings. Its time step is {frame.step.label}, not {ds.step.label}, so timing settings counted in steps (peak-match window, event spacing, warm-up, wavelet scales, DTW band) take the defaults for the new step.{depth && resampling ? ' An absolute event threshold or peak prominence also takes its default, because the values become totals.' : ''}</p>
       )}
     </section>
   );

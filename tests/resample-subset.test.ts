@@ -2,7 +2,8 @@
  * Audit fixes for the Plots-tab subset (window / season / resample) and the
  * "Use this data" commit path. DESIGN.md D5 (resampling pairs obs and each
  * simulation over the same steps; depth-per-step data are summed) and D1
- * (a seasonal subset keeps its time axis: out-of-season steps stay as gaps).
+ * (a seasonal subset keeps its own steps; the dates keep the time between
+ * seasons, and no NaN policy can fill the out-of-season steps).
  * Finding ids: compute-02, compute-03, subset-01..05, subset-07, subset-08,
  * units-01, project-02.
  */
@@ -10,7 +11,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { useApp } from '../src/store/store'
 import { applySubset, calendarDoy } from '../src/metrics/subset'
 import { computeAll } from '../src/metrics/registry'
-import { benchmarkSeries } from '../src/metrics/classical/catalogue'
+import { timePositions } from '../src/metrics/timing/timeAxis'
 import { computeForRun, subsetFrameFor, __resetComputeCachesForTests } from '../src/ui/compute'
 import { defaultTimingConfig } from '../src/types'
 
@@ -35,8 +36,10 @@ describe('compute-02 / subset-01: resampling pairs obs and sim over the same ste
 
   it('applySubset: each monthly sim mean covers exactly the days the obs mean covers', () => {
     const r = applySubset(dates, [obsGap, truth], { window: null, season: null, resample: 'monthly' }, { ms: DAY, label: '1d' });
-    expect(r.dates.length).toBe(12);
-    for (let b = 0; b < 12; b++) expect(r.sims[0][b]).toBeCloseTo(r.obs[b], 12);
+    // February keeps 13 of 28 days, under the half-coverage rule: left empty
+    expect(r.dates.length).toBe(11);
+    expect(r.dates.map(iso)).not.toContain('2001-02-01');
+    for (let b = 0; b < 11; b++) expect(r.sims[0][b]).toBeCloseTo(r.obs[b], 12);
     expect(r.obs[0]).toBeCloseTo((26 + 41) / 2, 12);  // Jan 16..31 of 10 + day
   });
 
@@ -61,19 +64,19 @@ describe('compute-02 / subset-01: resampling pairs obs and sim over the same ste
     S().commitSubsetDataset();
     const sub = active();
     const got = computeForRun(sub, sub.runs[0]);
-    expect(got.n).toBe(12);
+    expect(got.n).toBe(11);
     expect(got.values.nse).toBeCloseTo(1, 12);
     expect(got.values.pbias).toBeCloseTo(0, 12);
     expect(got.values.kge2009).toBeCloseTo(1, 12);
   });
 
-  it('a simulation missing a step the obs has leaves that bin empty instead of mixing different days', () => {
-    const obs = dates.map(() => 5);
+  it('a simulation missing a step leaves that step out of the obs mean too (one shared pairing)', () => {
+    const obs = dates.map((_, i) => 5 + (i < 31 ? i : 0));
     const sim = dates.map((_, i) => (i === 4 ? NaN : 5 + (i < 31 ? i : 0)));
     const r = applySubset(dates, [obs, sim], { window: null, season: null, resample: 'monthly' }, { ms: DAY, label: '1d' });
-    expect(r.obs[0]).toBe(5);
-    expect(Number.isNaN(r.sims[0][0])).toBe(true);   // January: sim lacks Jan 5
-    expect(r.sims[0][1]).toBe(5);                   // February complete
+    expect(r.obs[0]).toBeCloseTo(5 + (465 - 4) / 30, 12);  // January without Jan 5, in both
+    expect(r.sims[0][0]).toBeCloseTo(r.obs[0], 12);
+    expect(r.sims[0][1]).toBe(5);                           // February complete
   });
 });
 
@@ -116,7 +119,7 @@ describe('compute-03 / subset-02 / units-01: depth per interval is summed on res
     const dates = Array.from({ length: 48 }, (_, i) => Date.UTC(2001, 0, 1) + i * H);
     const r = applySubset(dates, [dates.map(() => 3)], { window: null, season: null, resample: 'daily' }, { ms: H, label: '1h' });
     expect(vals(r.obs)).toEqual([3, 3]);
-    expect(r.caption).toBe('daily means');
+    expect(r.caption).toBe('daily means of the steps valid in every series (a day needs at least half of its steps)');
   });
 });
 
@@ -140,35 +143,38 @@ describe('subset-03: the window end date is included through the end of that day
   });
 });
 
-describe('subset-04: a seasonal subset keeps the time axis; seasons are not joined (D1)', () => {
+describe('subset-04: a seasonal subset keeps its own steps; the dates keep the time between seasons (D1)', () => {
   const dates = daily(2001, 0, 1, 730);
 
-  it('out-of-season steps stay in the frame as gaps, so step indices are true time', () => {
+  it('out-of-season steps are not rows (no NaN policy can fill them), and the time axis still counts them', () => {
     const v = dates.map((_, i) => i);
     const r = applySubset(dates, [v], { window: null, season: { startDoy: 305, endDoy: 59 }, resample: 'native' }, { ms: DAY, label: '1d' });
-    for (let i = 1; i < r.dates.length; i++) expect(r.dates[i] - r.dates[i - 1]).toBe(DAY);
     const k = r.dates.indexOf(Date.UTC(2001, 10, 1));
     expect(r.obs[k]).toBe(304);
-    expect(Number.isNaN(r.obs[k - 1])).toBe(true);        // 2001-10-31 is out of season
+    expect(iso(r.dates[k - 1])).toBe('2001-02-28');         // the previous row ends the last season ...
+    const pos = timePositions(r.dates, r.dates.length);
+    expect(pos[k] - pos[k - 1]).toBe(246);                  // ... 246 days earlier on the time axis
     expect(r.shown).toBe(2 * (59 + 61));
-    expect(r.caption).toMatch(/gaps/);
+    expect(r.dates.length).toBe(2 * (59 + 61));
+    expect(r.obs.every(Number.isFinite)).toBe(true);
+    expect(r.step).toEqual({ ms: DAY, label: '1d', irregular: false });
+    expect(r.caption).toMatch(/out-of-season steps left out/);
   });
 
-  it('committed subset: persistence does not forecast Nov 1 from Feb 28; pairs keep their true step distance', () => {
+  it('committed subset: the timing metrics measure the true time between the Feb 28 and Nov 1 pairs', () => {
     const obs = dates.map(d => (iso(d) === '2001-02-26' ? 10 : 1));
     const sim = dates.map(d => (iso(d) === '2001-11-01' ? 10 : 1));
     S().commitDataset({ name: 'seam', dates, observed: { name: 'obs', values: obs, unit: 'm3s' }, runs: [{ name: 'sim', values: sim, unit: 'm3s' }] });
     S().updateView({ season: { startDoy: 305, endDoy: 59 } });
     S().commitSubsetDataset();
     const sub = active();
-    const k = sub.dates.indexOf(Date.UTC(2001, 10, 1));
-    const pers = benchmarkSeries(sub.observed.values as number[], 'persistence', sub.dates);
-    expect(Number.isNaN(pers[k])).toBe(true);
+    expect(sub.dates.length).toBe(240);
     const out = computeForRun(sub, sub.runs[0]);
     const idx = out.pairedIndex!;
+    const pos = timePositions(sub.dates, sub.dates.length);
     const p = idx.findIndex(i => iso(sub.dates[i]) === '2001-02-28');
     expect(iso(sub.dates[idx[p + 1]])).toBe('2001-11-01');
-    expect(idx[p + 1] - idx[p]).toBe(246);                  // 246 days, not one step
+    expect(pos[idx[p + 1]] - pos[idx[p]]).toBe(246);        // 246 days, not one step
   });
 });
 
@@ -233,7 +239,7 @@ describe('subset-08: a resample that cannot aggregate is a no-op, not a mislabel
   it('monthly record + daily resample keeps the monthly step and claims nothing', () => {
     const dates = Array.from({ length: 24 }, (_, i) => Date.UTC(2001, i, 1));
     const r = applySubset(dates, [dates.map((_, i) => i + 1)], { window: null, season: null, resample: 'daily' }, { ms: 30 * DAY, label: '1mo' });
-    expect(r.step).toEqual({ ms: 30 * DAY, label: '1mo' });
+    expect(r.step).toEqual({ ms: 30 * DAY, label: '1mo', irregular: false });
     expect(r.caption).not.toMatch(/daily/);
     expect(r.resampled).toBe(false);
     expect(vals(r.obs)).toEqual(dates.map((_, i) => i + 1));
@@ -271,11 +277,13 @@ describe('project-02: "Use this data" carries the analysis settings', () => {
     expect(sub.view.timingConfig).toEqual(src.view.timingConfig);
   });
 
-  it('a seasonal subset uses pairwise deletion, so a zero/mean NaN policy cannot fill the out-of-season gaps', () => {
+  it('a seasonal subset keeps the source NaN policy: it holds no out-of-season rows for the policy to fill', () => {
     setup();
     S().updateView({ nanPolicy: 'zero', season: { startDoy: 305, endDoy: 59 } });
     S().commitSubsetDataset();
-    expect(active().view.nanPolicy).toBe('pairwise');
+    expect(active().view.nanPolicy).toBe('zero');
+    expect(active().dates.every(d => { const c = calendarDoy(d); return c >= 305 || c <= 59; })).toBe(true);
+    expect(computeForRun(active(), active().runs[0]).n).toBe(active().dates.length);
   });
 
   it('summed depths: an absolute threshold and prominence in per-step units go back to the defaults', () => {

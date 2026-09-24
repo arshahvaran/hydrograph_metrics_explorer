@@ -57,34 +57,35 @@ export function alignByDate(input: CommitInput): CommitInput {
   };
 }
 
-/** Timing settings that do not depend on the step: a flow threshold, a peak
- *  prominence in flow units, and the DTW band as a fraction of n. The others
- *  (event spacing, warm-up, peak-match window, wavelet scales) are counted in
- *  steps and keep their meaning only while the step is unchanged. */
-// the DTW band and the peak settings are step counts, so they reset on resampling
+/** Timing settings that do not depend on the step: a flow threshold and a
+ *  peak prominence in flow units. The others (event spacing, warm-up,
+ *  peak-match window, peak separation, wavelet scales, the DTW band) are
+ *  counted in steps and keep their meaning only while the step is unchanged,
+ *  so they take the defaults for the new step when it changes. */
 const STEP_FREE: (keyof TimingConfig)[] = ['eventThreshold', 'peakProminence'];
 
 /**
  * The view of a dataset made by "Use this data": the analysis settings of the
  * source come along (audit project-02; they were once reset to the defaults
- * without a word). The step-counted timing settings are reset to the defaults
- * for the new step when the subset is resampled, and a flow-valued threshold
- * or prominence is reset too when depths per step were summed (a total per
- * day is not on the scale of a depth per hour). A seasonal subset keeps its
- * out-of-season steps as gaps, which the 'zero' and 'mean' NaN policies
- * would fill, so it uses pairwise deletion. The Plots-tab bar says all this
- * before the button is pressed.
+ * without a word), the NaN policy included: the subset holds no out-of-season
+ * rows and no empty resampled bins, so a 'zero' or 'mean' policy fills only
+ * values that were missing in the source. The step-counted timing settings
+ * are reset to the defaults for the new step when the step changes (a
+ * resample, or a window over a part of the record sampled at another step),
+ * and a flow-valued threshold or prominence is reset too when depths per step
+ * were summed (a total per day is not on the scale of a depth per hour). The
+ * Plots-tab bar says all this before the button is pressed.
  */
-export function subsetView(v: ViewState, stepMs: number, n: number, resampled: boolean, summedDepth: boolean): ViewState {
+export function subsetView(v: ViewState, stepMs: number, n: number, stepChanged: boolean, summedDepth: boolean): ViewState {
   const view = defaultView(stepMs, n);
   view.transform = v.transform;
-  view.nanPolicy = v.season ? 'pairwise' : v.nanPolicy;
+  view.nanPolicy = v.nanPolicy;
   view.benchmark = v.benchmark;
   view.metricPreset = v.metricPreset;
   view.priorityMetrics = v.priorityMetrics.map(p => ({ ...p }));
   view.boundedDisplay = v.boundedDisplay;
   view.showBootstrapCIs = v.showBootstrapCIs;
-  if (!resampled) {
+  if (!stepChanged) {
     view.timingConfig = structuredClone(v.timingConfig);
   } else {
     // Start from the defaults for the new step; bring the step-free settings.
@@ -170,24 +171,26 @@ export const useApp = create<AppState>((set, get) => ({
     const v = src.view;
     const resampling = v.resample !== 'native' && resampleAvailable(v.resample, src.step);
     if (!v.window && !v.season && !resampling) return null;
-    // Simulations are resampled over the steps the observed bins cover, and
-    // depths per step are summed (DESIGN D5); a season keeps its gaps (D1).
+    // The same subsetter as the Plots preview (subsetFrameFor): the observed
+    // series and every simulation are resampled over the same steps, and
+    // depths per step are summed (DESIGN D5). Out-of-season steps and empty
+    // bins are not rows, so no NaN policy can fill them; the dates keep the
+    // time between them (D1).
     const perStepDepth = isPerStepDepth(src.targetUnit);
     const frame = applySubset(src.dates, [src.observed.values, ...src.runs.map(r => r.values)], v, src.step, { perStepDepth });
     if (frame.shown < 2) return null;
-    // The step is known, not re-detected: the subset keeps the source step,
-    // and a resample sets a regular 1d or calendar 1mo step. Detecting it
-    // again from dates with seasonal gaps once gave '31d (irregular)' for
-    // monthly data, and depth conversion then used 31 days for every month.
-    const step = frame.resampled
-      ? { ms: frame.step.ms, label: frame.step.label, irregular: false }
-      : { ...src.step };
+    // A resample sets a regular 1d or calendar 1mo step. A native subset
+    // takes the step detected on its own span, out-of-season steps included
+    // (a window over the daily part of a daily-then-hourly record is 1d, not
+    // the source's 1h), so seasonal gaps never read as a coarser step.
+    const step = { ms: frame.step.ms, label: frame.step.label, irregular: frame.step.irregular };
+    const stepChanged = step.ms !== src.step.ms || step.label !== src.step.label;
     const id = newId('ds');
     const runs: Run[] = src.runs.map((r, i) => ({
       id: newId('run'), name: r.name, values: Array.from(frame.sims[i]),
       inputUnit: r.inputUnit, visible: r.visible, color: r.color,
     }));
-    const view = subsetView(v, step.ms, frame.dates.length, frame.resampled, perStepDepth);
+    const view = subsetView(v, step.ms, frame.dates.length, stepChanged, frame.resampled && perStepDepth);
     const ds: Dataset = {
       id, name: `${src.name} (${frame.caption || 'subset'})`, dates: frame.dates,
       observed: { name: src.observed.name, values: Array.from(frame.obs), inputUnit: src.observed.inputUnit },

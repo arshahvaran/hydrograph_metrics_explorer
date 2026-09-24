@@ -579,7 +579,8 @@ export interface BenchmarkSkill {
  *    month (UTC);
  *  - persistence: the observation at the previous step of the record (of the
  *    filled record under the zero / mean policies). There is none at the
- *    first step or after a missing observation, and the pair is then dropped
+ *    first step, after a missing observation or after absent dates (the time
+ *    step, not the row, counts), and the pair is then dropped
  *    from both scores, under every NaN policy.
  * The benchmark is then transformed like the simulation (same ε and log
  * reference), and both scores are taken on the pairs where it exists. With
@@ -610,7 +611,10 @@ function scoreBenchmark(p: MetricPairs, kind: C.BenchmarkKind, ctx: Pick<Compute
     }
     for (let k = 0; k < n0; k++) flow[k] = month[k] < 0 ? NaN : sums[month[k]] / counts[month[k]];
   } else {
-    for (let k = 0; k < n0; k++) flow[k] = rows[k] > 0 ? p.obsRows[rows[k] - 1] : NaN;
+    // The previous time step, not the previous row (D1): a row after absent
+    // dates (the first day of a season in a seasonal subset) has none.
+    const pos = timeAxisInfo(ctx.datesMs, p.obsRows.length).pos;
+    for (let k = 0; k < n0; k++) flow[k] = rows[k] > 0 && pos[rows[k]] - pos[rows[k] - 1] === 1 ? p.obsRows[rows[k] - 1] : NaN;
   }
 
   const f = C.transformFn(ctx.transform, p.obsMean);

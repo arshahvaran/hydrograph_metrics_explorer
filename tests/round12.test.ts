@@ -94,10 +94,10 @@ describe('DOY/heatmap/spaghetti binning follows the subset frame (round 12)', ()
       season: { startDoy: 305, endDoy: 59 },
       resample: 'monthly',
     }, STEP);
-    // Nov01 Dec01 Jan02 Feb02 Nov02 Dec02 hold values; Mar02..Oct02 stay as
-    // gaps on a regular monthly axis (audit subset-04, D1)
+    // Nov01 Dec01 Jan02 Feb02 Nov02 Dec02 hold values; Mar02..Oct02 are out
+    // of season and not rows (the dates keep the time; audit subset-04, D1)
     expect(frame.shown).toBe(6);
-    expect(frame.dates.length).toBe(14);
+    expect(frame.dates.length).toBe(6);
     expect(Array.from(frame.obs).filter(Number.isFinite).length).toBe(6);
     const byYear = binByYear(frame.dates, clean(frame.obs));
     expect(byYear.get(2001)![304]).toBeCloseTo(319.5, 12); // Nov 2001 at day 305
