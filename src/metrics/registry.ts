@@ -395,8 +395,8 @@ export const DTW_EDGE_NOTE_SHARE = 0.2;
  *  transform), which the Timing tab shows; false for the notes that concern
  *  only the classical metrics (the FDC signatures, the metrics that read n/a
  *  on log flows), which the Metrics tab shows. The Timing tab once kept only
- *  notes that matched a list of words and so hid, among others, "No events at
- *  the current threshold; raise/lower it on the Timing tab". */
+ *  notes that matched a list of words and so hid, among others, the note that
+ *  there are no observed events, which points to the Timing tab itself. */
 export function isTimingNote(note: string): boolean {
   return note !== C.LOG_NA_NOTE && !note.startsWith('n/a: %Bias');
 }
