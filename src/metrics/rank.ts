@@ -43,11 +43,25 @@ export function scoreMetric(id: string, raw: number[]): number[] {
   return dist.map(d => (isFinite(d) ? 1 - (d - lo) / (hi - lo) : NaN));
 }
 
+/** Composites closer than this are a tie and share a rank. */
+export const TIE_TOL = 1e-9;
+
+/** Metrics that measure a time offset; DE (its timing term is a correlation)
+ *  and the per-event magnitude errors carry the timing flag but do not. */
+export const SHIFT_TOLERANT_IDS = new Set(['peak_lag_abs', 'peak_lag_signed', 'event_lag', 'lag_best', 'sd_time',
+  'dtw_warp', 'dtw_dist', 'w1', 'w2sq', 'xwt_lag']);
+
 export function rankRuns(inputs: RankInput[], priorities: { id: string; weight: number }[]): RankRow[] {
   const active = priorities.filter(p => p.weight > 0);
   const perMetricScores = new Map<string, number[]>();
   for (const p of active) {
-    perMetricScores.set(p.id, scoreMetric(p.id, inputs.map(i => i.values[p.id] ?? NaN)));
+    const sc = scoreMetric(p.id, inputs.map(i => i.values[p.id] ?? NaN));
+    // Every run is scored on the same metrics: when a metric is available for
+    // some runs, a run on which it cannot be computed (a flat simulation has no
+    // KGE or peak timing) scores 0, the worst, instead of being compared on a
+    // smaller set; a metric no run has is left out for all of them.
+    if (sc.some(v => isFinite(v))) perMetricScores.set(p.id, sc.map(v => (isFinite(v) ? v : 0)));
+    else perMetricScores.set(p.id, sc);
   }
   const rows: RankRow[] = inputs.map((inp, i) => {
     const perMetric: Record<string, number> = {};
@@ -59,11 +73,20 @@ export function rankRuns(inputs: RankInput[], priorities: { id: string; weight: 
     }
     return { runName: inp.runName, perMetric, composite: wsum ? acc / wsum : NaN, rank: 0 };
   });
+  // a missing composite sorts last; 0 is a valid (worst) composite, not missing
+  const key = (c: number) => (Number.isFinite(c) ? c : -Infinity);
   const order = rows.map((_, i) => i).sort((a, b) => {
-    const d = (rows[b].composite || -Infinity) - (rows[a].composite || -Infinity);
-    return d !== 0 ? d : rows[a].runName.localeCompare(rows[b].runName);
+    const ka = key(rows[a].composite), kb = key(rows[b].composite);
+    if (Math.abs(ka - kb) > TIE_TOL && ka !== kb) return kb - ka;
+    return rows[a].runName.localeCompare(rows[b].runName);
   });
-  order.forEach((idx, pos) => { rows[idx].rank = pos + 1; });
+  // tied composites share a rank (1, 1, 3): no run is called better than an equal one
+  order.forEach((idx, pos) => {
+    const prev = pos > 0 ? rows[order[pos - 1]] : null;
+    const tied = prev && Number.isFinite(prev.composite) && Number.isFinite(rows[idx].composite)
+      && Math.abs(prev.composite - rows[idx].composite) <= TIE_TOL;
+    rows[idx].rank = tied ? prev!.rank : pos + 1;
+  });
   return rows;
 }
 

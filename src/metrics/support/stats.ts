@@ -23,13 +23,22 @@ export function sortedAsc(a: Vec): Float64Array {
   return Float64Array.from(a as ArrayLike<number>).sort();
 }
 
+/** True when any element is NaN: a typed-array sort puts NaN last, so an
+ *  order statistic of such an array would be a finite but wrong number. */
+export function hasNaN(a: Vec): boolean {
+  for (let i = 0; i < a.length; i++) if (Number.isNaN(a[i])) return true;
+  return false;
+}
+
 export function median(a: Vec): number {
+  if (hasNaN(a)) return NaN;
   const s = sortedAsc(a); const n = s.length;
   return n % 2 ? s[(n - 1) / 2] : 0.5 * (s[n / 2 - 1] + s[n / 2]);
 }
 
 /** NumPy default ('linear') quantile. q in [0,1]. */
 export function quantile(a: Vec, q: number): number {
+  if (hasNaN(a)) return NaN;
   const s = sortedAsc(a); const n = s.length;
   if (n === 0) return NaN;
   const pos = (n - 1) * q;
@@ -41,6 +50,7 @@ export function quantile(a: Vec, q: number): number {
 /** Ordinal ranks 0..n-1 = argsort of argsort (ties broken by index), as hydroeval's kgenp. */
 export function ranksOrdinal(a: Vec): Float64Array {
   const n = a.length;
+  if (hasNaN(a)) return new Float64Array(n).fill(NaN);   // NaN has no rank; the comparator would scramble the rest
   const idx = Array.from({ length: n }, (_, i) => i).sort((i, j) => a[i] - a[j] || i - j);
   const r = new Float64Array(n);
   idx.forEach((orig, rank) => { r[orig] = rank; });
@@ -50,6 +60,7 @@ export function ranksOrdinal(a: Vec): Float64Array {
 /** Average ranks 1..n with ties averaged (classical Spearman). */
 export function ranksAverage(a: Vec): Float64Array {
   const n = a.length;
+  if (hasNaN(a)) return new Float64Array(n).fill(NaN);   // NaN has no rank; the comparator would scramble the rest
   const idx = Array.from({ length: n }, (_, i) => i).sort((i, j) => a[i] - a[j] || i - j);
   const r = new Float64Array(n);
   let i = 0;

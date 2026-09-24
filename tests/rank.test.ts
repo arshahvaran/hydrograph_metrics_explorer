@@ -39,14 +39,35 @@ describe('composite priority ranking (spec §14, AC13)', () => {
       .toBeGreaterThan(timingHeavy.find(r => r.runName === 'MagnitudeFit')!.composite);
   });
 
-  it('missing values are excluded from the weighted mean, not treated as zero', () => {
+  // Audit stats-03: a metric that one run cannot produce used to be dropped
+  // for that run only, so the runs were compared on different metrics and a
+  // flat simulation could win at any weight. It now scores 0 (the worst) for
+  // that run; a metric no run has is still left out for all of them.
+  it('a metric missing for one run scores 0 for it; every run is compared on the same metrics', () => {
     const rows = rankRuns(
       [{ runName: 'A', values: { nse: 0.8 } }, { runName: 'B', values: { nse: 0.8, w1: 0.5 } }],
       [{ id: 'nse', weight: 1 }, { id: 'w1', weight: 1 }],
     );
-    const a = rows.find(r => r.runName === 'A')!;
-    expect(Number.isFinite(a.composite)).toBe(true);
-    expect(Number.isNaN(a.perMetric['w1'])).toBe(true);
+    const a = rows.find(r => r.runName === 'A')!, b = rows.find(r => r.runName === 'B')!;
+    expect(a.perMetric['w1']).toBe(0);
+    expect(b.composite).toBeGreaterThan(a.composite);
+    expect(b.rank).toBe(1);
+    const none = rankRuns([{ runName: 'A', values: { nse: 0.8 } }, { runName: 'B', values: { nse: 0.6 } }],
+      [{ id: 'nse', weight: 1 }, { id: 'w1', weight: 1 }]);
+    expect(none.every(r => Number.isNaN(r.perMetric['w1']))).toBe(true);
+    expect(none.find(r => r.runName === 'A')!.composite).toBe(1);
+  });
+
+  it('stats-07/report-08: a composite of 0 is valid, and equal composites share a rank', () => {
+    const rows = rankRuns(
+      [{ runName: 'B', values: { nse: 0.5 } }, { runName: 'A', values: { nse: 0.5 } }, { runName: 'C', values: { nse: 0.1 } }, { runName: 'D', values: {} }],
+      [{ id: 'nse', weight: 1 }],
+    );
+    const r = Object.fromEntries(rows.map(x => [x.runName, x]));
+    expect(r.A.rank).toBe(1); expect(r.B.rank).toBe(1);
+    expect(r.C.composite).toBe(0);
+    expect(r.C.rank).toBe(3);
+    expect(r.D.rank).toBe(3);   // D had no NSE: it scores 0 like C, so it ties with C
   });
 });
 

@@ -3,7 +3,7 @@ import { useApp } from '../store/store'
 import { REGISTRY, PRESETS, GROUPS } from '../metrics/registry'
 import { benchmarkSeries, nse as nseFn, kge2009 as kgeFn, skill } from '../metrics/classical/catalogue'
 import { applyNanPolicy } from '../ingest/missing'
-import { useRunOutputs, bestIndex, frameFor, useBootstrapCIsAll, useComputeError } from './compute'
+import { useRunOutputs, bestIndices, frameFor, useBootstrapCIsAll, useComputeError } from './compute'
 import { csvLine, fmtNum, download } from './format'
 import { Eq } from './Eq'
 import { APP_VERSION } from '../version'
@@ -100,7 +100,7 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
               <option value="persistence">persistence</option>
             </select>
           </label>
-          <label title="Circular moving-block bootstrap on the paired series (B=500, L≈n^⅓, seeded). Timing rows are excluded; resampling blocks destroys the time axis they measure.">
+          <label title="Circular block bootstrap of the conventional (time-synchronous) metrics on the same pairs and transform as the values shown (B = 500, seeded). The block length follows the persistence of the errors (Politis and White, 2004), so records with long-lasting errors get longer blocks and wider intervals. Timing and shape rows are excluded: resampling blocks destroys the time axis they measure.">
             <input type="checkbox" checked={ciOn} onChange={e => updateView({ showBootstrapCIs: e.target.checked })} /> Calculate 95% CIs (block bootstrap)
           </label>
           {ciOn && boots.progress < 1 && <span className="muted" role="status" aria-live="polite">bootstrapping… {Math.round(boots.progress * 100)}%</span>}
@@ -126,7 +126,7 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
                 <FragmentGroup key={g} title={g}>
                   {rows.map(m => {
                     const vals = outputs.map(o => (o ? display(m.id, o.values[m.id]) : NaN));
-                    const best = runs.length > 1 ? bestIndex(vals, m.direction) : -1;
+                    const best = runs.length > 1 ? bestIndices(vals, m.direction) : new Set<number>();
                     return (
                       <tr key={m.id} className={m.timing ? 'timingrow' : ''} title={m.blurb + ` Range ${m.range}.`}>
                         <td>{m.timing ? '⏱ ' : ''}{m.label}</td>
@@ -135,7 +135,7 @@ function MetricsTabInner({ ds }: { ds: Dataset }) {
                           const res = ciOn ? boots.results[i] : null;
                           const ci = res?.cis[m.id];
                           return (
-                            <td key={runs[i].id} className={i === best ? 'best' : ''}>
+                            <td key={runs[i].id} className={best.has(i) ? 'best' : ''}>
                               {fmtNum(v, m.digits)}
                               {ciOn && (m.timing
                                 ? <span className="ci" title="Block resampling destroys the time axis that timing metrics measure, so a bootstrap CI would be meaningless here.">CI n/a</span>
