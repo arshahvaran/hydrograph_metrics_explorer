@@ -30,7 +30,9 @@ const MAP: [keyof typeof C, string][] = [
   ['nse', 'nse'], ['nseMod', 'nse_mod'], ['nseRel', 'nse_rel'], ['ve', 've'],
 ]
 
-const CASES = ['tiny6', 'nan8', 'synth730_shift3', 'synth730_offset', 'synth730_scale', 'synth730_dampen', 'synth730_noise', 'synth730_combo']
+// event_tri (40 of 60 observed flows at the baseflow) was pinned in the fixture
+// but never tested (audit claims-04); it is the tied-flow case for KGEnp.
+const CASES = ['tiny6', 'nan8', 'synth730_shift3', 'synth730_offset', 'synth730_scale', 'synth730_dampen', 'synth730_noise', 'synth730_combo', 'event_tri']
 
 describe('classical catalogue vs executed HydroErr 2.0.0 (every implemented metric, every fixture series)', () => {
   for (const name of CASES) {
@@ -60,6 +62,7 @@ const PAPER_LOG_FAMILY: Record<string, { mle: number; male: number; msle: number
   synth730_dampen: { mle: 0.08881625726297145, male: 0.18118434383799314, msle: 0.04199251096049126, rmsle: 0.2049207431191173 },
   synth730_noise: { mle: -0.028515095421128563, male: 0.15663325755272908, msle: 0.04863136331606176, rmsle: 0.22052519882331306 },
   synth730_combo: { mle: -0.22304977601808432, male: 0.2350222725152894, msle: 0.06784780831790949, rmsle: 0.26047611851743624 },
+  event_tri: { mle: 0, male: 0.27154731076993344, msle: 0.23792731031597075, rmsle: 0.4877779313539828 },
 }
 
 describe('log-error family follows the defining paper (ln S/O), not HydroErr\'s log1p code', () => {
@@ -95,11 +98,29 @@ describe('vs executed hydroeval 0.1.0 (PBIAS sign, KGEnp, C2M family, MARE)', ()
       close(C.c2m(C.nse(o, s)), num(he.nse_c2m))
       close(C.c2m(C.kge2009(o, s).value), num(he.kge_c2m))
       close(C.c2m(C.kge2012(o, s).value), num(he.kgeprime_c2m))
-      // hydroeval breaks Spearman ties by numpy's unstable quicksort order;
-      // ours are stable-by-index: identical when there are no ties, ≤1e-5 with.
-      close(C.c2m(C.kgenp(o, s).value), num(he.kgenp_c2m), 1e-5)
+      // KGEnp: HME uses average ranks for ties (Spearman, as Pool et al., 2018
+      // via R cor); hydroeval ranks tied values by sort position. Identical
+      // without ties; a few tied simulated values (shift3, combo) move it by
+      // < 1e-6; event_tri is the documented exception below.
+      if (name === 'event_tri') return
+      const tieTol = name === 'synth730_shift3' || name === 'synth730_combo' ? 1e-6 : 1e-9
+      close(C.kgenp(o, s).value, num(he.kgenp.kgenp), tieTol)
+      close(C.c2m(C.kgenp(o, s).value), num(he.kgenp_c2m), tieTol)
     })
   }
+  it('event_tri (heavily tied): KGEnp is the average-rank value, 4.5 % from hydroeval (README exception)', () => {
+    const { o, s } = series('event_tri')
+    const he = F.results.event_tri['hydroeval_0.1.0']
+    // scipy.stats.spearmanr (average ranks) on the same pairs: rs = 0.7876466174321709,
+    // alpha_np = beta = 1, so KGEnp = rs; C2M = 0.649684018502834.
+    close(C.kgenp(o, s).value, 0.7876466174321709, 1e-12)
+    close(C.c2m(C.kgenp(o, s).value), 0.649684018502834, 1e-12)
+    close(C.spearman(o, s), num(F.results.event_tri['HydroErr_2.0.0'].spearman_r), 1e-12)
+    const relK = Math.abs(C.kgenp(o, s).value - num(he.kgenp.kgenp)) / num(he.kgenp.kgenp)
+    const relC = Math.abs(C.c2m(C.kgenp(o, s).value) - num(he.kgenp_c2m)) / num(he.kgenp_c2m)
+    expect(relK).toBeCloseTo(0.0454, 4)
+    expect(relC).toBeCloseTo(0.0749, 4)
+  })
 })
 
 describe('metrics without an executable oracle: pinned identities', () => {

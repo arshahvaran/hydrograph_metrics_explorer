@@ -124,17 +124,22 @@ describe('fmtStamp step-aware time stamps (round 12)', () => {
   })
 })
 
+// Audit norms-04/report-03 changed the rule for small magnitudes: a non-zero
+// value that fixed decimals would round to zero now shows significant figures
+// (exponent form below 1e-3), so it keeps its sign and never reads as "0.00".
+// The round-12 property still holds: no display is a signed zero.
 describe('fmtNum never shows a signed zero (round 12)', () => {
-  it('float round-off below display precision renders unsigned', () => {
-    expect(fmtNum(-1e-16, 2)).toBe('0.00');
-    expect(fmtNum(-1e-16, 3)).toBe('0.000');
+  it('float round-off below display precision shows its true size, never "-0.00"', () => {
+    expect(fmtNum(-1e-16, 2)).toBe('-1.0e-16');
+    expect(fmtNum(-1e-16, 3)).toBe('-1.00e-16');
+    expect(fmtNum(-0, 2)).toBe('0.00');
   })
-  it('a genuine small negative that rounds to zero drops the sign; past half a digit it keeps it', () => {
-    expect(fmtNum(-0.004, 2)).toBe('0.00');
-    expect(fmtNum(-0.006, 2)).toBe('-0.01');
+  it('a small negative keeps its sign with significant figures', () => {
+    expect(fmtNum(-0.004, 2)).toBe('-0.0040');
+    expect(fmtNum(-0.006, 2)).toBe('-0.0060');
   })
-  it('zero digits and true zero are unaffected; genuine negatives keep the sign', () => {
-    expect(fmtNum(-0.4, 0)).toBe('0');
+  it('zero digits and true zero; genuine negatives keep the sign', () => {
+    expect(fmtNum(-0.4, 0)).toBe('-0.40');
     expect(fmtNum(0, 2)).toBe('0.00');
     expect(fmtNum(-0.25, 2)).toBe('-0.25');
     expect(fmtNum(NaN, 2)).toBe('n/a');

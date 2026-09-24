@@ -1,8 +1,19 @@
+/** Display a metric value: `digits` fixed decimals from 0.1 upward (from 1
+ *  upward when digits = 0) and for an exact zero. A smaller non-zero magnitude
+ *  shows max(2, digits) significant figures, in exponent form below 1e-3
+ *  ("3.82e-4"), so a non-zero value never reads as 0. Fixed decimals once
+ *  printed a non-zero MSE of 3.8e-4 as "0.000", the optimum (audit norms-04,
+ *  report-03). */
 export const fmtNum = (v: number | undefined | null, digits = 3): string => {
   if (v === undefined || v === null || !isFinite(v)) return 'n/a';
   // toFixed switches to exponent notation at 1e21 ("-7.7e+27"); a magnitude
   // that large is summation garbage on degenerate data, not a metric value.
   if (Math.abs(v) >= 1e21) return 'n/a';
+  const a = Math.abs(v);
+  if (a !== 0 && a < Math.max(0.1, 10 ** -digits)) {
+    const sig = Math.max(2, digits);
+    return a < 1e-3 ? v.toExponential(sig - 1) : v.toPrecision(sig);
+  }
   const s = v.toFixed(digits);
   // toFixed keeps the sign of a negative value that rounds to zero ("-0.00");
   // anything within half of the last displayed digit of zero shows unsigned.
