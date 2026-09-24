@@ -41,8 +41,10 @@ your browser. **No data ever leaves the page**; there is no server, no database,
 **Data ingestion.** CSV/TXT/XLSX upload and paste with explicit column mapping, a
 spreadsheet-style editing grid, Julian and calendar date parsing, automatic time-step
 detection, user-declared missing values, and a unit engine covering volumetric flows and
-area/step-aware depth-to-volume conversion (with automatic rescaling of absolute event
-thresholds).
+area/step-aware depth-to-volume conversion. Settings held in flow units (an absolute event
+threshold, a custom peak prominence, the Sandbox offset and noise) convert with the data;
+where the factor varies through the record (depth on monthly data) the threshold becomes the
+equivalent percentile and the others reset, with a note.
 
 **Metrics.** A 63-metric panel: the conventional families (error norms, correlation and
 agreement, efficiencies including KGE variants and bounded C2M forms, flow-duration-curve
@@ -88,7 +90,7 @@ Deployed to GitHub Pages from the `gh-pages` branch (`dist/` contents).
 One date column plus one observed and any number of simulated discharge columns, in CSV,
 TXT, or XLSX (or pasted directly). Column roles are assigned explicitly at import; missing
 values are declared in the "Missing value" box rather than assumed. Supported units include
-m³/s, ft³/s, L/s, m³/day, ac-ft/day, and depth per step (mm, in) with a catchment area.
+m³/s, ft³/s, L/s, m³/day, ac-ft/day, and depth (mm per step, or inches per day) with a catchment area.
 Everything runs inside one browser tab, so inputs are bounded: delimited files up to
 200 MB, workbooks up to 25 MB, project files up to 100 MB, tables up to 1,000,000 rows,
 100 columns and 30 million cells, and up to 60 simulated columns per dataset. Tables above

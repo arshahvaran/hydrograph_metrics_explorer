@@ -41,6 +41,7 @@ export function DataTab() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [convertMsg, setConvertMsg] = useState<string | null>(null);
+  const [convertOk, setConvertOk] = useState(false);
   const [pendingLoad, setPendingLoad] = useState<PendingLoad | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const cacheRef = useRef<StageCache>(newStageCache());
@@ -247,12 +248,12 @@ export function DataTab() {
             <tr><th>Step</th><td>{ds.step.label}{ds.step.irregular ? ' (irregular)' : ''}</td></tr>
             <tr><th>Series</th><td>{ds.observed.name || 'Observed'} + {ds.runs.length} simulation{ds.runs.length === 1 ? '' : 's'}</td></tr>
             <tr><th>Unit</th><td>
-              <select aria-label="Convert units to" value={ds.targetUnit} onChange={e => setConvertMsg(convertUnits(e.target.value as UnitId))}>
+              <select aria-label="Convert units to" value={ds.targetUnit} onChange={e => { const to = e.target.value as UnitId; const msg = convertUnits(to); setConvertMsg(msg); setConvertOk(useApp.getState().project.datasets.find(d => d.id === ds.id)?.targetUnit === to); }}>
                 {Object.values(UNITS).filter(u => u.kind !== 'dimensionless' || ds.targetUnit === 'dimensionless').map(u => <option key={u.id} value={u.id}>{u.label}</option>)}
               </select>
             </td></tr>
           </tbody></table>
-          {convertMsg && <div className="error">{convertMsg}</div>}
+          {convertMsg && <div className={convertOk ? 'warning' : 'error'} role="status">{convertMsg}</div>}
           <p className="muted">Head to <strong>Metrics</strong> for the full catalogue, <strong>Timing</strong> for the timing and shape diagnostics, or <strong>Sandbox</strong> to stress-test the metrics.</p>
         </section>
       )}

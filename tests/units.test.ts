@@ -2,10 +2,14 @@ import { describe, it, expect } from 'vitest'
 import { convertSeries, areaToKm2 } from '../src/units/convert'
 
 describe('unit engine (Appendix B)', () => {
+  // audit units-06: exact definitions, not 6-figure constants
   it('volumetric factors are exact', () => {
-    expect(convertSeries([1], { from: 'cfs', to: 'm3s' })[0]).toBe(0.0283168)
+    expect(convertSeries([1], { from: 'cfs', to: 'm3s' })[0]).toBeCloseTo(0.028316846592, 15)
     expect(convertSeries([1], { from: 'ls', to: 'm3s' })[0]).toBe(0.001)
-    expect(convertSeries([1], { from: 'MGD', to: 'm3s' })[0]).toBe(0.0438126)
+    expect(convertSeries([1], { from: 'MGD', to: 'm3s' })[0]).toBeCloseTo(3785.411784 / 86400, 15)
+    expect(convertSeries([1], { from: 'm3s', to: 'm3day' })[0]).toBeCloseTo(86400, 9)
+    expect(convertSeries([1], { from: 'acftday', to: 'm3day' })[0]).toBeCloseTo(1233.48183754752, 9)
+    expect(convertSeries([1000], { from: 'cfs', to: 'm3day' })[0]).toBeCloseTo(2446575.5455488, 6)
   })
   it('round-trips preserve full float precision', () => {
     const v = convertSeries(convertSeries([12.345], { from: 'm3s', to: 'acftday' }), { from: 'acftday', to: 'm3s' })[0]
@@ -31,9 +35,9 @@ describe('unit engine (Appendix B)', () => {
     expect(mm).toBeCloseTo(10, 12)
   })
   it('area factors are exact', () => {
-    expect(areaToKm2(1, 'mi2')).toBe(2.589988)
+    expect(areaToKm2(1, 'mi2')).toBeCloseTo(2.589988110336, 14)
     expect(areaToKm2(1, 'ha')).toBe(0.01)
-    expect(areaToKm2(1, 'acre')).toBe(0.00404686)
+    expect(areaToKm2(1, 'acre')).toBeCloseTo(0.0040468564224, 16)
   })
   it('guards: dimensionless vs flow refuses; depth without area refuses', () => {
     expect(() => convertSeries([1], { from: 'dimensionless', to: 'm3s' })).toThrow()
@@ -41,6 +45,6 @@ describe('unit engine (Appendix B)', () => {
   })
   it('NaN passes through untouched', () => {
     const out = convertSeries([NaN, 1], { from: 'cfs', to: 'm3s' })
-    expect(out[0]).toBeNaN(); expect(out[1]).toBe(0.0283168)
+    expect(out[0]).toBeNaN(); expect(out[1]).toBeCloseTo(0.028316846592, 15)
   })
 })

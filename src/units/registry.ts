@@ -1,6 +1,8 @@
 import type { UnitId, UnitKind, AreaUnitId } from '../types'
 
-// Conversion factors pinned exactly to webtool_v3.md Appendix B.
+// Conversion factors are the exact definitions (international foot and mile,
+// US gallon, acre-foot, acre), not rounded constants: a 6-figure factor was
+// visible at display precision (1 m³/s showed as 86,399.806 m³/day).
 // Volumetric units carry a fixed factor to the base unit m³/s.
 // Depth units convert through catchment area and the time step (see convert.ts).
 
@@ -18,12 +20,12 @@ export interface UnitDef {
 
 export const UNITS: Record<UnitId, UnitDef> = {
   m3s:    { id: 'm3s',    label: 'm³/s',        kind: 'volumetric', toM3s: 1 },
-  cfs:    { id: 'cfs',    label: 'ft³/s (cfs)', kind: 'volumetric', toM3s: 0.0283168 },
+  cfs:    { id: 'cfs',    label: 'ft³/s (cfs)', kind: 'volumetric', toM3s: 0.3048 ** 3 },
   ls:     { id: 'ls',     label: 'L/s',         kind: 'volumetric', toM3s: 0.001 },
-  m3day:  { id: 'm3day',  label: 'm³/day',      kind: 'volumetric', toM3s: 1.15741e-5 },
-  MLday:  { id: 'MLday',  label: 'ML/day',      kind: 'volumetric', toM3s: 0.0115741 },
-  MGD:    { id: 'MGD',    label: 'MGD (US)',    kind: 'volumetric', toM3s: 0.0438126 },
-  acftday:{ id: 'acftday',label: 'acre-ft/day', kind: 'volumetric', toM3s: 0.0142764 },
+  m3day:  { id: 'm3day',  label: 'm³/day',      kind: 'volumetric', toM3s: 1 / 86400 },
+  MLday:  { id: 'MLday',  label: 'ML/day',      kind: 'volumetric', toM3s: 1000 / 86400 },
+  MGD:    { id: 'MGD',    label: 'MGD (US)',    kind: 'volumetric', toM3s: (1e6 * 3.785411784e-3) / 86400 },
+  acftday:{ id: 'acftday',label: 'acre-ft/day', kind: 'volumetric', toM3s: 1233.48183754752 / 86400 },
   mm_step:{ id: 'mm_step',label: 'mm / interval', kind: 'depth', toMmPerInterval: 1, interval: 'step' },
   in_day: { id: 'in_day', label: 'in / day',    kind: 'depth', toMmPerInterval: 25.4, interval: 'day' },
   dimensionless: { id: 'dimensionless', label: 'dimensionless', kind: 'dimensionless' },
@@ -32,9 +34,9 @@ export const UNITS: Record<UnitId, UnitDef> = {
 /** Area factors to km² (Appendix B). */
 export const AREA_TO_KM2: Record<AreaUnitId, number> = {
   km2: 1,
-  mi2: 2.589988,
+  mi2: 1.609344 ** 2,
   ha: 0.01,
-  acre: 0.00404686,
+  acre: 4046.8564224e-6,
 };
 
 export function unitKind(u: UnitId): UnitKind {

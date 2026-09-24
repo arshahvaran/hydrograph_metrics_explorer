@@ -28,6 +28,7 @@ export interface Frame {
 }
 
 const frameCache = new Map<string, Frame>();
+const areaKey = (ds: Dataset) => (ds.area ? `${ds.area.value}${ds.area.unit}` : 'noarea');
 
 /** Full-record frame: analysis tabs always see the whole dataset. Subsetting
  *  is done in the Plots tab and materialised via commitSubsetDataset. */
@@ -35,7 +36,8 @@ export function frameFor(ds: Dataset): Frame {
   // targetUnit is part of the key: convertUnits rewrites the value arrays in
   // place under the same dataset id, and a unit-blind cache once served old-unit
   // observed values against new-unit simulations (catastrophic metric values).
-  const key = ['full', ds.id, ds.dates.length, ds.targetUnit].join('|');
+  // ...and so is the catchment area: depth<->volume values depend on it (audit compute-08)
+  const key = ['full', ds.id, ds.dates.length, ds.targetUnit, areaKey(ds)].join('|');
   const hit = frameCache.get(key);
   if (hit) return hit;
   const frame: Frame = {
@@ -56,7 +58,7 @@ export function subsetFrameFor(ds: Dataset): Frame {
   const v = ds.view;
   // The dataset id sits second in every frame key (after the frame kind) so
   // the cache eviction below can tell which dataset a cached panel belongs to.
-  const key = ['subset', ds.id, ds.dates.length, ds.targetUnit, JSON.stringify(v.window), JSON.stringify(v.season), v.resample].join('|');
+  const key = ['subset', ds.id, ds.dates.length, ds.targetUnit, areaKey(ds), JSON.stringify(v.window), JSON.stringify(v.season), v.resample].join('|');
   const hit = frameCache.get(key);
   if (hit) return hit;
   const base = applySubset(ds.dates, [ds.observed.values], v, ds.step);

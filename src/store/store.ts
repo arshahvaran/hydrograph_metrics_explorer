@@ -177,7 +177,32 @@ export const useApp = create<AppState>((set, get) => ({
   }))),
   updateSandbox: (patch) => set(s => mutateActive(s, d => ({ ...d, view: { ...d.view, sandbox: { ...d.view.sandbox, ...patch } } }))),
   setLocation: (lat, lon) => set(s => mutateActive(s, d => ({ ...d, location: { lat, lon } }))),
-  setArea: (value, unit) => set(s => mutateActive(s, d => ({ ...d, area: { value, unit } }))),
+  // Series already converted between depth and volume were derived with the
+  // previous area; they are re-derived with the new one (back to their input
+  // unit with the old area, forward with the new), so the data always match
+  // the area on screen and in the report.
+  setArea: (value, unit) => set(s => mutateActive(s, d => {
+    const area = { value, unit };
+    const old = d.area;
+    const viaArea = (from: UnitId) => from !== d.targetUnit && (UNITS[from].kind === 'depth' || UNITS[d.targetUnit].kind === 'depth');
+    const hasOld = !!old && isFinite(old.value) && old.value > 0;
+    if (!hasOld || !(value > 0) || (old!.value === value && old!.unit === unit)) return { ...d, area };
+    const ctx = { stepMs: d.step.ms, monthly: d.step.label === '1mo', dates: d.dates };
+    const rederive = (vals: ArrayLike<number>, from: UnitId) => {
+      if (!viaArea(from)) return vals;
+      const input = convertSeries(vals, { ...ctx, area: old!, from: d.targetUnit, to: from });
+      return Array.from(convertSeries(input, { ...ctx, area, from, to: d.targetUnit }));
+    };
+    try {
+      return {
+        ...d, area,
+        observed: { ...d.observed, values: rederive(d.observed.values, d.observed.inputUnit) as number[] },
+        runs: d.runs.map(r => ({ ...r, values: rederive(r.values, r.inputUnit) as number[] })),
+      };
+    } catch {
+      return { ...d, area };
+    }
+  })),
 
   convertUnits: (to) => {
     const s = get();
@@ -191,24 +216,53 @@ export const useApp = create<AppState>((set, get) => ({
       };
       const observed = { ...ds.observed, values: Array.from(convertSeries(ds.observed.values, { ...ctx, from: ds.targetUnit, to })) };
       const runs = ds.runs.map(r => ({ ...r, values: Array.from(convertSeries(r.values, { ...ctx, from: ds.targetUnit, to })) }));
-      // A user-set ABSOLUTE event threshold is a value in the old unit; leaving
-      // the number as-is silently redefines every event (8 m3/s became "8 L/s").
-      // When the conversion factor is uniform across the record (all flow<->flow
-      // conversions, and depth<->volume on a fixed step) the threshold converts
-      // exactly; a non-uniform (monthly depth) factor has no single right answer,
-      // so the value is then left for the user, who is shown the new unit anyway.
+      // Every stored setting that is a value in the data unit converts with the
+      // data, or the same number silently means something else afterwards
+      // (8 m3/s became "8 L/s"): an absolute event threshold, a custom peak
+      // prominence, and the sandbox offset and noise amplitude. When the factor
+      // is uniform across the record (flow<->flow, and depth<->volume on a fixed
+      // step) each converts exactly. A non-uniform (monthly depth) factor has no
+      // single value: the threshold becomes the percentile of observed flow it
+      // stood for, the others return to their defaults, and the user is told.
       let view = ds.view;
-      const et = view.timingConfig.eventThreshold;
-      if (et.kind === 'absolute' && Number.isFinite(et.value)) {
-        const probe = convertSeries(ds.dates.map(() => 1), { ...ctx, from: ds.targetUnit, to });
-        let lo = Infinity, hi = -Infinity;
-        for (const f of probe) { if (f < lo) lo = f; if (f > hi) hi = f; }
-        if (Number.isFinite(lo) && hi - lo <= 1e-9 * Math.max(1, Math.abs(hi))) {
-          view = { ...view, timingConfig: { ...view.timingConfig, eventThreshold: { ...et, value: et.value * lo } } };
+      const notes: string[] = [];
+      const probe = convertSeries(ds.dates.map(() => 1), { ...ctx, from: ds.targetUnit, to });
+      let lo = Infinity, hi = -Infinity;
+      for (const f of probe) { if (f < lo) lo = f; if (f > hi) hi = f; }
+      const uniform = Number.isFinite(lo) && hi - lo <= 1e-9 * Math.max(1, Math.abs(hi));
+      const tc = view.timingConfig, sb = view.sandbox;
+      const et = tc.eventThreshold;
+      if (uniform) {
+        view = {
+          ...view,
+          timingConfig: {
+            ...tc,
+            eventThreshold: et.kind === 'absolute' && Number.isFinite(et.value) ? { ...et, value: et.value * lo } : et,
+            peakProminence: typeof tc.peakProminence === 'number' ? tc.peakProminence * lo : tc.peakProminence,
+          },
+          sandbox: { ...sb, offset: sb.offset * lo, noiseAmp: sb.noiseAmp * lo },
+        };
+      } else {
+        let eventThreshold = et;
+        if (et.kind === 'absolute' && Number.isFinite(et.value)) {
+          const fin = ds.observed.values.filter(v => Number.isFinite(v));
+          const below = fin.filter(v => v < et.value).length;
+          const pct = fin.length ? Math.round((1000 * below) / fin.length) / 10 : 90;
+          eventThreshold = { kind: 'percentile', value: pct };
+          notes.push(`The absolute event threshold (${et.value} ${UNITS[ds.targetUnit].label}) has no single value in ${UNITS[to].label} on this record, so it is now the equivalent percentile of observed flow, P${pct}.`);
         }
+        const reset: string[] = [];
+        if (typeof tc.peakProminence === 'number') reset.push('the custom peak prominence (now auto)');
+        if (sb.offset !== 0 || sb.noiseAmp !== 0) reset.push('the sandbox offset and noise (now 0)');
+        if (reset.length) notes.push(`The conversion factor varies through the record, so ${reset.join(' and ')} could not be converted and ${reset.length === 1 ? 'was' : 'were'} reset.`);
+        view = {
+          ...view,
+          timingConfig: { ...tc, eventThreshold, peakProminence: typeof tc.peakProminence === 'number' ? 'auto' : tc.peakProminence },
+          sandbox: { ...sb, offset: 0, noiseAmp: 0 },
+        };
       }
       set(st => mutateActive(st, d => ({ ...d, observed, runs, targetUnit: to, view })));
-      return null;
+      return notes.length ? notes.join(' ') : null;
     } catch (e) {
       return e instanceof Error ? e.message : String(e);
     }
