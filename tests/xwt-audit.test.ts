@@ -62,11 +62,17 @@ it('xwt-04: explicit wavelet scales are used', () => {
   expect(three.byScale.map(x => x.scale)).toEqual([2, 4, 8]);
 });
 
-it('xwt-05: standardisation is linear in n (16384 steps: about 0.2 s, was 2 s)', () => {
-  const n = 16384;
-  const o = Array.from({ length: n }, (_, t) => 5 + Math.sin(t / 40) + 0.3 * Math.sin(t / 7));
-  const s = o.map((_, t) => o[Math.max(0, t - 3)]);
-  const t0 = performance.now();
-  xwtLag(o, s);
-  expect(performance.now() - t0).toBeLessThan(1000);
+it('xwt-05: standardisation is not quadratic (4x the steps costs well under 16x the time)', () => {
+  const series = (n: number) => {
+    const o = Array.from({ length: n }, (_, t) => 5 + Math.sin(t / 40) + 0.3 * Math.sin(t / 7));
+    return { o, s: o.map((_, t) => o[Math.max(0, t - 3)]) };
+  };
+  const time = (n: number) => {
+    const { o, s } = series(n);
+    let best = Infinity;
+    for (let k = 0; k < 3; k++) { const t0 = performance.now(); xwtLag(o, s); best = Math.min(best, performance.now() - t0); }
+    return best;
+  };
+  const ratio = time(16384) / time(4096);
+  expect(ratio).toBeLessThan(9);          // n log n with J scales: about 4.5-5.5; the O(n^2) form gave about 16
 });
