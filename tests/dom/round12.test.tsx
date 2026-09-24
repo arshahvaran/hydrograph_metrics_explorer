@@ -98,7 +98,7 @@ describe('subset-frame binning on the Plots tab, round 12', () => {
     const med = (call[1] as any[]).find((t: any) => /^observed \(median\)$/.test(t.name ?? ''));
     const xs = med.x as number[];
     expect(Math.min(...xs)).toBe(41);   // 2003-02-10 is DOY 41, not DOY 1
-    expect(Math.max(...xs)).toBe(91);   // 2003-03-31 is calendar day 91 (Mar 1 = 61)
+    expect(Math.max(...xs)).toBe(90);   // 2003-03-31 is day 90 of the 365-day Season calendar (Mar 1 = 60)
     expect(xs.length).toBe(50);         // 19 February + 31 March days
     // the value plotted on DOY 41 is the sample of 2003-02-10 (record row 40)
     expect(med.y[0]).toBeCloseTo(6 + 4 * Math.sin(40 / 7), 2);

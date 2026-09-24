@@ -7,25 +7,26 @@
  *    2001-07-01 put its first value on DOY 1). Pinned here against the real
  *    applySubset plus the extracted binByDoy/binByYear helpers with
  *    hand-computed (doy, year, value) expectations. Since the plots audit
- *    (plots-06) the bins are CALENDAR days on a 366-day calendar (Feb 29 =
- *    60, Mar 1 = 61 in every year), so the values below are calendarDay().
+ *    (plots-06, repaired in plots-06-r1/r2) the bins are days of the 365-day
+ *    calendar of the Season filter (Mar 1 = 60 in every year, Feb 29 pooled
+ *    with Feb 28), so the values below are calendarDoy().
  *  - fmtStamp keeps the time part for sub-daily steps and the date-only form
  *    for daily and coarser steps.
  *  - fmtNum never renders a minus sign on a value that displays as zero.
  */
 import { describe, it, expect } from 'vitest'
-import { applySubset, doyUTC } from '../src/metrics/subset'
-import { binByDoy, binByYear, calendarDay } from '../src/ui/plotBins'
+import { applySubset, doyUTC, calendarDoy } from '../src/metrics/subset'
+import { binByDoy, binByYear } from '../src/ui/plotBins'
 import { fmtNum, fmtStamp } from '../src/ui/format'
 
 const DAY = 86_400_000;
 const STEP = { ms: DAY, label: '1d' };
 // Two non-leap years, one sample per day; each value IS its own calendar day
-// (Mar 1 = 61), so a correctly binned bucket holds only values equal to its key.
+// (Mar 1 = 60), so a correctly binned bucket holds only values equal to its key.
 const start = Date.UTC(2001, 0, 1);
 const N = 730;
 const dates = Array.from({ length: N }, (_, i) => start + i * DAY);
-const obs = Float64Array.from(dates, ms => calendarDay(ms));
+const obs = Float64Array.from(dates, ms => calendarDoy(ms));
 const clean = (v: ArrayLike<number>) => Array.from(v, x => (isFinite(x as number) ? (x as number) : null));
 
 describe('DOY/heatmap/spaghetti binning follows the subset frame (round 12)', () => {
@@ -34,13 +35,13 @@ describe('DOY/heatmap/spaghetti binning follows the subset frame (round 12)', ()
       window: [Date.UTC(2001, 6, 1), dates[N - 1]] as [number, number], season: null, resample: 'native',
     }, STEP);
     expect(doyUTC(frame.dates[0])).toBe(182);             // 2001-07-01 (ordinal)
-    expect(frame.obs[0]).toBe(183);                       // calendar day of Jul 1
+    expect(frame.obs[0]).toBe(182);                       // calendar day of Jul 1
     const byDoy = binByDoy(frame.dates, clean(frame.obs));
     for (const [doy, vals] of byDoy) for (const v of vals) expect(v).toBe(doy);
-    expect(byDoy.get(183)).toEqual([183, 183]);           // Jul 1 of 2001 and 2002
-    expect(byDoy.get(182)).toEqual([182]);                // Jun 30 only from 2002
+    expect(byDoy.get(182)).toEqual([182, 182]);           // Jul 1 of 2001 and 2002
+    expect(byDoy.get(181)).toEqual([181]);                // Jun 30 only from 2002
     expect(byDoy.get(1)).toEqual([1]);                    // Jan 1 only from 2002
-    expect(byDoy.has(60)).toBe(false);                    // no Feb 29 in non-leap years
+    expect(byDoy.get(60)).toEqual([60]);                  // Mar 1 only from 2002 (no empty day 60)
     expect(byDoy.size).toBe(365);
   })
 
@@ -52,19 +53,19 @@ describe('DOY/heatmap/spaghetti binning follows the subset frame (round 12)', ()
     expect([...byYear.keys()].sort()).toEqual([2001, 2002]);
     for (const y of [2001, 2002]) {
       const row = byYear.get(y)!;
+      expect(row.length).toBe(365);
       expect(row[0]).toBe(1);                             // Jan 1 kept
       expect(row[58]).toBe(59);                           // Feb 28 = day 59 kept
-      expect(row[59]).toBeNull();                         // no Feb 29 (day 60) in these years
-      expect(row[60]).toBeNull();                         // Mar 1 = day 61 filtered
-      expect(row[304]).toBeNull();                        // Oct 31 = day 305 filtered
-      expect(row[305]).toBe(306);                         // Nov 1 kept
-      expect(row[365]).toBe(366);                         // Dec 31 kept (day 366 in every year)
+      expect(row[59]).toBeNull();                         // Mar 1 = day 60 filtered
+      expect(row[303]).toBeNull();                        // Oct 31 = day 304 filtered
+      expect(row[304]).toBe(305);                         // Nov 1 = day 305 kept, as the season says
+      expect(row[364]).toBe(365);                         // Dec 31 kept (day 365 in every year)
       expect(row.filter(v => v !== null).length).toBe(120); // 59 + 61 in-season days
     }
     const byDoy = binByDoy(frame.dates, clean(frame.obs));
     expect([...byDoy.keys()].sort((a, b) => a - b)).toEqual([
       ...Array.from({ length: 59 }, (_, i) => i + 1),
-      ...Array.from({ length: 61 }, (_, i) => i + 306),
+      ...Array.from({ length: 61 }, (_, i) => i + 305),
     ]);
     for (const [doy, vals] of byDoy) expect(vals).toEqual([doy, doy]);
   })
@@ -72,9 +73,9 @@ describe('DOY/heatmap/spaghetti binning follows the subset frame (round 12)', ()
   it('monthly resample: bins land on month-start DOYs with the hand-computed means', () => {
     const frame = applySubset(dates, [obs], { window: null, season: null, resample: 'monthly' }, STEP);
     expect(frame.dates.length).toBe(24);
-    const monthStartDoys = [1, 32, 61, 92, 122, 153, 183, 214, 245, 275, 306, 336];
+    const monthStartDoys = [1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335];
     // mean of the calendar-day values inside month m = (first day + last day) / 2
-    const monthMeans = [16, 45.5, 76, 106.5, 137, 167.5, 198, 229, 259.5, 290, 320.5, 351];
+    const monthMeans = [16, 45.5, 75, 105.5, 136, 166.5, 197, 228, 258.5, 289, 319.5, 350];
     const byYear = binByYear(frame.dates, clean(frame.obs));
     expect([...byYear.keys()].sort()).toEqual([2001, 2002]);
     for (const y of [2001, 2002]) {
@@ -99,12 +100,12 @@ describe('DOY/heatmap/spaghetti binning follows the subset frame (round 12)', ()
     expect(frame.dates.length).toBe(14);
     expect(Array.from(frame.obs).filter(Number.isFinite).length).toBe(6);
     const byYear = binByYear(frame.dates, clean(frame.obs));
-    expect(byYear.get(2001)![305]).toBeCloseTo(320.5, 12); // Nov 2001 at day 306
-    expect(byYear.get(2001)![335]).toBeCloseTo(351, 12);   // Dec 2001 at day 336
+    expect(byYear.get(2001)![304]).toBeCloseTo(319.5, 12); // Nov 2001 at day 305
+    expect(byYear.get(2001)![334]).toBeCloseTo(350, 12);   // Dec 2001 at day 335
     expect(byYear.get(2002)![0]).toBeCloseTo(16, 12);      // Jan 2002 at day 1
     expect(byYear.get(2002)![31]).toBeCloseTo(45.5, 12);   // Feb 2002 at day 32
-    expect(byYear.get(2002)![305]).toBeCloseTo(320.5, 12);
-    expect(byYear.get(2002)![335]).toBeCloseTo(351, 12);
+    expect(byYear.get(2002)![304]).toBeCloseTo(319.5, 12);
+    expect(byYear.get(2002)![334]).toBeCloseTo(350, 12);
     expect(byYear.get(2001)!.filter(v => v !== null).length).toBe(2);
     expect(byYear.get(2002)!.filter(v => v !== null).length).toBe(4);
   })

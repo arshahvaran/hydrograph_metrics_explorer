@@ -12,8 +12,9 @@
  *    is passed in data units.
  *  - plots-04: the DTW alignment plot draws the aligned run itself, never a
  *    series looked up by display name.
- *  - plots-05 / plots-06: day-of-year plots bin on the calendar day (Mar 1 is
- *    61 in every year) and average sub-daily samples to one value per day.
+ *  - plots-05 / plots-06: day-of-year plots bin on the calendar day (since the
+ *    repair plots-06-r1/r2 the 365-day Season calendar: Mar 1 is 60 in every
+ *    year) and average sub-daily samples to one value per day.
  *  - plots-07 / plots-08 / plots-09: the CSV holds what is plotted, with
  *    self-describing trace names.
  *  - plots-10: the y-axis title follows the view mode.
@@ -236,11 +237,11 @@ describe('plots-06: calendar-day bins do not shift in leap years', () => {
     openPlots();
     const tr = await openPlot('DOY climatology', t => t.name === 'observed (median)');
     const med = tr.find(t => t.name === 'observed (median)');
-    expect(med.x).toEqual([1, 32, 61, 92, 122, 153, 183, 214, 245, 275, 306, 336]);
+    expect(med.x).toEqual([1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335]);
     expect(med.y[2]).toBeCloseTo(3.35, 12);        // median March over all 8 years
     const hm = (await openPlot('Annual heatmap', t => t.type === 'heatmap'))[0];
     const cols = hm.z.map((row: any[]) => row.flatMap((v, k) => (v === null ? [] : [k + 1])));
-    for (const c of cols) expect(c).toEqual([1, 32, 61, 92, 122, 153, 183, 214, 245, 275, 306, 336]);
+    for (const c of cols) expect(c).toEqual([1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335]);
   });
 });
 
@@ -250,8 +251,8 @@ describe('plots-07 / plots-09: Plots-tab CSV exports hold what is plotted', () =
     openPlots();
     const hm = (await openPlot('Annual heatmap', t => t.type === 'heatmap'))[0];
     const lines = (await captureCsv(screen.getByTitle('Download plotted data as CSV'))).split('\n');
-    expect(lines[0]).toBe('trace,x,y,z');
-    expect(lines.length - 1).toBe(730);          // 2 years x 365 plotted cells
+    expect(lines[0]).toBe('trace,DOY (365-day calendar; 1 Mar = 60),year,Q [m³/s]');
+    expect(lines.length - 1).toBe(729);          // 365 cells in 2003; 2004 to Dec 30 with Feb 28 and 29 in one cell
     expect(lines[1]).toBe(`observed,1,2003,${hm.z[0][0]}`);
     expect(lines).toContain(`observed,1,2004,${hm.z[1][0]}`);
     expect(hm.z[1][0]).toBe(5.281);

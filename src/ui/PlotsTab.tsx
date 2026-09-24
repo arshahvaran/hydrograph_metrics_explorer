@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
 import { useApp } from '../store/store'
-import { PlotHost } from './PlotHost'
+import { PlotHost, type CsvColumns } from './PlotHost'
 import { NumField } from './NumField'
 import { useSubsetRunOutput, useComputeError, subsetFrameFor } from './compute'
 import { dtwTies } from './alignment'
 import { decimateMinMax, decimationNote } from './decimate'
 import { fmtNum, fmtStamp } from './format'
-import { binByDoy, binByYear, isSubDaily } from './plotBins'
+import { binByDoy, binByYear, isSubDaily, DOY_SLOTS, MONTH_START_DOYS } from './plotBins'
+import { makeSubsetter } from '../metrics/subset'
 import { AnalysisBar } from './AnalysisBar'
 import { quantile } from '../metrics/support/stats'
 import { OBSERVED_COLOR } from '../types'
@@ -44,6 +45,30 @@ interface PairGroup { label: string; dash: string; index: number[]; obs: Float64
 const OBS_DASHES = ['solid', 'dot', 'dash', 'dashdot', 'longdash'];
 
 /**
+ * The frame steps inside the season, or null when no season is set (every
+ * step of the frame is then in the selection). A season keeps its
+ * out-of-season steps in the frame as missing values (gaps on the time
+ * axis); running the same subsetter on an all-ones series marks exactly
+ * those steps (or, resampled, the bins without an in-season step) as NaN.
+ */
+function seasonSteps(ds: Dataset, frameLen: number): number[] | null {
+  if (!ds.view.season) return null;
+  const probe = makeSubsetter(ds.dates, new Float64Array(ds.dates.length).fill(1), ds.view, ds.step);
+  if (probe.obs.length !== frameLen) return null;
+  const sel: number[] = [];
+  probe.obs.forEach((v, i) => { if (Number.isFinite(v)) sel.push(i); });
+  return sel;
+}
+
+/** applyNanPolicy on the in-season steps only (all steps when `sel` is
+ *  null); the returned index points into the frame. */
+function pairOn(obs: Float64Array, sim: Float64Array, policy: NanPolicy, sel: number[] | null): { obs: Float64Array; sim: Float64Array; index: number[] } {
+  if (!sel) return applyNanPolicy(obs, sim, policy);
+  const p = applyNanPolicy(Float64Array.from(sel, i => obs[i]), Float64Array.from(sel, i => sim[i]), policy);
+  return { obs: p.obs, sim: p.sim, index: p.index.map(k => sel[k]) };
+}
+
+/**
  * Flow-duration, Q-Q and DOY plots compare observed and simulated flows on
  * the sample the metric panel uses: applyNanPolicy with the dataset's NaN
  * policy ('pairwise' keeps the steps where both are valid). Simulations with
@@ -51,18 +76,21 @@ const OBS_DASHES = ['solid', 'dot', 'dash', 'dashdot', 'longdash'];
  * gets its own observed curve. With no simulation shown, the observed curve
  * uses every valid observed step. (Each curve once used all of its own valid
  * steps, so a simulated curve included steps with no observation.)
+ * With a season (`sel`), the out-of-season steps are left out before the
+ * policy is applied, so 'zero' and 'mean' fill only missing values inside
+ * the season; they once filled every out-of-season step with 0 or the mean.
  */
-function pairGroups(all: Series[], policy: NanPolicy): PairGroup[] {
+function pairGroups(all: Series[], policy: NanPolicy, sel: number[] | null): PairGroup[] {
   const [obs, ...sims] = all;
   if (!sims.length) {
     const index: number[] = [];
-    obs.raw.forEach((v, i) => { if (isFinite(v)) index.push(i); });
+    (sel ?? Array.from(obs.raw, (_, i) => i)).forEach(i => { if (isFinite(obs.raw[i])) index.push(i); });
     return [{ label: obs.name, dash: 'solid', index, obs: Float64Array.from(index, i => obs.raw[i]), members: [] }];
   }
   const groups: PairGroup[] = [];
   const same = (a: number[], b: number[]) => a.length === b.length && a.every((v, k) => v === b[k]);
   for (const s of sims) {
-    const p = applyNanPolicy(obs.raw, s.raw, policy);
+    const p = pairOn(obs.raw, s.raw, policy, sel);
     const g = groups.find(gr => same(gr.index, p.index));
     if (g) g.members.push({ s, sim: p.sim });
     else groups.push({ label: obs.name, dash: 'solid', index: p.index, obs: p.obs, members: [{ s, sim: p.sim }] });
@@ -74,14 +102,21 @@ function pairGroups(all: Series[], policy: NanPolicy): PairGroup[] {
   return groups;
 }
 
-function pairNote(groups: PairGroup[], policy: NanPolicy): string {
-  if (!groups[0].members.length) return `observed record only, n = ${groups[0].index.length}`;
+function pairNote(groups: PairGroup[], policy: NanPolicy, seasonal: boolean): string {
+  const season = seasonal ? 'out-of-season steps left out, never filled; ' : '';
+  if (!groups[0].members.length) return `${season}observed record only, n = ${groups[0].index.length}`;
   const ns = groups.length === 1
     ? `n = ${groups[0].index.length}`
     : `n = ${groups.map(g => `${g.index.length} (${g.members.map(m => m.s.name).join(', ')})`).join(', ')}; one observed curve per pairing`;
-  if (policy === 'zero') return `missing values set to zero, as in the metrics (NaN policy): ${ns}`;
-  if (policy === 'mean') return `missing values set to the series mean, as in the metrics (NaN policy): ${ns}`;
-  return `paired time steps only (observed and simulated both valid, as in the metrics): ${ns}`;
+  // A dataset made from a season uses pairwise deletion (store subsetView),
+  // so a fill inside the season is not claimed to be "as in the metrics".
+  if (policy === 'zero') return seasonal
+    ? `${season}missing in-season values set to zero (NaN policy): ${ns}`
+    : `missing values set to zero, as in the metrics (NaN policy): ${ns}`;
+  if (policy === 'mean') return seasonal
+    ? `${season}missing in-season values set to the in-season mean (NaN policy): ${ns}`
+    : `missing values set to the series mean, as in the metrics (NaN policy): ${ns}`;
+  return `${season}paired time steps only (observed and simulated both valid, as in the metrics): ${ns}`;
 }
 
 /** y-axis title of the time-series view: the plotted quantity per mode. */
@@ -92,10 +127,15 @@ export function timeSeriesYTitle(mode: Mode, unit: string): string {
   return `Q [${unit}]`;
 }
 
-const DOY_AXIS_TITLE = 'Calendar day (ticks at the 1st of each month)';
-// Month ticks on the 366-day calendar of plotBins (Feb 29 = 60, Mar 1 = 61), so the
-// axis reads as dates and is not confused with the 365-day season numbers.
-const DOY_TICKS = { tickvals: [1, 32, 61, 92, 122, 153, 183, 214, 245, 275, 306, 336], ticktext: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] };
+// The day-of-year plots number days as the Season fields do (calendarDoy,
+// src/metrics/subset.ts): a 365-day calendar, 1 Mar = 60 in every year and
+// 29 Feb pooled with 28 Feb. Ticks at the 1st of each month keep the axis
+// readable as dates.
+const DOY_AXIS_TITLE = 'DOY (365-day calendar as in the Season field: 1 Mar = 60, 29 Feb pooled with 28 Feb)';
+const DOY_TICKS = { tickvals: MONTH_START_DOYS, ticktext: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] };
+/** CSV column of the day numbers (the CSV has no axis title to explain them). */
+const DOY_CSV_X = 'DOY (365-day calendar; 1 Mar = 60)';
+const DOY_X = Array.from({ length: DOY_SLOTS }, (_, k) => k + 1);
 
 /** Largest moving-average window; the loop is O(n x w) on every render. */
 export const MOVING_AVG_MAX = 90;
@@ -146,13 +186,20 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
   const alignOut = useSubsetRunOutput(ds, plot === 'alignment' ? alignRun : null);
   const computeError = useComputeError(ds, frame);
   const all = useMemo(() => seriesOf(ds, frame), [ds, frame.key]);
+  // keyed like the frame (dataset, length, window, season, resample): one
+  // O(n) pass per selection, not per view change
+  const sel = useMemo(() => seasonSteps(ds, frame.dates.length), [frame.key]);
   const unit = UNITS[ds.targetUnit].label;
 
-  const { traces, layout, note } = useMemo(() => {
+  const { traces, layout, note, csv } = useMemo((): { traces: any[]; layout: any; note: string | null; csv?: CsvColumns } => {
     const yTitle = `Q [${unit}]`;
     const L: any = { yaxis: { title: yTitle, type: logY ? 'log' : 'linear' } };
     const thr = Number(threshold);
-    const policy = ds.view.nanPolicy;
+    // With a season, out-of-season steps never reach the NaN policy (see
+    // pairGroups); if the season steps could not be told apart, nothing is
+    // filled at all.
+    const seasonal = !!ds.view.season;
+    const policy: NanPolicy = seasonal && !sel ? 'pairwise' : ds.view.nanPolicy;
     const subDaily = isSubDaily(frame.step.ms);
 
     if (plot === 'timeseries') {
@@ -201,17 +248,17 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
         const y = Array.from(v).filter(x => isFinite(x)).sort((a, b) => b - a);
         return { x: y.map((_, i) => (100 * (i + 1)) / (y.length + 1)), y };
       };
-      const groups = pairGroups(all, policy);
+      const groups = pairGroups(all, policy, sel);
       const t = groups.flatMap(g => [
         { ...fdc(g.obs), name: g.label, type: 'scatter', mode: 'lines', line: { color: OBSERVED_COLOR, width: all[0].width, dash: g.dash } },
         ...g.members.map(m => ({ ...fdc(m.sim), name: m.s.name, type: 'scatter', mode: 'lines', line: { color: m.s.color, width: m.s.width, dash: m.s.dash } })),
       ]);
-      return { traces: t, layout: { xaxis: { title: 'Exceedance probability [%]' }, yaxis: { title: yTitle, type: 'log' }, hovermode: 'closest' }, note: `Log(y) flow duration curves (Weibull plotting position); ${pairNote(groups, policy)}` };
+      return { traces: t, layout: { xaxis: { title: 'Exceedance probability [%]' }, yaxis: { title: yTitle, type: 'log' }, hovermode: 'closest' }, note: `Log(y) flow duration curves (Weibull plotting position); ${pairNote(groups, policy, seasonal)}` };
     }
 
     if (plot === 'qq') {
       const qs = Array.from({ length: 99 }, (_, i) => (i + 1) / 100);
-      const groups = pairGroups(all, policy);
+      const groups = pairGroups(all, policy, sel);
       let mx = -Infinity;
       const t: any[] = groups.flatMap(g => {
         const oq = qs.map(q => quantile(g.obs, q));
@@ -219,12 +266,12 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
         return g.members.map(m => ({ x: oq, y: qs.map(q => quantile(m.sim, q)), name: m.s.name, type: 'scatter', mode: 'lines+markers', marker: { size: 4 }, line: { color: m.s.color } }));
       });
       t.push({ x: [0, mx], y: [0, mx], name: '1:1', type: 'scatter', mode: 'lines', line: { color: '#555', dash: 'dash', width: 1 } });
-      return { traces: t, layout: { xaxis: { title: `Observed quantiles [${unit}]`, showline: false, zeroline: true }, yaxis: { title: `Simulated quantiles [${unit}]`, scaleanchor: 'x', showline: false, zeroline: true }, hovermode: 'closest' }, note: `Percentiles 1 to 99; ${pairNote(groups, policy)}` };
+      return { traces: t, layout: { xaxis: { title: `Observed quantiles [${unit}]`, showline: false, zeroline: true }, yaxis: { title: `Simulated quantiles [${unit}]`, scaleanchor: 'x', showline: false, zeroline: true }, hovermode: 'closest' }, note: `Percentiles 1 to 99; ${pairNote(groups, policy, seasonal)}` };
     }
 
     if (plot === 'doy') {
       const t: any[] = [];
-      const groups = pairGroups(all, policy);
+      const groups = pairGroups(all, policy, sel);
       // Bin on the subset frame's own dates (v1.11 regression), restricted to
       // each pairing's time steps.
       const series = (dts: number[], v: ArrayLike<number>) => {
@@ -248,9 +295,10 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
       return {
         traces: t,
         layout: { xaxis: { title: DOY_AXIS_TITLE, ...DOY_TICKS, showline: false }, yaxis: { title: yTitle, type: logY ? 'log' : 'linear', zeroline: true } },
+        csv: { x: DOY_CSV_X, y: yTitle },
         note: 'Medians by day of year; shaded band = observed interquartile range (IQR)'
           + (subDaily ? '; each day is the daily mean of the sub-daily values' : '')
-          + `; ${pairNote(groups, policy)}`,
+          + `; ${pairNote(groups, policy, seasonal)}`,
       };
     }
 
@@ -262,16 +310,17 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
       const dailyNote = subDaily ? '; each day is the daily mean of the sub-daily values' : '';
       if (plot === 'heatmap') {
         return {
-          traces: [{ name: s.name, z: years.map(y => byYear.get(y)!), x: Array.from({ length: 366 }, (_, i) => i + 1), y: years, type: 'heatmap', colorscale: 'Rainbow', colorbar: { title: { text: unit, side: 'right' }, lenmode: 'pixels', len: 370, y: 0.5, yanchor: 'middle', thickness: 14, outlinewidth: 0 } }],
+          traces: [{ name: s.name, z: years.map(y => byYear.get(y)!), x: DOY_X, y: years, type: 'heatmap', colorscale: 'Rainbow', colorbar: { title: { text: unit, side: 'right' }, lenmode: 'pixels', len: 370, y: 0.5, yanchor: 'middle', thickness: 14, outlinewidth: 0 } }],
           layout: { xaxis: { title: DOY_AXIS_TITLE, ...DOY_TICKS }, yaxis: { title: 'Year', dtick: 1 }, hovermode: 'closest' },
+          csv: { x: DOY_CSV_X, y: 'year', z: yTitle },
           note: `Annual regime of ${s.name}${dailyNote}`,
         };
       }
       const t = years.map((y, i) => ({
-        x: Array.from({ length: 366 }, (_, k) => k + 1), y: byYear.get(y)!, name: String(y), type: 'scatter', mode: 'lines',
+        x: DOY_X, y: byYear.get(y)!, name: String(y), type: 'scatter', mode: 'lines',
         line: { color: i === years.length - 1 ? s.color : 'rgba(120,130,140,0.45)', width: i === years.length - 1 ? 2 : 1 },
       }));
-      return { traces: t, layout: { xaxis: { title: DOY_AXIS_TITLE, ...DOY_TICKS, showline: false }, yaxis: { title: yTitle, type: logY ? 'log' : 'linear', zeroline: true }, hovermode: 'closest' }, note: `One line per year of ${s.name}; latest year highlighted in color${dailyNote}` };
+      return { traces: t, layout: { xaxis: { title: DOY_AXIS_TITLE, ...DOY_TICKS, showline: false }, yaxis: { title: yTitle, type: logY ? 'log' : 'linear', zeroline: true }, hovermode: 'closest' }, csv: { x: DOY_CSV_X, y: yTitle }, note: `One line per year of ${s.name}; latest year highlighted in color${dailyNote}` };
     }
 
     // alignment
@@ -304,7 +353,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
         + (transform !== 'none' ? `; alignment computed on ${transform}-transformed flows` : '')
         + (factor > 1 ? `; ${decimationNote(factor)}` : ''),
     };
-  }, [ds, plot, mode, logY, movAvg, threshold, focusIdx, dates, all, unit, frame.key, alignOut]);
+  }, [ds, plot, mode, logY, movAvg, threshold, focusIdx, dates, all, sel, unit, frame.key, alignOut]);
 
   const needsFocus = plot === 'heatmap' || plot === 'spaghetti' || plot === 'alignment';
   const alignError = plot === 'alignment' && !alignOut ? computeError : null;
@@ -352,7 +401,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
         </div>
         {note && <p className="muted">{note}</p>}
         {alignError && <div className="error" role="alert">{alignError}</div>}
-        <PlotHost traces={traces} layout={layout} height={440} square={plot === 'scatter' || plot === 'fdc' || plot === 'qq'} name={`${ds.name.replace(/[^\w-]+/g, '_')}_${plot}`} />
+        <PlotHost traces={traces} layout={layout} height={440} square={plot === 'scatter' || plot === 'fdc' || plot === 'qq'} csvColumns={csv} name={`${ds.name.replace(/[^\w-]+/g, '_')}_${plot}`} />
       </section>
     </div>
   );
