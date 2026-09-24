@@ -35,10 +35,16 @@ export interface TimingConfig {
   eventThreshold: { kind: 'percentile' | 'absolute'; value: number };
   /** Minimum separation between detected events, in steps. */
   eventMinDistance: number;
-  /** Steps excluded at the start of the record before event detection. */
+  /** Steps excluded at the start of the record before event detection
+   *  (events and Series Distance only; peak timing follows Gauch et al., 2021,
+   *  which has no warm-up). */
   eventWarmup: number;
-  /** Peak matching search window, in steps (default is step-aware, see defaults()). */
+  /** Peak matching search window: half-width in steps on each side of the
+   *  observed peak (default is step-aware, see defaultTimingConfig()). */
   peakMatchTolerance: number;
+  /** Minimum separation between observed peaks for peak timing, in steps
+   *  (Gauch et al., 2021: 100). Separate from the event gap. */
+  peakMinDistance: number;
   /** Peak prominence threshold; 'auto' = std of observed (Gauch et al., 2021). */
   peakProminence: 'auto' | number;
 }
@@ -106,6 +112,15 @@ export interface Project {
   activeDatasetId: string | null;
 }
 
+/** Default peak-match half-window in steps, as the Gauch et al. (2021)
+ *  reference code (neuralhydrology mean_peak_timing) sets it:
+ *  max(floor(12 h / step), 3) on each side of the observed peak, i.e. ±12 h
+ *  (a one-day window) for hourly data and ±3 steps for daily or coarser data. */
+export function defaultPeakWindow(stepMs: number): number {
+  if (!(stepMs > 0)) return 3;
+  return Math.min(TIMING_RANGES.peakMatchTolerance[1], Math.max(3, Math.floor((12 * 3600_000) / stepMs)));
+}
+
 export function defaultTimingConfig(stepMs: number, n: number): TimingConfig {
   const daily = stepMs >= 22 * 3600_000; // daily or coarser
   return {
@@ -113,13 +128,15 @@ export function defaultTimingConfig(stepMs: number, n: number): TimingConfig {
     // window below (Sakoe & Chiba, 1978, set the window from the plausible
     // timing deviation, not from the record length); never above the
     // accepted range of 10 % of a very short record
-    dtwBand: Math.min(daily ? 3 : 24, dtwBandMax(n)),
+    dtwBand: Math.min(defaultPeakWindow(stepMs), dtwBandMax(n)),
     waveletScales: 'auto',
     eventThreshold: { kind: 'percentile', value: 90 },
     eventMinDistance: daily ? 5 : 24,
     eventWarmup: 0,
-    // Gauch et al. (2021): search window 1 day for hourly data, 3 days for daily data.
-    peakMatchTolerance: daily ? 3 : 24,
+    // Gauch et al. (2021) reference code: ±12 h for hourly data, ±3 steps for daily data.
+    peakMatchTolerance: defaultPeakWindow(stepMs),
+    // Gauch et al. (2021): observed peaks at least 100 steps apart.
+    peakMinDistance: 100,
     peakProminence: 'auto',
   };
 }
@@ -133,6 +150,7 @@ export const TIMING_RANGES = {
   eventMinDistance: [1, 100_000],
   eventWarmup: [0, 10_000_000],
   peakMatchTolerance: [1, 10_000],
+  peakMinDistance: [1, 100_000],
   dtwBand: [1, 100_000],
   peakProminence: [0, Number.MAX_VALUE],
 } as const;
@@ -225,6 +243,7 @@ export function clampTimingConfig(raw: unknown, base: TimingConfig, n?: number):
     eventMinDistance: take(o.eventMinDistance, TIMING_RANGES.eventMinDistance, base.eventMinDistance, true),
     eventWarmup: take(o.eventWarmup, TIMING_RANGES.eventWarmup, base.eventWarmup, true),
     peakMatchTolerance: take(o.peakMatchTolerance, TIMING_RANGES.peakMatchTolerance, base.peakMatchTolerance, true),
+    peakMinDistance: take(o.peakMinDistance, TIMING_RANGES.peakMinDistance, base.peakMinDistance, true),
     peakProminence,
   };
   return { config, changed };

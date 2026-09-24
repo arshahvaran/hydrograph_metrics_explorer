@@ -52,14 +52,14 @@ export function eventTableRows(ev: EventReport, frame: Frame, ds: Dataset, limit
   // ahead of an event shifted its date by the number of missing values).
   const row = (i: number) => pairedIndex?.[i] ?? i;
   return ev.events.slice(0, limit).map((e: EventError, k: number) => {
-    const simPeak = e.obs.peakQ * (1 + e.peakMagErrPct / 100);
+    const simPeak = e.obs.peakQ * (1 + e.peakMagErrPct / 100), ms = frame.dates[row(e.obs.start)] ?? ds.dates[row(e.obs.start)];
     return [
       String(k + 1),
-      isoDay(frame.dates[row(e.obs.start)] ?? ds.dates[row(e.obs.start)]),
+      Number.isFinite(ms) ? fmtStamp(ms, frame.step?.ms ?? ds.step?.ms ?? 86_400_000) : 'n/a', // sub-daily: keeps the time of day
       fmtNum(e.obs.peakQ, 2),
       fmtNum(simPeak, 2),
       fmtNum(e.peakLag, 1),
-      fmtNum(e.volumeErrPct, 1),
+      fmtNum(e.volumeErrPct, 1), e.matched ? 'hit' : 'miss',
     ];
   });
 }
@@ -149,7 +149,7 @@ export function summaryPairs(ds: Dataset, frame: Frame): [string, string][] {
     ['Unit', UNITS[ds.targetUnit].label + (ds.area ? ` · area ${ds.area.value} ${ds.area.unit}` : '')],
     ['Location', ds.location ? `${ds.location.lat.toFixed(4)}, ${ds.location.lon.toFixed(4)} (WGS84)` : 'n/a'],
     ['NaN policy / transform / benchmark', `${v.nanPolicy} / ${v.transform} / ${v.benchmark}`],
-    ['Timing config', `events ≥ ${v.timingConfig.eventThreshold.kind === 'absolute' ? `${v.timingConfig.eventThreshold.value} ${UNITS[ds.targetUnit].label}` : `P${v.timingConfig.eventThreshold.value} of observed flow`}, min-distance ${v.timingConfig.eventMinDistance}, peak window ±${v.timingConfig.peakMatchTolerance}, DTW band ±${v.timingConfig.dtwBand} steps`],
+    ['Timing config', `events ≥ ${v.timingConfig.eventThreshold.kind === 'absolute' ? `${v.timingConfig.eventThreshold.value} ${UNITS[ds.targetUnit].label}` : `P${v.timingConfig.eventThreshold.value} of observed flow`}, min event gap ${v.timingConfig.eventMinDistance}, peak window ±${v.timingConfig.peakMatchTolerance}, peak separation ${v.timingConfig.peakMinDistance}, DTW band ±${v.timingConfig.dtwBand} steps`],
     // Every other setting that changes a reported value (audit report-05).
     ['Event warm-up / peak prominence', `${v.timingConfig.eventWarmup} steps / ${v.timingConfig.peakProminence === 'auto' ? 'auto (standard deviation of the observed flow)' : `${v.timingConfig.peakProminence} ${UNITS[ds.targetUnit].label}`}`],
     ['Wavelet scales', String(v.timingConfig.waveletScales)],
@@ -195,6 +195,11 @@ async function dataUrlBytes(u: string): Promise<Uint8Array> {
   const res = await fetch(u);
   return new Uint8Array(await res.arrayBuffer());
 }
+
+/** Header of the report event table (DOCX and PDF share it). The volume
+ *  column is 100·(Vs − Vo)/Vo, so its sign is stated: it is the opposite of
+ *  the PBIAS convention (+ = under) used in the metric table. */
+export const EVENT_TABLE_HEADER = ['#', 'Start', 'Obs peak', 'Sim peak', 'Peak lag [steps]', 'Volume err % (+ = over)', 'Matched'];
 
 export interface ReportPayload {
   ds: Dataset; frame: Frame; runs: Run[]; outputs: ComputeOutput[];
@@ -267,11 +272,11 @@ export async function buildDocx(p: ReportPayload): Promise<Blob> {
       H(`${runs[i].name}`, HeadingLevel.HEADING_2);
       if (!ev || !ev.events.length) { Ptext('n/a; no events at this threshold.', { italic: true }); continue; }
       Ptext(`Hits ${ev.hits} · misses ${ev.misses} · false alarms ${ev.falseAlarms} · threat score ${fmtNum(ev.threat, 2)}.`);
-      const w = Math.floor(CONTENT / 6);
+      const w = Math.floor(CONTENT / EVENT_TABLE_HEADER.length);
       kids.push(tableOf(
-        ['#', 'Start', 'Obs peak', 'Sim peak', 'Peak lag [steps]', 'Volume bias %'],
+        EVENT_TABLE_HEADER,
         eventTableRows(ev, frame, ds, 12, outputs[i].pairedIndex).map(cells => ({ cells })),
-        [w, w, w, w, w, CONTENT - 5 * w],
+        EVENT_TABLE_HEADER.map((_, k) => (k < EVENT_TABLE_HEADER.length - 1 ? w : CONTENT - (EVENT_TABLE_HEADER.length - 1) * w)),
       ));
       if (ev.events.length > 12) Ptext(`… ${ev.events.length - 12} more events omitted; export the full table from the Timing tab.`, { italic: true });
     }
@@ -356,7 +361,7 @@ export function openPrintReport(p: ReportPayload): void {
       body += `<h3>${esc(r.name)}</h3>`;
       if (!ev || !ev.events.length) { body += '<p><em>n/a; no events at this threshold.</em></p>'; return; }
       body += `<p>Hits ${ev.hits} · misses ${ev.misses} · false alarms ${ev.falseAlarms} · threat ${fmtNum(ev.threat, 2)}.</p>`;
-      body += `<table><thead>${rowsHtml(['#', 'Start', 'Obs peak', 'Sim peak', 'Peak lag', 'Vol bias %'], 'th')}</thead><tbody>` +
+      body += `<table><thead>${rowsHtml(EVENT_TABLE_HEADER, 'th')}</thead><tbody>` +
         eventTableRows(ev, frame, ds, 12, outputs[i].pairedIndex).map(cells => rowsHtml(cells)).join('') + '</tbody></table>';
     });
   }

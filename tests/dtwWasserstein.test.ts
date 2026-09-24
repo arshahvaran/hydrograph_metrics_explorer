@@ -132,11 +132,13 @@ describe('dtw-wass-02: W1, W2^2 and DTW on the time axis, not the compacted pair
 })
 
 describe('dtw-wass-04: the DTW band is a number of time steps', () => {
-  it('the default band is the peak-match tolerance: 3 daily steps, 24 hourly steps', () => {
+  // the peak window follows Gauch et al. (2021): ±12 h hourly (audit events-05), ±3 daily
+  it('the default band is the peak-match tolerance: 3 daily steps, 12 hourly steps', () => {
     const d = defaultTimingConfig(DAY, 10_000) as any, h = defaultTimingConfig(HOUR, 10_000) as any
     expect(d.dtwBand).toBe(3)
-    expect(h.dtwBand).toBe(24)
+    expect(h.dtwBand).toBe(12)
     expect(d.dtwBand).toBe(d.peakMatchTolerance)
+    expect(h.dtwBand).toBe(h.peakMatchTolerance)
     // never above 10 % of a very short record
     expect((defaultTimingConfig(DAY, 25) as any).dtwBand).toBe(2)
   })
