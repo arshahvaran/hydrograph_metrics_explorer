@@ -26,14 +26,23 @@ const identity = (n: number): number[] => Array.from({ length: n }, (_, i) => i)
  * record), the row number is used, as before.
  */
 export function timePositions(datesMs: ArrayLike<number> | undefined, n: number): number[] {
-  if (!datesMs || datesMs.length < n || n < 2) return identity(Math.max(0, n));
+  return timeAxisInfo(datesMs, n).pos;
+}
+
+/** The time positions plus what the caller should tell the user: whether the
+ *  dates were too irregular to use (row numbers instead) and how many rows lie
+ *  closer together than one step (each still counts one step). */
+export function timeAxisInfo(datesMs: ArrayLike<number> | undefined, n: number): { pos: number[]; irregular: boolean; subStepRows: number } {
+  const plain = { pos: identity(Math.max(0, n)), irregular: false, subStepRows: 0 };
+  if (!datesMs || datesMs.length < n || n < 2) return plain;
   const d: number[] = new Array(n);
   for (let i = 0; i < n; i++) {
     d[i] = datesMs[i];
-    if (!Number.isFinite(d[i]) || (i > 0 && d[i] <= d[i - 1])) return identity(n);
+    if (!Number.isFinite(d[i]) || (i > 0 && d[i] <= d[i - 1])) return plain;
   }
   const step = detectStep(d);
-  if (!(step.ms > 0)) return identity(n);
+  if (!(step.ms > 0)) return plain;
+  let subStepRows = 0;
   const pos: number[] = new Array(n);
   pos[0] = 0;
   let offGrid = 0;
@@ -47,8 +56,10 @@ export function timePositions(datesMs: ArrayLike<number> | undefined, n: number)
       k = Math.round(dt / step.ms);
       if (Math.abs(dt - k * step.ms) > 0.01 * step.ms) offGrid++;
     }
-    if (k < 1) { offGrid++; k = 1; }
+    if (k < 1) { offGrid++; subStepRows++; k = 1; }
     pos[i] = pos[i - 1] + k;
   }
-  return offGrid / (n - 1) > OFF_GRID_TOLERANCE ? identity(n) : pos;
+  return offGrid / (n - 1) > OFF_GRID_TOLERANCE
+    ? { pos: identity(n), irregular: true, subStepRows }
+    : { pos, irregular: false, subStepRows };
 }

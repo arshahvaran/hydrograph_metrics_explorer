@@ -8,7 +8,7 @@ import { peakTiming, eventErrors, lagSweep, type EventOptions } from './timing/e
 import { dtwOnTimeAxis, wasserstein1, wasserstein2sq, massIssue, DTW_CELL_BUDGET, type DtwRecordResult } from './timing/dtwWasserstein'
 import { diagnosticEfficiency, seriesDistance } from './timing/deSd'
 import { xwtLag } from './timing/xwt'
-import { timePositions } from './timing/timeAxis'
+import { timeAxisInfo } from './timing/timeAxis'
 import type { TimingConfig } from '../types'
 
 export type Direction = 'max' | 'min' | 'zero' | 'one';
@@ -260,7 +260,10 @@ export function computeAll(obsRaw: ArrayLike<number>, simRaw: ArrayLike<number>,
   const { o, s, raw, notes } = pairForMetrics(obsRaw, simRaw, ctx);
   // Time-step position of every row (D1): the row number, or the step count
   // from the dates when rows are absent from the file.
-  const rowPos = timePositions(ctx.datesMs, Math.min(obsRaw.length, simRaw.length));
+  const axis = timeAxisInfo(ctx.datesMs, Math.min(obsRaw.length, simRaw.length));
+  const rowPos = axis.pos;
+  if (axis.irregular) notes.push('The dates are irregular (more than 5 % of the intervals are off the detected time step), so the timing metrics count rows, not time steps: a lag across missing or unevenly spaced rows may be under- or over-stated.');
+  else if (axis.subStepRows > 0) notes.push(`${axis.subStepRows} row${axis.subStepRows === 1 ? ' is' : 's are'} closer to the previous row than one time step; each still counts as one step in the timing metrics.`);
   const heavy = ctx.heavy !== false;
   if (ctx.transform !== 'none') notes.push(transformScopeNote(ctx.transform));
   if (ctx.transform === 'log') notes.push(C.LOG_NA_NOTE);

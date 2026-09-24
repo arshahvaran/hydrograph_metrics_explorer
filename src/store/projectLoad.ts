@@ -112,6 +112,19 @@ function loadView(v: unknown, stepMs: number, n: number, warn: (msg: string) => 
     // converted to steps (or reset to the default) with a note, never refused.
     const mig = migrateDtwBand(o.timingConfig, n, base.timingConfig);
     if (mig.note) warn(mig.note);
+    // Files before v1.14 have no peak separation (it followed the event gap) and
+    // saved the old hourly peak window of ±24 steps; the Gauch et al. (2021)
+    // defaults (100-step separation, max(12 h, 3 steps) window) replace an
+    // untouched old default, with a note.
+    const tc0 = mig.raw as Record<string, unknown> | null;
+    if (tc0 && typeof tc0 === 'object' && !('peakMinDistance' in tc0)) {
+      const oldDefault = stepMs >= 22 * 3600_000 ? 3 : 24;
+      if (tc0.peakMatchTolerance === oldDefault && base.timingConfig.peakMatchTolerance !== oldDefault) {
+        (mig.raw as Record<string, unknown>).peakMatchTolerance = base.timingConfig.peakMatchTolerance;
+        warn(`the project was saved before v1.14: the default peak window of ±${oldDefault} steps is now ±${base.timingConfig.peakMatchTolerance} steps (Gauch et al., 2021)`);
+      }
+      warn(`the project was saved before v1.14: peak timing now uses its own peak separation of ${base.timingConfig.peakMinDistance} steps (Gauch et al., 2021) instead of the event gap`);
+    }
     const { config, changed } = clampTimingConfig(mig.raw, base.timingConfig, n);
     out.timingConfig = config;
     if (changed || typeof o.timingConfig !== 'object' || o.timingConfig === null) warn('timing settings were invalid and have been reset to defaults');

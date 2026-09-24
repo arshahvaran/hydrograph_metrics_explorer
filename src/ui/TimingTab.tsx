@@ -129,7 +129,7 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
   return (
     <div>
       <section className="card">
-        <h2>Timing &amp; shape configuration <span className="muted">(live; hover a setting to see which metrics use it)</span></h2>
+        <h2>Timing &amp; shape configuration <span className="muted">(live; most settings show on hover which metrics use them)</span></h2>
         <label className="cfgdefault"><span className="switch"><input type="checkbox" checked={useDefaults} onChange={e => {
           const on = e.target.checked;
           setUseDefaults(on);
@@ -151,7 +151,7 @@ function TimingTabInner({ ds }: { ds: Dataset }) {
             label="Min event gap" onClamp={setClampNote} onCommit={v => updateTiming({ eventMinDistance: v })} /> steps</label>
           <label title="Steps skipped at the start of the record before event detection. Applies to the event metrics and Series Distance only; to leave a spin-up period out of every metric, set a Custom window on the Plots tab and click Use this data">Event warm-up <NumField value={t.eventWarmup} min={0} max={Math.max(0, n - 2)} integer unit="steps" style={{ width: '4.5em' }}
             label="Event warm-up" onClamp={setClampNote} onCommit={v => updateTiming({ eventWarmup: v })} /> steps</label>
-          <label title="Half-width of the search window on each side of an observed peak or event (peak timing, event metrics, Series Distance). Default after Gauch et al. (2021): ±12 h for sub-daily data, ±3 steps for daily data">Peak window ± <NumField value={t.peakMatchTolerance} min={TIMING_RANGES.peakMatchTolerance[0]} max={TIMING_RANGES.peakMatchTolerance[1]} integer unit="steps" style={{ width: '4em' }}
+          <label title="Half-width of the search window on each side of an observed peak or event (peak timing, event metrics, Series Distance). Default after Gauch et al. (2021): the larger of 12 h and 3 steps on each side (±12 steps for hourly data, ±3 steps for 6-hourly or daily data)">Peak window ± <NumField value={t.peakMatchTolerance} min={TIMING_RANGES.peakMatchTolerance[0]} max={TIMING_RANGES.peakMatchTolerance[1]} integer unit="steps" style={{ width: '4em' }}
             label="Peak window" onClamp={setClampNote} onCommit={v => updateTiming({ peakMatchTolerance: v })} /> steps</label>
           <label title="Minimum distance between the observed peaks used by peak timing; Gauch et al. (2021) use 100 steps">Peak separation <NumField value={t.peakMinDistance} min={TIMING_RANGES.peakMinDistance[0]} max={TIMING_RANGES.peakMinDistance[1]} integer unit="steps" style={{ width: '4.5em' }}
             label="Peak separation" onClamp={setClampNote} onCommit={v => updateTiming({ peakMinDistance: v })} /> steps</label>
