@@ -7,13 +7,13 @@ import { dtwTies } from './alignment'
 import { decimateMinMax, decimationNote } from './decimate'
 import { fmtNum, fmtStamp } from './format'
 import { binByDoy, binByYear, isSubDaily, DOY_SLOTS, MONTH_START_DOYS } from './plotBins'
-import { makeSubsetter } from '../metrics/subset'
 import { AnalysisBar } from './AnalysisBar'
 import { quantile } from '../metrics/support/stats'
 import { OBSERVED_COLOR } from '../types'
 import { arrMax } from '../metrics/support/stats'
 import { UNITS } from '../units/registry'
 import { applyNanPolicy, type NanPolicy } from '../ingest/missing'
+import { timePositions } from '../metrics/timing/timeAxis'
 import type { Dataset } from '../types'
 
 const PLOTS = [
@@ -45,19 +45,15 @@ interface PairGroup { label: string; dash: string; index: number[]; obs: Float64
 const OBS_DASHES = ['solid', 'dot', 'dash', 'dashdot', 'longdash'];
 
 /**
- * The frame steps inside the season, or null when no season is set (every
- * step of the frame is then in the selection). A season keeps its
- * out-of-season steps in the frame as missing values (gaps on the time
- * axis); running the same subsetter on an all-ones series marks exactly
- * those steps (or, resampled, the bins without an in-season step) as NaN.
+ * The frame steps inside the season, or null when no season is set. The
+ * frame of a season holds only in-season steps (makeSubsetter leaves the
+ * others out, and the dates keep the time between them), so every step of
+ * the frame is in the selection and no NaN policy can fill an out-of-season
+ * step.
  */
 function seasonSteps(ds: Dataset, frameLen: number): number[] | null {
   if (!ds.view.season) return null;
-  const probe = makeSubsetter(ds.dates, new Float64Array(ds.dates.length).fill(1), ds.view, ds.step);
-  if (probe.obs.length !== frameLen) return null;
-  const sel: number[] = [];
-  probe.obs.forEach((v, i) => { if (Number.isFinite(v)) sel.push(i); });
-  return sel;
+  return Array.from({ length: frameLen }, (_, i) => i);
 }
 
 /** applyNanPolicy on the in-season steps only (all steps when `sel` is
@@ -140,18 +136,44 @@ const DOY_X = Array.from({ length: DOY_SLOTS }, (_, k) => k + 1);
 /** Largest moving-average window; the loop is O(n x w) on every render. */
 export const MOVING_AVG_MAX = 90;
 
-function applyMode(y: (number | null)[], mode: Mode, movAvg: number | null): (number | null)[] {
+/** Rows that start a run of consecutive time steps: the first row, and every
+ *  row that follows dates absent from the frame (a season join, dates skipped
+ *  in the file). Irregular dates, which have no step grid, never start one. */
+export function segmentStarts(datesMs: ArrayLike<number>): boolean[] {
+  const pos = timePositions(datesMs, datesMs.length);
+  return Array.from({ length: datesMs.length }, (_, i) => i === 0 || pos[i] - pos[i - 1] > 1);
+}
+
+/** Put a blank point before every segment start after the first, so that the
+ *  line breaks there instead of joining the two sides of absent dates. */
+export function breakAtGaps<T>(x: T[], y: (number | null)[], starts: boolean[]): { x: T[]; y: (number | null)[] } {
+  if (!starts.some((b, i) => b && i > 0)) return { x, y };
+  const bx: T[] = [], by: (number | null)[] = [];
+  for (let i = 0; i < y.length; i++) {
+    if (i > 0 && starts[i]) { bx.push(x[i]); by.push(null); }
+    bx.push(x[i]); by.push(y[i]);
+  }
+  return { x: bx, y: by };
+}
+
+/** The plotted quantity of the time-series view. The moving average and the
+ *  derivative stay inside a run of consecutive steps (`starts`, from
+ *  segmentStarts): neither reaches across absent dates. */
+export function applyMode(y: (number | null)[], mode: Mode, movAvg: number | null, starts?: boolean[]): (number | null)[] {
   let out = y.slice();
+  const newRun = (i: number) => i === 0 || !!starts?.[i];
   if (movAvg && movAvg > 1) {
     const w = Math.min(Math.floor(movAvg), MOVING_AVG_MAX, y.length);
+    let s0 = 0;
     out = out.map((_, i) => {
+      if (newRun(i)) s0 = i;
       let s = 0, c = 0;
-      for (let k = Math.max(0, i - w + 1); k <= i; k++) { const v = out[k]; if (v !== null) { s += v; c++; } }
+      for (let k = Math.max(s0, i - w + 1); k <= i; k++) { const v = out[k]; if (v !== null) { s += v; c++; } }
       return c ? s / c : null;
     });
   }
   if (mode === 'derivative') {
-    out = out.map((v, i) => (i === 0 || v === null || out[i - 1] === null ? null : v - (out[i - 1] as number)));
+    out = out.map((v, i) => (newRun(i) || v === null || out[i - 1] === null ? null : v - (out[i - 1] as number)));
   } else if (mode === 'cumulative') {
     let acc = 0;
     out = out.map(v => (v === null ? null : (acc += v)));
@@ -180,6 +202,8 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
 
   const frame = subsetFrameFor(ds);
   const dates = useMemo(() => frame.dates.map(m => fmtStamp(m, frame.step.ms)), [frame.key]);
+  // runs of consecutive steps: lines break, and the derived modes restart, at absent dates
+  const starts = useMemo(() => segmentStarts(frame.dates), [frame.key]);
   const alignRun = ds.runs.filter(r => r.visible)[Math.max(0, Math.min(focusIdx - 1, ds.runs.length - 1))] ?? ds.runs[0] ?? null;
   // Computed on the SAME subset frame the plot displays, so the ties always
   // join the series that were actually aligned (analysis tabs stay full-frame).
@@ -207,7 +231,8 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
       // the derived modes run on the full series first so their values are exact.
       let factor = 1;
       const t = all.map(s => {
-        const d = decimateMinMax(dates, applyMode(s.y, mode, movAvg || null));
+        const g = breakAtGaps(dates, applyMode(s.y, mode, movAvg || null, starts), starts);
+        const d = decimateMinMax(g.x, g.y);
         factor = Math.max(factor, d.factor);
         return {
           x: d.x, y: d.y, name: s.name, type: 'scatter', mode: 'lines',
@@ -341,7 +366,8 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
     const transform = ds.view.transform;
     // the two series are display-decimated like the time series; the ties
     // index the full frame and are drawn as they are (at most 160 of them)
-    const dO = decimateMinMax(dates, paired.o), dS = decimateMinMax(dates, paired.s);
+    const gO = breakAtGaps(dates, paired.o, starts), gS = breakAtGaps(dates, paired.s, starts);
+    const dO = decimateMinMax(gO.x, gO.y), dS = decimateMinMax(gS.x, gS.y);
     const factor = Math.max(dO.factor, dS.factor);
     return {
       traces: [
@@ -357,7 +383,7 @@ function PlotsTabInner({ ds }: { ds: Dataset }) {
         + (transform !== 'none' ? `; alignment computed on ${transform}-transformed flows` : '')
         + (factor > 1 ? `; ${decimationNote(factor)}` : ''),
     };
-  }, [ds, plot, mode, logY, movAvg, threshold, focusIdx, dates, all, sel, unit, frame.key, alignOut]);
+  }, [ds, plot, mode, logY, movAvg, threshold, focusIdx, dates, starts, all, sel, unit, frame.key, alignOut]);
 
   const needsFocus = plot === 'heatmap' || plot === 'spaghetti' || plot === 'alignment';
   const alignError = plot === 'alignment' && !alignOut ? computeError : null;

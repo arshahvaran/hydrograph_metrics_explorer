@@ -87,6 +87,24 @@ describe('1. subset-04: a committed season holds only in-season rows, so no NaN 
     expect(pos[b] - pos[a]).toBe(276);                         // ... 276 days apart on the time axis
   });
 
+  it('DTW, W1 and W2^2 of the committed season equal those of the full record with the other steps blank (D1)', () => {
+    commitSeason();
+    S().commitSubsetDataset();
+    const sub = active();
+    const timing = { ...defaultTimingConfig(DAY, dates.length), dtwBand: 10 };
+    const ctx = { nanPolicy: 'pairwise' as const, transform: 'none' as const, timing };
+    const part = computeAll(sub.observed.values, sub.runs[0].values, { ...ctx, datesMs: sub.dates });
+    const blank = obs.map((v, i) => (inSeason(dates[i]) ? v : NaN));
+    const full = computeAll(blank, sim, { ...ctx, datesMs: dates });
+    for (const id of ['w1', 'w2sq', 'dtw_dist', 'dtw_warp']) {
+      expect(Number.isFinite(part.values[id])).toBe(true);
+      expect(part.values[id]).toBeCloseTo(full.values[id], 9);
+    }
+    // counting rows instead would join Feb 28 to Dec 1 and shrink W1
+    const rows = computeAll(sub.observed.values, sub.runs[0].values, ctx);
+    expect(Math.abs(rows.values.w1 - part.values.w1)).toBeGreaterThan(0.1);
+  });
+
   it('the Plots preview holds exactly the committed rows, so its DTW panel is not gap-filled either', () => {
     commitSeason('zero');
     const src = active();
@@ -134,6 +152,29 @@ describe('1. subset-04: a committed season holds only in-season rows, so no NaN 
     expect(before[1].step).toEqual({ ms: DAY, label: '1d', irregular: false });
     expect(before[3].step).toEqual({ ms: 30 * DAY, label: '1mo', irregular: false });
     expect(before[3].dates.length).toBe(16);                   // Nov-Feb of four winters
+  });
+
+  it('a one-month season of monthly data reloads with its 1mo step (was 365d, irregular)', () => {
+    const months: number[] = [];
+    for (let y = 2001; y <= 2006; y++) for (let m = 0; m < 12; m++) months.push(Date.UTC(y, m, 1));
+    S().commitDataset({ name: 'mon1', dates: months, observed: { name: 'o', values: months.map((_, i) => 30 + i), unit: 'mm_step' }, runs: [{ name: 's', values: months.map((_, i) => 31 + i), unit: 'mm_step' }] });
+    S().updateView({ season: { startDoy: 60, endDoy: 90 } });   // March only
+    S().commitSubsetDataset();
+    const made = active();
+    expect(made.dates.length).toBe(6);
+    expect(made.step).toEqual({ ms: 30 * DAY, label: '1mo', irregular: false });
+    expect(detectStep(made.dates).irregular).toBe(true);        // what the loader alone would conclude
+    const { project } = parseProjectFile(serialiseProject(S().project));
+    expect(project.datasets.find(d => d.name === made.name)!.step).toEqual(made.step);
+  });
+
+  it('the loader does not take a saved step that the dates contradict', () => {
+    const days = daily(2001, 0, 1, 40);
+    S().commitDataset({ name: 'd', dates: days, observed: { name: 'o', values: days.map((_, i) => i + 1), unit: 'm3s' }, runs: [{ name: 's', values: days.map((_, i) => i + 2), unit: 'm3s' }] });
+    const file = JSON.parse(serialiseProject(S().project));
+    file.datasets[0].step = { ms: 30 * DAY, label: '1mo', irregular: false };
+    const { project } = parseProjectFile(JSON.stringify(file));
+    expect(project.datasets[0].step).toEqual({ ms: DAY, label: '1d', irregular: false });
   });
 
   it('a missing in-season value is still a missing value that the source policy treats', () => {

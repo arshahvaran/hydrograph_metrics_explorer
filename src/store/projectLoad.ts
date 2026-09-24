@@ -77,6 +77,26 @@ const validMs = (x: unknown): x is number => typeof x === 'number' && Number.isF
 let seq = 0;
 const nid = (p: string) => `${p}_load_${Date.now().toString(36)}_${(seq++).toString(36)}`;
 
+/**
+ * The step of a loaded dataset: detected from its dates, as always, unless
+ * detection can only call them irregular while the file saved a regular step
+ * that the dates agree with (no interval shorter than 0.9 of it). A seasonal
+ * subset of one month of monthly data keeps one date a year, which reads as
+ * an irregular yearly step; its step was detected on the full span when the
+ * subset was made ('1mo'), and a depth conversion needs that step.
+ */
+export function loadStep(saved: unknown, dates: number[]): { ms: number; label: string; irregular: boolean } {
+  const det = detectStep(dates);
+  const detected = { ms: det.ms, label: det.label, irregular: det.irregular };
+  if (!det.irregular || !saved || typeof saved !== 'object') return detected;
+  const s = saved as Record<string, unknown>;
+  if (typeof s.ms !== 'number' || !Number.isFinite(s.ms) || s.ms <= 0 || typeof s.label !== 'string'
+    || s.label.length > 40 || s.irregular !== false) return detected;
+  const ms = s.ms;
+  for (let i = 1; i < dates.length; i++) if (dates[i] - dates[i - 1] < 0.9 * ms) return detected;
+  return { ms, label: s.label, irregular: false };
+}
+
 function loadView(v: unknown, stepMs: number, n: number, warn: (msg: string) => void, runIds: Map<string, string> = new Map()): ViewState {
   const base = defaultView(stepMs, n);
   if (typeof v !== 'object' || v === null) return base;
@@ -225,7 +245,7 @@ function loadDataset(raw: unknown, errors: string[], dsIds: Map<string, string>)
     }
     return id;
   });
-  const step = detectStep(aligned.dates);
+  const step = loadStep(d.step, aligned.dates);
   // Same bounds as the Map tab's Set button: an infinite or out-of-range
   // coordinate once made Leaflet try to load an infinite number of tiles.
   let loc: { lat: number; lon: number } | null = null;

@@ -112,7 +112,7 @@ function AnalysisBarInner({ ds }: { ds: Dataset }) {
           onClick={() => commitSubsetDataset()}>Use this data →</button>
       </div>
       {(v.season || (frame.bins?.empty ?? 0) > 0) && (
-        <p className="muted">{v.season ? 'Out-of-season steps are' : 'Days or months left empty are'} not part of the plots or of the new dataset, so no NaN policy fills them. The dates keep the time between the steps kept: peak timing, events, Series Distance and the lag sweep count it as time.</p>
+        <p className="muted">{v.season ? 'Out-of-season steps are' : 'Days or months left empty are'} not part of the plots or of the new dataset, so no NaN policy fills them. The dates keep the time between the steps kept: peak timing, events, Series Distance, DTW, W₁, W₂² and the lag sweep count it as time.</p>
       )}
       {stepChanged && (
         <p className="muted">The new dataset keeps the analysis settings. Its time step is {frame.step.label}, not {ds.step.label}, so timing settings counted in steps (peak-match window, event spacing, warm-up, wavelet scales, DTW band) take the defaults for the new step.{depth && resampling ? ' An absolute event threshold or peak prominence also takes its default, because the values become totals.' : ''}</p>
