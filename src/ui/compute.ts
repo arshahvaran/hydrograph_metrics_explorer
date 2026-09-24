@@ -437,13 +437,16 @@ export function perturb(base: ArrayLike<number>, s: SandboxState): Float64Array 
   return out;
 }
 
-/** Best value of a row across runs, honouring the metric's direction. */
+/** Best value of a row across runs, honouring the metric's direction. A
+ *  'min' metric (optimum 0, range [0, ∞)) is scored by its distance to 0, as
+ *  the composite ranking does (rank.ts scoreMetric): a value below 0 is out of
+ *  range, not better, and once underlined the larger error. */
 export function bestIndex(values: number[], direction: 'max' | 'min' | 'zero' | 'one'): number {
   let best = -1, bestScore = Infinity;
   values.forEach((v, i) => {
     if (!isFinite(v)) return;
-    const score = direction === 'max' ? -v : direction === 'min' ? v
-      : direction === 'zero' ? Math.abs(v) : Math.abs(v - 1);
+    const score = direction === 'max' ? -v
+      : direction === 'min' || direction === 'zero' ? Math.abs(v) : Math.abs(v - 1);
     if (score < bestScore) { bestScore = score; best = i; }
   });
   return best;
