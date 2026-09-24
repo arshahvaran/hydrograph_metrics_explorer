@@ -300,7 +300,8 @@ export async function buildDocx(p: ReportPayload): Promise<Blob> {
       [w0, wn, ...priorities.map(() => wm), 1400],
     ));
     if (isFinite(rows[order[0]].composite)) {
-      Ptext(`Recommended simulation: ${rows[order[0]].runName} (composite ${rows[order[0]].composite.toFixed(3)}). Scores are relative to the compared simulations; unbounded efficiencies are normalised through C2M = E/(2−E) before weighting.`);
+      const leaders = order.filter(i => rows[i].rank === 1 && isFinite(rows[i].composite)).map(i => rows[i].runName);
+      Ptext(`${leaders.length > 1 ? `Tie between ${leaders.join(' and ')}` : `Recommended simulation: ${rows[order[0]].runName}`} (composite ${rows[order[0]].composite.toFixed(3)}). Scores are relative to the compared simulations; a metric a simulation lacks scores 0 for it; unbounded efficiencies are normalised through C2M = E/(2−E) before weighting.`);
     } else {
       Ptext('No composite could be computed for the selected priority metrics.', { italic: true });
     }
@@ -372,7 +373,10 @@ export function openPrintReport(p: ReportPayload): void {
     body += `<h2>5. Simulation ranking</h2><table><thead>${rowsHtml(['Rank', 'Simulation', ...priorities.map(p2 => `${p2.id} (w=${p2.weight})`), 'Composite'], 'th')}</thead><tbody>` +
       order.map(i => rowsHtml([String(rows[i].rank), rows[i].runName, ...priorities.map(p2 => (isFinite(rows[i].perMetric[p2.id]) ? rows[i].perMetric[p2.id].toFixed(2) : 'n/a')), isFinite(rows[i].composite) ? rows[i].composite.toFixed(3) : 'n/a'], 'td', rows[i].rank === 1 && isFinite(rows[i].composite) ? 'timing' : '')).join('') + '</tbody></table>' +
       (isFinite(rows[order[0]].composite)
-        ? `<p><strong>Recommended simulation: ${esc(rows[order[0]].runName)}</strong> (composite ${rows[order[0]].composite.toFixed(3)}).</p>`
+        ? (() => {
+            const leaders = order.filter(i => rows[i].rank === 1 && isFinite(rows[i].composite)).map(i => esc(rows[i].runName));
+            return `<p><strong>${leaders.length > 1 ? `Tie between ${leaders.join(' and ')}` : `Recommended simulation: ${esc(rows[order[0]].runName)}`}</strong> (composite ${rows[order[0]].composite.toFixed(3)}; a metric a simulation lacks scores 0 for it).</p>`;
+          })()
         : '<p><em>No composite could be computed for the selected priority metrics.</em></p>');
   }
   if (notes.trim()) body += `<h2>Notes</h2><p>${esc(notes.trim()).split(/\r?\n/).join('<br>')}</p>`;

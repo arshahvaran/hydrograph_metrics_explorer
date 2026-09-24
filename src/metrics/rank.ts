@@ -49,7 +49,7 @@ export const TIE_TOL = 1e-9;
 /** Metrics that measure a time offset; DE (its timing term is a correlation)
  *  and the per-event magnitude errors carry the timing flag but do not. */
 export const SHIFT_TOLERANT_IDS = new Set(['peak_lag_abs', 'peak_lag_signed', 'event_lag', 'lag_best', 'sd_time',
-  'dtw_warp', 'dtw_dist', 'w1', 'w2sq', 'xwt_lag']);
+  'dtw_warp', 'w1', 'w2sq', 'xwt_lag']);   // not dtw_dist: an amplitude mismatch after warping, blind to the offset
 
 export function rankRuns(inputs: RankInput[], priorities: { id: string; weight: number }[]): RankRow[] {
   const active = priorities.filter(p => p.weight > 0);

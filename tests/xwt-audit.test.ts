@@ -12,13 +12,15 @@ const INPUTS = JSON.parse(readFileSync(new URL('./fixtures/xwt_audit_inputs.json
 
 describe('xwt-01: a pure shift longer than half of a fast period is not folded toward zero', () => {
   for (const key of ['flashy_K6', 'flashy_K12']) {
-    it(`${key}: headline lag within 10 % of K, no per-scale lag of the wrong sign`, () => {
+    it(`${key}: headline lag within 10 % of K; every row that agrees with it is positive`, () => {
       const { o, s, K } = INPUTS[key];
       const r = xwtLag(o, s);
       expect(Math.abs(r.headlineLag - K)).toBeLessThan(0.1 * K);
-      const signed = r.byScale.filter(x => Number.isFinite(x.meanLag));
-      expect(signed.length).toBeGreaterThan(5);
-      expect(signed.every(x => x.meanLag > 0)).toBe(true);
+      const agree = r.byScale.filter(x => Number.isFinite(x.meanLag) && !x.beyondHalfPeriod);
+      expect(agree.length).toBeGreaterThan(0);
+      expect(agree.every(x => x.meanLag > 0)).toBe(true);
+      // rows whose half period is shorter than the lag hold aliased principal lags and are flagged
+      expect(r.byScale.filter(x => Number.isFinite(x.meanLag) && x.period / 2 < Math.abs(r.headlineLag)).every(x => x.beyondHalfPeriod)).toBe(true);
     });
   }
 });
@@ -75,4 +77,56 @@ it('xwt-05: standardisation is not quadratic (4x the steps costs well under 16x 
   };
   const ratio = time(16384) / time(4096);
   expect(ratio).toBeLessThan(9);          // n log n with J scales: about 4.5-5.5; the O(n^2) form gave about 16
+});
+
+// ---- review cases (science3 review, xwt-R1..R3, R5) -------------------------
+import { mulberry32 } from '../src/metrics/support/stats'
+function storms(n: number, p: number, meanDepth: number, shape: number, scale: number, len: number, seed: number) {
+  const r = mulberry32(seed);
+  const rain = Array.from({ length: n }, () => (r() < p ? -meanDepth * Math.log(1 - r()) : 0));
+  const uh = Array.from({ length: len }, (_, k) => Math.pow(k + 0.5, shape - 1) * Math.exp(-(k + 0.5) / scale));
+  const su = uh.reduce((a, b) => a + b, 0);
+  const q = new Array(n).fill(0);
+  for (let t = 0; t < n; t++) if (rain[t]) for (let k = 0; k < len && t + k < n; k++) q[t + k] += (rain[t] * uh[k]) / su;
+  return q;
+}
+
+it('xwt-R1: a slow seasonal lag does not decide the branch of the storm scales', () => {
+  const n = 3650, ev = storms(n + 5, 0.03, 10, 2, 2, 40, 1);
+  const o = Array.from({ length: n }, (_, t) => 10 + 6 * Math.sin(2 * Math.PI * t / 365) + ev[t + 1]);
+  const s = Array.from({ length: n }, (_, t) => 10 + 6 * Math.sin(2 * Math.PI * (t - 100) / 365) + ev[t]);
+  const rows = xwtLag(o, s).byScale.filter(x => x.period < 80 && Number.isFinite(x.meanLag));
+  expect(rows.length).toBeGreaterThan(5);
+  expect(rows.every(x => Math.abs(x.meanLag - 1) < 0.5)).toBe(true);
+});
+
+it('xwt-R2: a diurnal lag of +10 h stays +10 h next to storms 5 h early', () => {
+  const n = 8760, ev = storms(n + 10, 0.01, 10, 3, 4, 120, 2);
+  const o = Array.from({ length: n }, (_, t) => 5 + Math.sin(2 * Math.PI * t / 24) + ev[t + 5]);
+  const s = Array.from({ length: n }, (_, t) => 5 + Math.sin(2 * Math.PI * (t - 10) / 24) + ev[t + 10]);
+  const r = xwtLag(o, s);
+  const diurnal = r.byScale.filter(x => x.period > 18 && x.period < 30 && Number.isFinite(x.meanLag));
+  expect(diurnal.length).toBeGreaterThan(0);
+  expect(diurnal.every(x => x.meanLag > 6 && x.meanLag < 13)).toBe(true);
+  expect(r.headlineLag).toBeGreaterThan(0);
+});
+
+it('xwt-R3: independent noise on a shared signal gives no coherent timing error', () => {
+  const r3 = mulberry32(9);
+  const g = () => { let u = 0; for (let k = 0; k < 12; k++) u += r3(); return u - 6; };
+  const q = storms(2000, 0.02, 10, 2, 3, 60, 3).map(v => v + 1);
+  const o = q.map(v => v + 1.5 * g()), s = q.map(v => v + 1.5 * g());
+  const r = xwtLag(o, s);
+  expect(Number.isNaN(r.headlineLag) || Math.abs(r.headlineLag) < 0.5).toBe(true);
+  expect(r.byScale.filter(x => x.period < 6).every(x => Number.isNaN(x.meanLag) || Math.abs(x.meanLag) < 0.5)).toBe(true);
+});
+
+it('xwt-R5: explicit scales below 2 steps of the analysed series are reported as dropped', () => {
+  const n = 20000;
+  const o = Array.from({ length: n }, (_, t) => 10 + Math.sin(2 * Math.PI * t / 240));
+  const s = o.map((_, t) => o[Math.max(0, t - 12)]);
+  const r = xwtLag(o, s, [2, 4, 8, 60]);
+  expect(r.decimation).toBe(3);
+  expect(r.droppedScales).toEqual([2, 4]);
+  expect(r.byScale.map(x => x.scale)).toEqual([8, 60]);
 });

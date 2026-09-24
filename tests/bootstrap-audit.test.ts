@@ -72,3 +72,42 @@ describe('stats-02: the block length follows the persistence of the errors', () 
     expect(w(auto)).toBeGreaterThan(w(fixed));
   });
 });
+
+// ---- review repairs (science3 review br-R1, br-R3, br-R5, br-R6) ------------
+import { bestIndices } from '../src/ui/compute'
+import { rankRuns, SHIFT_TOLERANT_IDS } from '../src/metrics/rank'
+
+describe('br-R1: the block length follows the persistence of the flows as well as of the error', () => {
+  it('persistent flows with white error get long blocks (the signed error alone gave 3)', () => {
+    const rnd = mulberry32(21);
+    const g = () => { let u = 0; for (let k = 0; k < 12; k++) u += rnd(); return u - 6; };
+    const n = 3650; let x = 0;
+    const o = Array.from({ length: n }, (_, t) => { x = 0.99 * x + 0.6 * g(); return Math.exp(1 + x) + 2 * Math.sin(2 * Math.PI * t / 365) + 5; });
+    const s = o.map(v => v + 8 * g());
+    const res = bootstrapCIs(o, s, ctx(), { B: 60 });
+    expect(res.blockLen).toBeGreaterThan(50);
+    expect(res.blockLen).toBeLessThanOrEqual(Math.ceil(Math.min(3 * Math.sqrt(n), n / 3)));
+  });
+});
+
+it('br-R3: an oversize record is refused before any block-length work', () => {
+  const n = 150_000;
+  const o = Array.from({ length: n }, (_, t) => 5 + Math.sin(t / 30)), s = o.map(v => v + 0.1);
+  const t0 = performance.now();
+  const res = bootstrapCIs(o, s, ctx(), { B: 10 });
+  expect(res.reason).toMatch(/up to 100,000 valid pairs/);
+  expect(performance.now() - t0).toBeLessThan(1500);
+});
+
+it('br-R6/report-07: every tied best value is marked', () => {
+  expect([...bestIndices([2, -2], 'zero')].sort()).toEqual([0, 1]);
+  expect([...bestIndices([0.8, 0.8, 0.5], 'max')].sort()).toEqual([0, 1]);
+});
+
+it('br-R5: the DTW distance is not counted as a shift-tolerant timing metric', () => {
+  expect(SHIFT_TOLERANT_IDS.has('dtw_dist')).toBe(false);
+  expect(SHIFT_TOLERANT_IDS.has('dtw_warp')).toBe(true);
+  expect(SHIFT_TOLERANT_IDS.has('de')).toBe(false);
+  const rows = rankRuns([{ runName: 'A', values: { nse: 0.5 } }, { runName: 'B', values: { nse: 0.5 } }], [{ id: 'nse', weight: 1 }]);
+  expect(rows.every(r => r.rank === 1)).toBe(true);
+});

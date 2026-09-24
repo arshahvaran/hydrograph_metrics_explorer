@@ -60,7 +60,8 @@ export function defaultBlockLen(n: number): number {
  */
 export function autoBlockLen(x: ArrayLike<number>): number {
   const n = x.length;
-  const lo = 3, hi = Math.max(3, Math.floor(n / 4));
+  // Patton's code caps the length at ceil(min(3 sqrt n, n/3)); n/4 keeps at least four blocks
+  const lo = 3, hi = Math.max(3, Math.min(Math.floor(n / 4), Math.ceil(Math.min(3 * Math.sqrt(n), n / 3))));
   if (n < 12) return lo;
   let m0 = 0; for (let i = 0; i < n; i++) m0 += x[i]; m0 /= n;
   const maxLag = Math.min(n - 1, Math.max(20, Math.ceil(Math.min(3 * Math.sqrt(n), n / 3))));
@@ -112,8 +113,6 @@ export function bootstrapCIs(
   const pairedRaw = { obs: Float64Array.from(keep, i => paired0.obs[i]), sim: Float64Array.from(keep, i => paired0.sim[i]) };
   const n = paired.obs.length;
   const B = opts.B ?? 500;
-  const err = Float64Array.from({ length: n }, (_, i) => paired.sim[i] - paired.obs[i]);
-  const L = opts.blockLen ?? autoBlockLen(err);
   // MASE scale: the one-step naive error of the ORIGINAL ordered record
   let naive = 0; for (let i = 1; i < n; i++) naive += Math.abs(paired.obs[i] - paired.obs[i - 1]);
   naive = n > 1 ? naive / (n - 1) : NaN;
@@ -121,11 +120,18 @@ export function bootstrapCIs(
   const seed = opts.seed ?? 12345;
   const num = (v: number) => v.toLocaleString('en-US');
   if (n < BOOTSTRAP_MIN_N) {
-    return { cis: {}, B: 0, blockLen: L, n, seed, reason: `Bootstrap CIs need at least ${BOOTSTRAP_MIN_N} valid pairs; this simulation has ${num(n)}.` };
+    return { cis: {}, B: 0, blockLen: NaN, n, seed, reason: `Bootstrap CIs need at least ${BOOTSTRAP_MIN_N} valid pairs; this simulation has ${num(n)}.` };
   }
   if (n > BOOTSTRAP_MAX_N) {
-    return { cis: {}, B: 0, blockLen: L, n, seed, reason: `Bootstrap CIs are available for records with up to ${num(BOOTSTRAP_MAX_N)} valid pairs; this record has ${num(n)}. Use an analysis window or resample to daily or monthly means first.` };
+    return { cis: {}, B: 0, blockLen: NaN, n, seed, reason: `Bootstrap CIs are available for records with up to ${num(BOOTSTRAP_MAX_N)} valid pairs; this record has ${num(n)}. Use an analysis window or resample to daily or monthly means first.` };
   }
+  // Block length (after the size checks: it costs O(n sqrt n)): the largest
+  // Politis-White length among the observed flows, the error and its magnitude,
+  // since NSE, r and KGE depend on the persistence of O and RMSE/MAE on |e|;
+  // the signed error alone gave blocks of 3 for persistent flows with white
+  // error and CIs that covered a third of the time.
+  const err = Float64Array.from({ length: n }, (_, i) => paired.sim[i] - paired.obs[i]);
+  const L = opts.blockLen ?? Math.max(autoBlockLen(paired.obs), autoBlockLen(err), autoBlockLen(Float64Array.from(err, Math.abs)));
   const rng = mulberry32(seed);
 
   const samples = new Map<string, number[]>();

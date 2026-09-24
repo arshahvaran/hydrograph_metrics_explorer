@@ -7,6 +7,10 @@
 import { mean, stdPop, pearson, type Vec } from '../support/stats'
 
 const OMEGA0 = 6;
+/** Phase-coherence threshold: mean resultant length of the significant cross-spectrum phases. */
+const COHERENCE_MIN = 0.5;
+/** Smallest usable scale in steps of the analysed series (the auto grid's s0). */
+export const XWT_MIN_SCALE = 2;
 const FOURIER_FACTOR = (4 * Math.PI) / (OMEGA0 + Math.sqrt(2 + OMEGA0 * OMEGA0)); // ≈ 1.0330
 
 // ---- iterative radix-2 FFT (in place) ----
@@ -77,15 +81,19 @@ function ar1(x: Float64Array): number {
 export interface XwtScaleRow {
   scale: number;               // native steps
   period: number;              // native steps
-  meanLag: number;             // lag (native steps) from the circular power-weighted mean phase, unwrapped across scales
+  meanLag: number;             // principal lag (native steps, |lag| <= T/2) of the circular power-weighted mean phase
   fracSignificant: number;     // share of in-COI points above the 95 % red-noise level
-  /** |meanLag| > period/2: the phase alone cannot identify this lag; it was
-   *  placed on the branch nearest the next coarser scale's lag. */
+  /** This scale's principal lag disagrees with the headline lag (by more than a
+   *  quarter period modulo T), or the headline lag exceeds half this period:
+   *  aliased, or a process with another lag. NaN meanLag: no significant,
+   *  phase-coherent power at this scale. */
   beyondHalfPeriod: boolean;
 }
 
 export interface XwtResult {
-  headlineLag: number;         // significant-power-weighted mean of the per-scale lags (native steps)
+  headlineLag: number;         // the single lag most consistent with the phases of all coherent scales (native steps)
+  /** Explicit scales (native steps) that could not be used: below 2 steps of the analysed series or above half its length. */
+  droppedScales: number[];
   headlineAbsLag: number;
   byScale: XwtScaleRow[];
   fracSignificant: number;
@@ -132,10 +140,11 @@ export function xwtLag(obsIn: Vec, simIn: Vec, scalesIn: 'auto' | number[] = 'au
   // scales, in steps of the (possibly block-averaged) series: auto = s0 = 2,
   // dj = 0.25, up to n/4; explicit scales arrive in native steps
   let scales: number[];
+  let droppedScales: number[] = [];
   if (Array.isArray(scalesIn) && scalesIn.length > 0) {
-    scales = [...new Set(scalesIn.map(v => v / decimation))]
-      .filter(v => Number.isFinite(v) && v >= 1 && v <= n / 2)
-      .sort((a, b) => a - b);
+    const ok = (v: number) => Number.isFinite(v) && v >= XWT_MIN_SCALE && v <= n / 2;
+    droppedScales = scalesIn.filter(v => !ok(v / decimation));
+    scales = [...new Set(scalesIn.map(v => v / decimation))].filter(ok).sort((a, b) => a - b);
   } else {
     const s0 = 2, dj = 0.25;
     const J = Math.floor(Math.log2(n / (4 * s0)) / dj);
@@ -153,7 +162,7 @@ export function xwtLag(obsIn: Vec, simIn: Vec, scalesIn: 'auto' | number[] = 'au
   };
 
   // per scale: significant cross power and its power-weighted circular mean phase
-  const perScale: { sc: number; period: number; power: number; phase: number; frac: number }[] = [];
+  const perScale: { sc: number; period: number; power: number; cos: number; sin: number; phase: number; frac: number; sig: number }[] = [];
   let sigCount = 0, coiCount = 0;
 
   scales.forEach((sc, si) => {
@@ -175,42 +184,81 @@ export function xwtLag(obsIn: Vec, simIn: Vec, scalesIn: 'auto' | number[] = 'au
       wSum += power; wCos += xr; wSin += xi;
     }
     coiCount += inCoi; sigCount += sig;
-    perScale.push({ sc, period, power: wSum, phase: wSum > 0 ? Math.atan2(wSin, wCos) : NaN, frac: inCoi > 0 ? sig / inCoi : 0 });
+    perScale.push({ sc, period, power: wSum, cos: wCos, sin: wSin, phase: wSum > 0 ? Math.atan2(wSin, wCos) : NaN, frac: inCoi > 0 ? sig / inCoi : 0, sig });
   });
 
-  // unwrap from coarse to fine: the principal lag at period T is only known
-  // modulo T; take the branch nearest the last coarser significant lag
-  const lagOf = new Array<number>(perScale.length).fill(NaN);
-  let ref = NaN;
-  for (let k = perScale.length - 1; k >= 0; k--) {
-    const p = perScale[k];
-    if (!Number.isFinite(p.phase)) continue;
-    const principal = (p.phase / (2 * Math.PI)) * p.period;   // sim late ⇒ positive (test-pinned)
-    lagOf[k] = Number.isFinite(ref) ? principal + p.period * Math.round((ref - principal) / p.period) : principal;
-    ref = lagOf[k];
+  // A scale's phase is only meaningful when its significant points agree on it:
+  // mean resultant length R = |Σ W_os| / Σ|W_os| (Zar, 1999) below 0.5 marks an
+  // incoherent scale, left undetermined (a gap in the curve, not in the headline).
+  // Neighbouring points are not independent: the Morlet decorrelation length in
+  // time is 2.32 s (Torrence & Compo, 1998, Table 2), so the Rayleigh test uses
+  // n_eff = significant points / (2.32 s) and the 95 % critical length
+  // sqrt(-ln 0.05 / n_eff) (Zar, 1999); a coarse scale with few independent
+  // samples cannot pass, however concentrated its phases look.
+  const coherent = perScale.map(p => {
+    if (!(p.power > 0)) return false;
+    const nEff = p.sig / (2.32 * p.sc);
+    const rCrit = nEff > 0 ? Math.max(COHERENCE_MIN, Math.sqrt(-Math.log(0.05) / nEff)) : Infinity;
+    return Math.hypot(p.cos, p.sin) / p.power >= rCrit;
+  });
+  // Headline: the single lag L that best explains the phases of all coherent
+  // scales at once, argmax_L sum_s w_s cos(phi_s - 2 pi L / T_s), w_s = |sum W_os|
+  // (power x resultant length). A phase fixes a lag only modulo T, but different
+  // periods alias differently, so a pure shift is identified even when no scale
+  // is long enough to hold it (a coarse-to-fine unwrap needed such an anchor and
+  // let one process's lag decide another's). Per-scale rows keep their principal
+  // lag (|lag| <= T/2); rows that disagree with L by more than half their period
+  // (aliased, or a process with another lag) are flagged.
+  const rows = perScale.map((p, k) => ({ p, ok: coherent[k], w: Math.hypot(p.cos, p.sin), principal: coherent[k] ? (p.phase / (2 * Math.PI)) * p.period : NaN }));
+  const used = rows.filter(r => r.ok);
+  let best = NaN;
+  if (used.length) {
+    const tMax = Math.max(...used.map(r => r.p.period));
+    const lMax = Math.min(n / 4, 2 * tMax);
+    const tMin = Math.min(...used.map(r => r.p.period));
+    const dL = Math.max(0.01, tMin / 40);
+    const score = (L: number) => { let a = 0; for (const r of used) a += r.w * Math.cos(r.p.phase - (2 * Math.PI * L) / r.p.period); return a; };
+    let bestScore = -Infinity;
+    const kMax = Math.floor(lMax / dL);
+    for (let k = -kMax; k <= kMax; k++) {           // symmetric grid through 0
+      const L = k * dL, sc = score(L);
+      // ties go to the smallest |L|, so an unresolvable sign reads nearest zero
+      if (sc > bestScore + 1e-12 || (Math.abs(sc - bestScore) <= 1e-12 && Math.abs(L) < Math.abs(best))) { bestScore = sc; best = L; }
+    }
+    // parabolic refinement on the grid neighbours
+    const s0 = score(best - dL), s1 = score(best), s2 = score(best + dL);
+    const den = s0 - 2 * s1 + s2;
+    if (den < 0) best += (dL * (s0 - s2)) / (2 * den);
   }
 
   const byScale: XwtScaleRow[] = [];
-  let sumW = 0, sumWLag = 0, sumWAbs = 0;
-  perScale.forEach((p, k) => {
-    const lag = lagOf[k];
-    if (Number.isFinite(lag)) { sumW += p.power; sumWLag += p.power * lag; sumWAbs += p.power * Math.abs(lag); }
+  let sumW = 0, sumWAbs = 0;
+  rows.forEach(r => {
+    let lag = r.principal;
+    const agrees = Number.isFinite(lag) && Number.isFinite(best)
+      && Math.abs(((lag - best) % r.p.period + 1.5 * r.p.period) % r.p.period - 0.5 * r.p.period) < 1e-9 + r.p.period / 4
+      && Math.abs(best) <= r.p.period / 2;
+    // a row that agrees with the headline is shown on the branch nearest it (the same lag modulo T)
+    if (agrees) lag = lag + r.p.period * Math.round((best - lag) / r.p.period);
+    if (Number.isFinite(lag)) { sumW += r.w; sumWAbs += r.w * Math.abs(lag); }
     // reported in NATIVE steps: scale, period and lag are all multiplied back
     // by the block size when the series was block-averaged
     byScale.push({
-      scale: p.sc * decimation, period: p.period * decimation,
+      scale: r.p.sc * decimation, period: r.p.period * decimation,
       meanLag: lag * decimation,
-      fracSignificant: p.frac,
-      beyondHalfPeriod: Number.isFinite(lag) && Math.abs(lag) > p.period / 2,
+      fracSignificant: r.p.frac,
+      beyondHalfPeriod: Number.isFinite(lag) && !agrees,
     });
   });
+  void sumWAbs;
 
   return {
-    headlineLag: sumW > 0 ? (sumWLag / sumW) * decimation : NaN,
-    headlineAbsLag: sumW > 0 ? (sumWAbs / sumW) * decimation : NaN,
+    headlineLag: Number.isFinite(best) && sumW > 0 ? best * decimation : NaN,
+    headlineAbsLag: Number.isFinite(best) && sumW > 0 ? Math.abs(best) * decimation : NaN,
     byScale,
     fracSignificant: coiCount > 0 ? sigCount / coiCount : 0,
     decimation,
+    droppedScales,
   };
 }
 
