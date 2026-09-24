@@ -106,9 +106,11 @@ dd.mm.yyyy dates. The Decimal mark answer applies only to the
 columns that the tab asks about. A stray double quote that would merge rows into one cell
 stops the load with the line numbers. Date-times with a UTC offset are converted to UTC, and
 spreadsheet date-times are read as written, without a time-zone conversion, to the whole
-second (to the millisecond when the cell format shows fractions of a second). Text saved
-under a workbook name, such as an HTML table or a CSV file named .xls, is read as text, so
-the tool, not the spreadsheet reader, decides its decimal mark. Supported units include
+second (to the millisecond when the cell format shows fractions of a second). A file with
+a workbook name (.xls, .xlsx) is read by what it holds, not by its name: a CSV or TSV file
+goes through the same text parser as a .csv upload, an HTML table is read as text, so the
+tool, not the spreadsheet reader, decides its decimal mark, and an RTF document is refused
+with a message. Supported units include
 m³/s, ft³/s, L/s, m³/day, ML/day, MGD, ac-ft/day, and depth (mm per time step, in per
 day) with a catchment area; a unit in square brackets in the column headers, such as `obs [ft³/s]`, sets the unit at
 import. Once the roles are mapped, only the Observed and Simulated headers count, and a
